@@ -1,0 +1,53 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "NODE_TLS_REJECT_UNAUTHORIZED=0 nodemon server.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "seed-prod": "NODE_ENV=production sequelize db:seed:all",
+    "seed": "set NODE_ENV=development && sequelize db:seed:all",
+    "seed-only": "NODE_ENV=development sequelize db:seed --seed",
+    "seed-only-prod": "NODE_ENV=production sequelize db:seed --seed",
+    "create-migration": "npx sequelize-cli migration:generate --name",
+    "run-migration": "npx sequelize-cli db:migrate",
+    "run-migration-only": "npx sequelize-cli db:migrate --name"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "cloudinary": "^1.21.0",
+    "config": "^3.3.12",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "crypto": "^1.0.1",
+    "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.1",
+    "handlebars": "^4.7.8",
+    "jsonwebtoken": "^9.0.2",
+    "juice": "^11.0.1",
+    "minio": "^8.0.5",
+    "moment": "^2.30.1",
+    "multer": "^1.4.5-lts.1",
+    "multer-storage-cloudinary": "^4.0.0",
+    "node-cron": "3.0.3",
+    "nodemailer": "^6.9.16",
+    "nodemon": "^3.1.7",
+    "p-limit": "^6.2.0",
+    "pg": "^8.13.1",
+    "pg-hstore": "^2.3.4",
+    "qs": "^6.13.1",
+    "sequelize": "^6.37.5",
+    "sequelize-paginate": "1.1.6",
+    "stripe": "^17.4.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1"
+  },
+  "devDependencies": {
+    "sequelize-cli": "^6.6.2"
+  }
+}
