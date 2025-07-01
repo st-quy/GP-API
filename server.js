@@ -23,19 +23,22 @@ app.use("/api", require("./routes"));
 //   await initializeBucket(); //Just for the first time
 // })();
 
-const sslOptions = {
-  key: fs.readFileSync("./ssl/key.pem"),
-  cert: fs.readFileSync("./ssl/cert.pem"),
-};
+// const sslOptions = {
+//   key: fs.readFileSync("./ssl/key.pem"),
+//   cert: fs.readFileSync("./ssl/cert.pem"),
+// };
 
 db.sequelize
   .sync({ force: false })
   // .authenticate()
   .then(async () => {
     console.log("Database synchronized and models updated successfully.");
-    https.createServer(sslOptions, app).listen(PORT, () => {
+    app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
     });
+    // https.createServer(sslOptions, app).listen(PORT, () => {
+    //   console.log(`Server is running on port ${PORT}`);
+    // });
   })
   .catch((error) => {
     console.error("Error synchronizing the database:", error);
