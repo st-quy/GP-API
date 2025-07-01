@@ -1,0 +1,32 @@
+name: Init MinIO
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  init:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set up mc
+      run: |
+        curl -O https://dl.min.io/client/mc/release/linux-amd64/mc
+        chmod +x mc
+        sudo mv mc /usr/local/bin/
+
+    - name: Init MinIO
+      env:
+        MINIO_ROOT_USER: ${{ secrets.MINIO_ROOT_USER }}
+        MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
+        MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+        MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+      run: |
+        until curl -s https://your-minio-service.onrender.com/minio/health/ready > /dev/null; do
+          echo "Waiting for MinIO..."
+          sleep 2
+        done
+
+        mc alias set gp_minio https://your-minio-service.onrender.com $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD
+        mc admin user info gp_minio $MINIO_ACCESS_KEY > /dev/null 2>&1 || {
+          mc admin user add gp_minio $MINIO_ACCESS_KEY $MINIO_SECRET_KEY
+          mc admin policy attach gp_minio readwrite --user $MINIO_ACCESS_KEY
+        }

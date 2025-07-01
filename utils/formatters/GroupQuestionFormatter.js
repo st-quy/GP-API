@@ -24,7 +24,7 @@ const formatQuestionContent = (questionContent) => {
     if (right) {
       const options = right
         .split("/")
-        .map((option) => option.split(".")[1]?.trim());
+        .map((option) => option.trim().replace(/^[A-J]\.\s*/, ""));
 
       if (!firstOptions) {
         firstOptions = options;

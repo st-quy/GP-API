@@ -2,13 +2,15 @@ const { splitAndTrimLines } = require("../common/StringUtils");
 
 const cleanItems = (lines, isLeft = true) => {
   return lines
-    .filter((line) => line.includes("=") || line.match(/^[A-J]\./))
+    .filter(
+      (line) =>
+        isLeft
+          ? line.match(/^\d+\./) // match "1.", "2.", etc. on the left side
+          : line.match(/^[A-J]\./) // match "A.", "B.", etc. on the right side
+    )
     .map((line) => {
       if (isLeft) {
-        return line
-          .replace(/^\d+\.\s*/, "")
-          .replace(/=\s*$/, "")
-          .trim();
+        return line.replace(/^\d+\.\s*/, "").trim();
       } else {
         return line.replace(/^[A-J]\.\s*/, "").trim();
       }
@@ -17,9 +19,10 @@ const cleanItems = (lines, isLeft = true) => {
 
 const parseMatchingAnswers = (correctStr, questionContent) => {
   const sections = questionContent.split(/Options:/i);
+
   if (sections.length !== 2) return [];
 
-  const leftItems = cleanItems(splitAndTrimLines(sections[0]), true);
+  const leftItems = cleanItems(splitAndTrimLines(sections[0]));
   const rightItems = cleanItems(splitAndTrimLines(sections[1]), false);
 
   return splitAndTrimLines(correctStr)

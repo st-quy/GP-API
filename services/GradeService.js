@@ -291,6 +291,7 @@ async function calculatePoints(req) {
       }
 
       const typeOfQuestion = answer.Question.Type;
+
       const skillType = answer.Question.Skill.Name;
 
       if (skillType !== skillName) {
@@ -306,6 +307,8 @@ async function calculatePoints(req) {
       } else if (typeOfQuestion === "matching") {
         const studentAnswers = JSON.parse(answer.AnswerText);
         const correctAnswers = correctContent.correctAnswer;
+        console.log(studentAnswers, "studentAnswers1");
+        console.log(correctAnswers, "correctAnswers2");
 
         correctAnswers.forEach((correct) => {
           const matched = studentAnswers.find(
@@ -317,7 +320,10 @@ async function calculatePoints(req) {
           }
         });
       } else if (typeOfQuestion === "ordering") {
-        const studentAnswers = JSON.parse(answer.AnswerText);
+        const studentAnswers = JSON.parse(answer.AnswerText).sort(
+          (a, b) => a.value - b.value
+        );
+
         const correctAnswers = correctContent.correctAnswer;
 
         const minLength = Math.min(
@@ -331,7 +337,10 @@ async function calculatePoints(req) {
           }
         }
       } else if (typeOfQuestion === "dropdown-list") {
-        const studentAnswers = JSON.parse(answer.AnswerText);
+        const studentAnswers = JSON.parse(answer.AnswerText).map((item) => ({
+          key: item.key.split(".")[0].trim(),
+          value: item.value,
+        }));
         const correctAnswers = correctContent.correctAnswer;
 
         correctAnswers.forEach((correct, index) => {
