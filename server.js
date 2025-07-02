@@ -19,9 +19,9 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use("/api", require("./routes"));
 
-// (async () => {
-//   await initializeBucket(); //Just for the first time
-// })();
+(async () => {
+  await initializeBucket(); //Just for the first time
+})();
 
 const sslOptions = {
   key: fs.readFileSync("./ssl/key.pem"),

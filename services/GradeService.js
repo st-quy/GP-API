@@ -307,8 +307,6 @@ async function calculatePoints(req) {
       } else if (typeOfQuestion === "matching") {
         const studentAnswers = JSON.parse(answer.AnswerText);
         const correctAnswers = correctContent.correctAnswer;
-        console.log(studentAnswers, "studentAnswers1");
-        console.log(correctAnswers, "correctAnswers2");
 
         correctAnswers.forEach((correct) => {
           const matched = studentAnswers.find(
@@ -341,7 +339,9 @@ async function calculatePoints(req) {
           key: item.key.split(".")[0].trim(),
           value: item.value,
         }));
-        const correctAnswers = correctContent.correctAnswer;
+        const correctAnswers = correctContent.correctAnswer.filter(
+          (item) => item.key !== "0"
+        );
 
         correctAnswers.forEach((correct, index) => {
           const student = studentAnswers[index];
