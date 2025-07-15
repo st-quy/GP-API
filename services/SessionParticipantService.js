@@ -69,11 +69,16 @@ async function getAllParticipants(req) {
       distinct: true,
     });
 
+    // Ensure page and limit are integers and >= 1
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.max(parseInt(req.query.limit) || 10, 1);
+
     const options = {
-      page: req.query.page || 1,
-      paginate: req.query.limit || 10,
+      page,
+      paginate: limit,
       where,
       include,
+      order: [["ID", "ASC"]], // Add a stable order to avoid duplicate/overlap
     };
 
     const result = await SessionParticipant.paginate(options);
@@ -83,8 +88,8 @@ async function getAllParticipants(req) {
       message: "Participants retrieved successfully",
       data: result.docs,
       pagination: {
-        currentPage: parseInt(req.query.page) || 1,
-        pageSize: parseInt(req.query.limit) || 10,
+        currentPage: page,
+        pageSize: limit,
         itemsOnPage: result.docs.length,
         totalPages: result.pages,
         totalItems: totalCount,
@@ -183,14 +188,6 @@ const publishScoresBySessionId = async (req) => {
     },
   });
 
-  if (incompleteParticipants.length > 0) {
-    return {
-      status: 400,
-      message:
-        "Some participants are missing required levels (Writing Level, Speaking Level, or Overall Level).",
-    };
-  }
-
   const completeStudents = await SessionParticipant.findAll({
     where: {
       SessionID: sessionId,
@@ -218,7 +215,15 @@ const publishScoresBySessionId = async (req) => {
   }
 
   const userIds = completeStudents.map((s) => s.UserID);
+  // if (incompleteParticipants.length > 0) {
+  //   return {
+  //     status: 400,
+  //     message:
+  //       "Some participants are missing required levels (Writing Level, Speaking Level, or Overall Level).",
+  //   };
+  // }
 
+  const isIncompleteParticipants = incompleteParticipants.length > 0;
   if (userIds.length) {
     await SessionParticipant.update(
       { IsPublished: true },
@@ -233,10 +238,12 @@ const publishScoresBySessionId = async (req) => {
 
   try {
     await generateStudentReportAndSendMail({ req, userIds });
-    await Session.update(
-      { isPublished: true, status: "COMPLETE" },
-      { where: { ID: sessionId } }
-    );
+    if (!isIncompleteParticipants) {
+      await Session.update(
+        { isPublished: true, status: "COMPLETE" },
+        { where: { ID: sessionId } }
+      );
+    }
   } catch (err) {
     console.error("Error generating student report:", err.message);
     return {
