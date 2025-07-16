@@ -142,7 +142,7 @@ module.exports = {
         partID: partIds["PART 2"],
         type: "speaking",
         imageKeys: [
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/ImageTopic2/2.png",
+          "https://10.25.80.12:9000/gp-bucket/Topic2/ImageTopic2/2.png",
         ],
       },
       {
@@ -153,7 +153,7 @@ module.exports = {
         partID: partIds["PART 2"],
         type: "speaking",
         imageKeys: [
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/ImageTopic2/2.png",
+          "https://10.25.80.12:9000/gp-bucket/Topic2/ImageTopic2/2.png",
         ],
       },
       {
@@ -164,7 +164,7 @@ module.exports = {
         partID: partIds["PART 2"],
         type: "speaking",
         imageKeys: [
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/ImageTopic2/2.png",
+          "https://10.25.80.12:9000/gp-bucket/Topic2/ImageTopic2/2.png",
         ],
       },
       {
@@ -175,7 +175,7 @@ module.exports = {
         partID: partIds["PART 3"],
         type: "speaking",
         imageKeys: [
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/ImageTopic2/3.png",
+          "https://10.25.80.12:9000/gp-bucket/Topic2/ImageTopic2/3.png",
         ],
       },
       {
@@ -186,7 +186,7 @@ module.exports = {
         partID: partIds["PART 3"],
         type: "speaking",
         imageKeys: [
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/ImageTopic2/3.png",
+          "https://10.25.80.12:9000/gp-bucket/Topic2/ImageTopic2/3.png",
         ],
       },
       {
@@ -197,7 +197,7 @@ module.exports = {
         partID: partIds["PART 3"],
         type: "speaking",
         imageKeys: [
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/ImageTopic2/3.png",
+          "https://10.25.80.12:9000/gp-bucket/Topic2/ImageTopic2/3.png",
         ],
       },
       {
@@ -209,7 +209,7 @@ module.exports = {
         partID: partIds["PART 4"],
         type: "speaking",
         imageKeys: [
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/ImageTopic2/4.png",
+          "https://10.25.80.12:9000/gp-bucket/Topic2/ImageTopic2/4.png",
         ],
       },
       {
@@ -220,7 +220,7 @@ module.exports = {
         partID: partIds["PART 4"],
         type: "speaking",
         imageKeys: [
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/ImageTopic2/4.png",
+          "https://10.25.80.12:9000/gp-bucket/Topic2/ImageTopic2/4.png",
         ],
       },
       {
@@ -232,7 +232,7 @@ module.exports = {
         partID: partIds["PART 4"],
         type: "speaking",
         imageKeys: [
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/ImageTopic2/4.png",
+          "https://10.25.80.12:9000/gp-bucket/Topic2/ImageTopic2/4.png",
         ],
       },
     ];

@@ -122,8 +122,7 @@ module.exports = {
         correctAnswer: "£1.50",
         partID: partIds["Information recognition (13 questions)"],
         type: "multiple-choice",
-        audioKeys:
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/Part1/3341.mp3",
+        audioKeys: "https://10.25.80.12:9000/gp-bucket/Topic2/Part1/3341.mp3",
       },
       {
         content:
@@ -137,8 +136,7 @@ module.exports = {
         correctAnswer: "In the afternoons",
         partID: partIds["Information recognition (13 questions)"],
         type: "multiple-choice",
-        audioKeys:
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/Part1/3342.mp3",
+        audioKeys: "https://10.25.80.12:9000/gp-bucket/Topic2/Part1/3342.mp3",
       },
       {
         content:
@@ -152,8 +150,7 @@ module.exports = {
         correctAnswer: "Red",
         partID: partIds["Information recognition (13 questions)"],
         type: "multiple-choice",
-        audioKeys:
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/Part1/3343.mp3",
+        audioKeys: "https://10.25.80.12:9000/gp-bucket/Topic2/Part1/3343.mp3",
       },
       {
         content: "A man is calling his wife. Where will they meet?",
@@ -165,8 +162,7 @@ module.exports = {
         correctAnswer: "Outside the shop",
         partID: partIds["Information recognition (13 questions)"],
         type: "multiple-choice",
-        audioKeys:
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/Part1/3344.mp3",
+        audioKeys: "https://10.25.80.12:9000/gp-bucket/Topic2/Part1/3344.mp3",
       },
       {
         content:
@@ -180,8 +176,7 @@ module.exports = {
         correctAnswer: "7 o’clock",
         partID: partIds["Information recognition (13 questions)"],
         type: "multiple-choice",
-        audioKeys:
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/Part1/3345.mp3",
+        audioKeys: "https://10.25.80.12:9000/gp-bucket/Topic2/Part1/3345.mp3",
       },
       {
         content:
@@ -200,8 +195,7 @@ module.exports = {
         correctAnswer: "On Saturday morning",
         partID: partIds["Information recognition (13 questions)"],
         type: "multiple-choice",
-        audioKeys:
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/Part1/3346.mp3",
+        audioKeys: "https://10.25.80.12:9000/gp-bucket/Topic2/Part1/3346.mp3",
       },
       {
         content:
@@ -220,8 +214,7 @@ module.exports = {
         correctAnswer: "They both had long hair",
         partID: partIds["Information recognition (13 questions)"],
         type: "multiple-choice",
-        audioKeys:
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/Part1/3348.mp3",
+        audioKeys: "https://10.25.80.12:9000/gp-bucket/Topic2/Part1/3348.mp3",
       },
       {
         content:
@@ -235,8 +228,7 @@ module.exports = {
         correctAnswer: "10,000",
         partID: partIds["Information recognition (13 questions)"],
         type: "multiple-choice",
-        audioKeys:
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/Part1/3349.mp3",
+        audioKeys: "https://10.25.80.12:9000/gp-bucket/Topic2/Part1/3349.mp3",
       },
       {
         content:
@@ -250,8 +242,7 @@ module.exports = {
         correctAnswer: "History classes",
         partID: partIds["Information recognition (13 questions)"],
         type: "multiple-choice",
-        audioKeys:
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/Part1/3350.mp3",
+        audioKeys: "https://10.25.80.12:9000/gp-bucket/Topic2/Part1/3350.mp3",
       },
       {
         content:
@@ -265,8 +256,7 @@ module.exports = {
         correctAnswer: "6 p.m",
         partID: partIds["Information recognition (13 questions)"],
         type: "multiple-choice",
-        audioKeys:
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/Part1/3351.mp3",
+        audioKeys: "https://10.25.80.12:9000/gp-bucket/Topic2/Part1/3351.mp3",
       },
       {
         content:
@@ -280,8 +270,7 @@ module.exports = {
         correctAnswer: "Cycles home",
         partID: partIds["Information recognition (13 questions)"],
         type: "multiple-choice",
-        audioKeys:
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/Part1/3352.mp3",
+        audioKeys: "https://10.25.80.12:9000/gp-bucket/Topic2/Part1/3352.mp3",
       },
       {
         content:
@@ -299,8 +288,7 @@ module.exports = {
         correctAnswer: "Speak at a conference",
         partID: partIds["Information recognition (13 questions)"],
         type: "multiple-choice",
-        audioKeys:
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/Part1/3353.mp3",
+        audioKeys: "https://10.25.80.12:9000/gp-bucket/Topic2/Part1/3353.mp3",
       },
       {
         content:
@@ -318,8 +306,7 @@ module.exports = {
         correctAnswer: "Going to the theatre",
         partID: partIds["Information recognition (13 questions)"],
         type: "multiple-choice",
-        audioKeys:
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/Part1/3354.mp3",
+        audioKeys: "https://10.25.80.12:9000/gp-bucket/Topic2/Part1/3354.mp3",
       },
       {
         content:
@@ -363,8 +350,7 @@ module.exports = {
         ],
         partID: partIds["Information Matching (4 questions)"],
         type: "dropdown-list",
-        audioKeys:
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/Part2.mp3",
+        audioKeys: "https://10.25.80.12:9000/gp-bucket/Topic2/Part2.mp3",
       },
       {
         content:
@@ -401,8 +387,7 @@ module.exports = {
         ],
         partID: partIds["Opinion Matching (4 questions)"],
         type: "dropdown-list",
-        audioKeys:
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/Part3.mp3",
+        audioKeys: "https://10.25.80.12:9000/gp-bucket/Topic2/Part3.mp3",
       },
       {
         content:
@@ -442,8 +427,7 @@ module.exports = {
         },
         partID: partIds["Inference (2 talks - 4 questions)"],
         type: "listening-questions-group",
-        audioKeys:
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/Part4/1.mp3",
+        audioKeys: "https://10.25.80.12:9000/gp-bucket/Topic2/Part4/1.mp3",
       },
       {
         content:
@@ -484,8 +468,7 @@ module.exports = {
         },
         partID: partIds["Inference (2 talks - 4 questions)"],
         type: "listening-questions-group",
-        audioKeys:
-          "https://aptis.greennwichdn.edu.vn:9000/gp-bucket/Topic2/Part4/2.mp3",
+        audioKeys: "https://10.25.80.12:9000/gp-bucket/Topic2/Part4/2.mp3",
       },
     ];
 
