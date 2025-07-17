@@ -18,7 +18,7 @@ exports.generatePDF = async (
   className,
   session,
   sessionParticipant,
-  result,
+  result
 ) => {
   try {
     const writingHTML = generateWritingSection(result);

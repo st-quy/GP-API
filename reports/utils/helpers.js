@@ -26,7 +26,6 @@ function generateWritingSection(result) {
       return `
       <div class="assessment-section">
         <div class="assessment-content">
-          <h4 class="part-title">${part.ContentPart}</h4>
           ${partHtml}
         </div>
       </div>
@@ -81,7 +80,6 @@ function generateSpeakingSection(result, className, sessionName) {
 
       return `
         <div class="assessment-content">
-          <h4 class="part-title">${part.ContentPart}</h4>
           ${questionsHtml}
         </div>
       `;
