@@ -177,8 +177,6 @@ async function changePassword(userId, oldPassword, newPassword) {
   }
 }
 
-
-
 async function sendResetPasswordEmail(email, host) {
   const transporter = nodemailer.createTransport({
     service: "gmail",
@@ -193,27 +191,47 @@ async function sendResetPasswordEmail(email, host) {
       throw new Error("User with this email does not exist");
     }
 
-    const resetToken = await jwt.sign({ userId: user.ID }, process.env.JWT_SECRET, {
-      expiresIn: "15m",
-    });
+    // const resetToken = await jwt.sign({ userId: user.ID }, process.env.JWT_SECRET, {
+    //   expiresIn: "15m",
+    // });
 
-    const resetLink = `${host}/reset-password?token=${resetToken}`;
+    // const resetLink = `${host}/reset-password?token=${resetToken}`;
+
+    // const mailOptions = {
+    //   from: process.env.EMAIL_USER,
+    //   to: user.email,
+    //   subject: "🔑 Reset Your Password",
+    //   html: `
+    //     <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ddd;">
+    //       <h2 style="color: #333;">🔑 Reset Your Password</h2>
+    //       <p>Hello <strong>${user.firstName} ${user.lastName}</strong>,</p>
+    //       <p>Click the link below to reset your password:</p>
+    //       <a href="${resetLink}" style="display: inline-block; padding: 10px 15px; background-color: #28a745; color: #fff; text-decoration: none; border-radius: 5px;">
+    //         Reset Password
+    //       </a>
+    //       <p style="color: #777; font-size: 12px;">This link will expire in 15 minutes.</p>
+    //     </div>
+    //   `,
+    // };
+    const defaultPassword = process.env.DEFAULT_PASSWORD;
+
+    user.password = await bcrypt.hash(defaultPassword, 10);
+    await user.save();
 
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: user.email,
-      subject: "🔑 Reset Your Password",
+      subject: "🔐 Your Password Has Been Reset",
       html: `
-        <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ddd;">
-          <h2 style="color: #333;">🔑 Reset Your Password</h2>
-          <p>Hello <strong>${user.firstName} ${user.lastName}</strong>,</p>
-          <p>Click the link below to reset your password:</p>
-          <a href="${resetLink}" style="display: inline-block; padding: 10px 15px; background-color: #28a745; color: #fff; text-decoration: none; border-radius: 5px;">
-            Reset Password
-          </a>
-          <p style="color: #777; font-size: 12px;">This link will expire in 15 minutes.</p>
-        </div>
-      `,
+    <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ddd;">
+      <h2 style="color: #333;">🔐 Password Reset Successful</h2>
+      <p>Hello <strong>${user.firstName} ${user.lastName}</strong>,</p>
+      <p>You have requested to reset your password. Here is your new password:</p>
+      <p style="font-size: 16px; font-weight: bold; color: #000;">${defaultPassword}</p>
+      <p style="color: #777; font-size: 12px;">For your security, please change this password after logging in.</p>
+      <p style="color: #aaa; font-size: 12px;">If you did not request this change, please ignore this email or contact support immediately.</p>
+    </div>
+  `,
     };
 
     await transporter.sendMail(mailOptions);
