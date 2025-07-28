@@ -169,6 +169,35 @@ const getParticipantsByUserId = async (userId, req) => {
   };
 };
 
+const getParticipantById = async (participantId) => {
+  const includeClause = [
+    {
+      model: Session,
+      as: "Session",
+    },
+    {
+      model: User,
+      as: "User",
+      attributes: { exclude: ["password"] },
+    },
+  ];
+
+  const participant = await SessionParticipant.findOne({
+    where: { ID: participantId },
+    include: includeClause,
+  });
+
+  if (!participant) {
+    return { status: 404, message: "No participant found with the given ID" };
+  }
+
+  return {
+    status: 200,
+    message: "Participant retrieved successfully",
+    data: participant,
+  };
+};
+
 const publishScoresBySessionId = async (req) => {
   const { sessionId } = req.body;
 
@@ -332,4 +361,5 @@ module.exports = {
   getAllParticipants,
   getParticipantsByUserId,
   getAllParticipantsGroupedByUser,
+  getParticipantById,
 };

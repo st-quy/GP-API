@@ -105,6 +105,11 @@ router.get(
   SessionParticipantController.getParticipantsByUserId
 );
 
+router.get(
+  "/detail/:participantId",
+  SessionParticipantController.getParticipantById
+);
+
 /**
  * @swagger
  * /session-participants/{sessionId}:

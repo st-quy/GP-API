@@ -26,6 +26,21 @@ const getParticipantsByUserId = async (req, res) => {
   }
 };
 
+const getParticipantById = async (req, res) => {
+  try {
+    const { participantId } = req.params;
+    const result = await SessionParticipantService.getParticipantById(
+      participantId
+    );
+    return res.status(result.status).json(result);
+  } catch (error) {
+    console.error("Error fetching participants by User:", error.stack);
+    return res
+      .status(500)
+      .json({ status: 500, message: "Internal server error" });
+  }
+};
+
 const getAllSessionParticipantsGroupedByUser = async (req, res) => {
   try {
     const result =
@@ -91,4 +106,5 @@ module.exports = {
   getAllParticipants,
   getParticipantsByUserId,
   getAllSessionParticipantsGroupedByUser,
+  getParticipantById,
 };
