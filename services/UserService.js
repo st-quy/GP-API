@@ -82,12 +82,12 @@ async function loginUser(email, password) {
   try {
     const user = await User.findOne({ where: { email } });
     if (!user) {
-      throw new Error("Invalid email or password");
+      throw new Error("Please enter a valid email");
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      throw new Error("Invalid email or password");
+      throw new Error("Please enter a valid password");
     }
 
     // Generate new access token and refresh token
@@ -103,7 +103,7 @@ async function loginUser(email, password) {
       },
     };
   } catch (error) {
-    throw new Error(`Login failed: ${error.message}`);
+    throw new Error(`${error.message}`);
   }
 }
 
