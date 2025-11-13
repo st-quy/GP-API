@@ -1,4 +1,4 @@
-const PartService = require("../service/PartService");
+const PartService = require("../services/PartService");
 
 const createPart = async (req, res) => {
   try {
@@ -22,8 +22,8 @@ const updatePart = async (req, res) => {
 
 const getPartByID = async (req, res) => {
   try {
-    const Part = await PartService.getPartByID(req);
-    return res.status(Part.status).json(Part);
+    const part = await PartService.getPartByID(req);
+    return res.status(part.status).json(part);
   } catch (error) {
     console.error("Error fetching part by ID:", error.message);
     return res.status(500).json({ message: "Internal server error" });
