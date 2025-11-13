@@ -1,0 +1,54 @@
+const QuestionService = require("../services/QuestionService");
+
+async function createQuestion(req, res) {
+  try {
+    const result = await QuestionService.createQuestion(req);
+    res.status(result.status).json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+}
+
+async function getQuestionsByPartID(req, res) {
+  try {
+    const result = await QuestionService.getQuestionsByPartID(req);
+    res.status(result.status).json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+}
+
+async function getQuestionByID(req, res) {
+  try {
+    const result = await QuestionService.getQuestionByID(req);
+    res.status(result.status).json(result);
+  } catch (error) {
+    res.status(404).json({ error: error.message });
+  }
+}
+
+async function updateQuestion(req, res) {
+  try {
+    const result = await QuestionService.updateQuestion(req);
+    res.status(result.status).json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+}
+
+async function deleteQuestion(req, res) {
+  try {
+    const result = await QuestionService.deleteQuestion(req);
+    res.status(result.status).json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+}
+
+module.exports = {
+  createQuestion,
+  getQuestionsByPartID,
+  getQuestionByID,
+  updateQuestion,
+  deleteQuestion,
+};

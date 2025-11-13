@@ -10,3 +10,8 @@ Dockerfile.minio-init
 init-minio.sh
 docker-compose.yml
 yarn.lock
+*.crt
+*.key
+*.pem
+ssl/cert.pem
+ssl/key.pem

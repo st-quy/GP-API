@@ -38,13 +38,31 @@ db.StudentAnswer = require("./StudentAnswer")(sequelize, DataTypes);
 db.StudentAnswerDraft = require("./StudentAnswerDraft")(sequelize, DataTypes);
 db.Skill = require("./Skill")(sequelize, DataTypes);
 db.Class = require("./Class")(sequelize, DataTypes);
+db.TopicPart = require("./TopicPart")(sequelize, DataTypes);
+
 
 // Relationships
 db.User.belongsToMany(db.Role, { through: db.UserRole, foreignKey: "UserID" });
 db.Role.belongsToMany(db.User, { through: db.UserRole, foreignKey: "RoleID" });
 
-db.Topic.hasMany(db.Part, { foreignKey: "TopicID" });
-db.Part.belongsTo(db.Topic, { foreignKey: "TopicID" });
+// Old topic part relationship 
+// db.Topic.hasMany(db.Part, { foreignKey: "TopicID" });
+// db.Part.belongsTo(db.Topic, { foreignKey: "TopicID" });
+
+// New many-to-many relationship between Topic and Part
+db.Topic.belongsToMany(db.Part, {
+  through: db.TopicPart,
+  foreignKey: "TopicID",
+  otherKey: "PartID",
+  as: "Parts",
+});
+
+db.Part.belongsToMany(db.Topic, {
+  through: db.TopicPart,
+  foreignKey: "PartID",
+  otherKey: "TopicID",
+  as: "Topics",
+});
 
 db.Part.hasMany(db.Question, { foreignKey: "PartID" });
 db.Question.belongsTo(db.Part, { foreignKey: "PartID" });

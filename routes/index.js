@@ -24,6 +24,9 @@ router.use("/session-participants", require("./SessionParticipantRoute"));
 router.use("/send-email", require("./SendMailRouter"));
 router.use("/grades", require("./GradeRoute"));
 router.use("/presigned-url", File);
+router.use("/questions", require("./QuestionRoute"));
+router.use("/parts", require("./PartRoute"));
+router.use("/topicparts", require("./TopicPartRoute"));
 
 // Add more routes here as needed
 // router.use("/another-route", anotherRoute);

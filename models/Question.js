@@ -49,6 +49,18 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.JSON,
       allowNull: true,
     },
+    GroupID: {
+      type: DataTypes.UUID,
+      allowNull: false,
+    },
+    TopicPartID: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: "TopicPart",
+        key: "ID",
+      },
+    },
   });
 
   return Question;
