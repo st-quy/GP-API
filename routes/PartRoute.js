@@ -6,6 +6,7 @@ const {
   updatePart,
   getPartByID,
   getAllPart,
+  deletePart,
 } = require("../controller/PartController");
 
 /**
@@ -149,4 +150,26 @@ router.post("/", createPart);
  */
 router.put("/:partId", updatePart);
 
+/**
+ * @swagger
+ * /parts/{partId}:
+ *   delete:
+ *     summary: Delete a part by ID
+ *     tags: [Part]
+ *     parameters:
+ *       - in: path
+ *         name: partId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: The ID of the part to delete
+ *     responses:
+ *       200:
+ *         description: Part deleted successfully
+ *       404:
+ *         description: Part not found
+ *       500:
+ *         description: Internal server error
+ */
+router.delete("/:partId", deletePart);
 module.exports = router;

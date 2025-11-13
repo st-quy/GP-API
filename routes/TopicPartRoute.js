@@ -4,7 +4,6 @@ const { allowAnonymous, authorize } = require("../middleware/AuthMiddleware");
 const {
   createTopicPart,
   deleteTopicPart,
-  getAllTopicParts,
 } = require("../controller/TopicPartController");
 
 /**
@@ -42,20 +41,6 @@ const {
  *         createdAt: "2025-11-10T10:00:00.000Z"
  *         updatedAt: "2025-11-10T10:05:00.000Z"
  */
-
-/**
- * @swagger
- * /topicparts:
- *   get:
- *     summary: Get all Topic-Part relationships
- *     tags: [TopicPart]
- *     responses:
- *       200:
- *         description: List of all TopicPart links
- *       500:
- *         description: Internal server error
- */
-router.get("/", getAllTopicParts);
 
 /**
  * @swagger
