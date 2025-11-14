@@ -1,10 +1,10 @@
 // models/index.js
-const { Sequelize, DataTypes } = require("sequelize");
-require("dotenv").config();
+const { Sequelize, DataTypes } = require('sequelize');
+require('dotenv').config();
 
 const sequelize = new Sequelize(process.env.DATABASE_URL, {
-  dialect: "postgres",
-  protocol: "postgres",
+  dialect: 'postgres',
+  protocol: 'postgres',
   // dialectOptions: {
   //   ssl: {
   //     require: true,
@@ -25,77 +25,94 @@ db.Sequelize = Sequelize;
  */
 
 // Models
-db.Session = require("./Session")(sequelize, DataTypes);
-db.User = require("./User")(sequelize, DataTypes);
-db.SessionRequest = require("./SessionRequest")(sequelize, DataTypes);
-db.SessionParticipant = require("./SessionParticipant")(sequelize, DataTypes);
-db.Role = require("./Role")(sequelize, DataTypes);
-db.UserRole = require("./UserRole")(sequelize, DataTypes);
-db.Topic = require("./Topic")(sequelize, DataTypes);
-db.Part = require("./Part")(sequelize, DataTypes);
-db.Question = require("./Question")(sequelize, DataTypes);
-db.StudentAnswer = require("./StudentAnswer")(sequelize, DataTypes);
-db.StudentAnswerDraft = require("./StudentAnswerDraft")(sequelize, DataTypes);
-db.Skill = require("./Skill")(sequelize, DataTypes);
-db.Class = require("./Class")(sequelize, DataTypes);
-db.TopicPart = require("./TopicPart")(sequelize, DataTypes);
-
+db.Session = require('./Session')(sequelize, DataTypes);
+db.User = require('./User')(sequelize, DataTypes);
+db.SessionRequest = require('./SessionRequest')(sequelize, DataTypes);
+db.SessionParticipant = require('./SessionParticipant')(sequelize, DataTypes);
+db.Role = require('./Role')(sequelize, DataTypes);
+db.UserRole = require('./UserRole')(sequelize, DataTypes);
+db.Topic = require('./Topic')(sequelize, DataTypes);
+db.Part = require('./Part')(sequelize, DataTypes);
+db.Question = require('./Question')(sequelize, DataTypes);
+db.StudentAnswer = require('./StudentAnswer')(sequelize, DataTypes);
+db.StudentAnswerDraft = require('./StudentAnswerDraft')(sequelize, DataTypes);
+db.Skill = require('./Skill')(sequelize, DataTypes);
+db.Class = require('./Class')(sequelize, DataTypes);
+db.TopicPart = require('./TopicPart')(sequelize, DataTypes);
+db.QuestionSet = require('./QuestionSet')(sequelize, DataTypes);
+db.QuestionSetQuestion = require('./QuestionSetQuestion')(sequelize, DataTypes);
 
 // Relationships
-db.User.belongsToMany(db.Role, { through: db.UserRole, foreignKey: "UserID" });
-db.Role.belongsToMany(db.User, { through: db.UserRole, foreignKey: "RoleID" });
+db.User.belongsToMany(db.Role, { through: db.UserRole, foreignKey: 'UserID' });
+db.Role.belongsToMany(db.User, { through: db.UserRole, foreignKey: 'RoleID' });
 
-// Old topic part relationship 
+// Old topic part relationship
 // db.Topic.hasMany(db.Part, { foreignKey: "TopicID" });
 // db.Part.belongsTo(db.Topic, { foreignKey: "TopicID" });
 
 // New many-to-many relationship between Topic and Part
 db.Topic.belongsToMany(db.Part, {
   through: db.TopicPart,
-  foreignKey: "TopicID",
-  otherKey: "PartID",
-  as: "Parts",
+  foreignKey: 'TopicID',
+  otherKey: 'PartID',
+  as: 'Parts',
 });
 
 db.Part.belongsToMany(db.Topic, {
   through: db.TopicPart,
-  foreignKey: "PartID",
-  otherKey: "TopicID",
-  as: "Topics",
+  foreignKey: 'PartID',
+  otherKey: 'TopicID',
+  as: 'Topics',
 });
 
-db.Part.hasMany(db.Question, { foreignKey: "PartID" });
-db.Question.belongsTo(db.Part, { foreignKey: "PartID" });
+db.Part.hasMany(db.Question, { foreignKey: 'PartID' });
+db.Question.belongsTo(db.Part, { foreignKey: 'PartID' });
 
-db.Question.belongsTo(db.Skill, { foreignKey: "SkillID" });
+db.Question.belongsTo(db.Skill, { foreignKey: 'SkillID' });
+db.Skill.hasMany(db.Question, { foreignKey: 'SkillID', as: 'Questions' });
 
-db.StudentAnswer.belongsTo(db.User, { foreignKey: "StudentID" });
-db.StudentAnswer.belongsTo(db.Topic, { foreignKey: "TopicID" });
-db.StudentAnswer.belongsTo(db.Question, { foreignKey: "QuestionID" });
+// NEW: QuestionSet <-> Question (M:N)
+db.QuestionSet.belongsToMany(db.Question, {
+  through: db.QuestionSetQuestion,
+  foreignKey: 'QuestionSetID',
+  otherKey: 'QuestionID',
+  as: 'Questions',
+});
 
-db.StudentAnswerDraft.belongsTo(db.User, { foreignKey: "StudentID" });
-db.StudentAnswerDraft.belongsTo(db.Topic, { foreignKey: "TopicID" });
-db.StudentAnswerDraft.belongsTo(db.Question, { foreignKey: "QuestionID" });
+db.Question.belongsToMany(db.QuestionSet, {
+  through: db.QuestionSetQuestion,
+  foreignKey: 'QuestionID',
+  otherKey: 'QuestionSetID',
+  as: 'QuestionSets',
+});
 
-db.User.hasMany(db.Class, { foreignKey: "UserID" });
-db.Class.belongsTo(db.User, { foreignKey: "UserID" });
+db.StudentAnswer.belongsTo(db.User, { foreignKey: 'StudentID' });
+db.StudentAnswer.belongsTo(db.Topic, { foreignKey: 'TopicID' });
+db.StudentAnswer.belongsTo(db.Question, { foreignKey: 'QuestionID' });
 
-db.Class.hasMany(db.Session, { foreignKey: "ClassID" });
+db.StudentAnswerDraft.belongsTo(db.User, { foreignKey: 'StudentID' });
+db.StudentAnswerDraft.belongsTo(db.Topic, { foreignKey: 'TopicID' });
+db.StudentAnswerDraft.belongsTo(db.Question, { foreignKey: 'QuestionID' });
 
-db.Topic.hasMany(db.Session, { foreignKey: "examSet" });
-db.Session.belongsTo(db.Topic, { foreignKey: "examSet" });
+db.User.hasMany(db.Class, { foreignKey: 'UserID' });
+db.Class.belongsTo(db.User, { foreignKey: 'UserID' });
 
-db.Session.belongsTo(db.Class, { foreignKey: "ClassID", as: "Classes" });
+db.Class.hasMany(db.Session, { foreignKey: 'ClassID' });
+
+db.Topic.hasMany(db.Session, { foreignKey: 'examSet' });
+db.Session.belongsTo(db.Topic, { foreignKey: 'examSet' });
+
+db.Session.belongsTo(db.Class, { foreignKey: 'ClassID', as: 'Classes' });
 // db.Session.hasMany(db.SessionParticipant, { foreignKey: "SessionID" });
 db.Session.hasMany(db.SessionParticipant, {
-  foreignKey: "SessionID",
-  as: "SessionParticipants",
+  foreignKey: 'SessionID',
+  as: 'SessionParticipants',
 });
 
-db.SessionParticipant.belongsTo(db.Session, { foreignKey: "SessionID" });
-db.SessionParticipant.belongsTo(db.User, { foreignKey: "UserID" });
+db.SessionParticipant.belongsTo(db.Session, { foreignKey: 'SessionID' });
+db.SessionParticipant.belongsTo(db.User, { foreignKey: 'UserID' });
 
-db.SessionRequest.belongsTo(db.Session, { foreignKey: "SessionID" });
-db.SessionRequest.belongsTo(db.User, { foreignKey: "UserID" });
+db.SessionRequest.belongsTo(db.Session, { foreignKey: 'SessionID' });
+db.SessionRequest.belongsTo(db.User, { foreignKey: 'UserID' });
 
 module.exports = db;
