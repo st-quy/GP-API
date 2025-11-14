@@ -15,15 +15,7 @@ module.exports = (sequelize, DataTypes) => {
     },
     Sequence: {
       type: DataTypes.INTEGER,
-      allowNull: false,
-    },
-    TopicID: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "Topics",
-        key: "ID",
-      },
+      allowNull: true,
     },
   });
 
