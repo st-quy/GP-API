@@ -18,6 +18,15 @@ async function getQuestionsByPartID(req, res) {
   }
 }
 
+async function createQuestionGroup(req, res) {
+  try {
+    const result = await QuestionService.createQuestionGroup(req);
+    res.status(result.status).json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+}
+
 async function getQuestionByID(req, res) {
   try {
     const result = await QuestionService.getQuestionByID(req);
@@ -47,6 +56,7 @@ async function deleteQuestion(req, res) {
 
 module.exports = {
   createQuestion,
+  createQuestionGroup,
   getQuestionsByPartID,
   getQuestionByID,
   updateQuestion,

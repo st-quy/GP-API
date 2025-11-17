@@ -1,4 +1,4 @@
-const {Topic, Part, TopicPart} = require("../models");
+const { Topic, Part, TopicPart } = require("../models");
 
 const createTopicPart = async (req) => {
   try {
@@ -7,7 +7,7 @@ const createTopicPart = async (req) => {
       return {
         status: 400,
         message: "TopicID and PartID are required",
-        };
+      };
     }
 
     const topic = await Topic.findByPk(TopicID);
@@ -31,19 +31,20 @@ const createTopicPart = async (req) => {
     });
 
     if (existedRelationship) {
-        return {
-            status: 409,
-            message: "This TopicPart relationship already exists",
-        };
+      return {
+        status: 409,
+        message: "This TopicPart relationship already exists",
+      };
     }
+
     const newTopicPart = await TopicPart.create({
       TopicID,
       PartID,
     });
     return {
       status: 201,
-        message: "TopicPart created successfully",
-        data: newTopicPart,
+      message: "TopicPart created successfully",
+      data: newTopicPart,
     };
   } catch (error) {
     throw new Error(`Error creating TopicPart: ${error.message}`);
@@ -51,17 +52,23 @@ const createTopicPart = async (req) => {
 };
 
 const deleteTopicPart = async (req) => {
-    try {
-        const { id } = req.params;
-        const topicPart = await TopicPart.findByPk(id);
-        if (!topicPart) {
-            return { status: 404, message: `TopicPart with id ${id} not found` };
-        }
-        await topicPart.destroy();
-        return { status: 200, message: "TopicPart deleted successfully" };
-    } catch (error) {
-        throw new Error(`Error deleting TopicPart: ${error.message}`);
-    }   
+  try {
+    const { id } = req.params;
+    const topicPart = await TopicPart.findByPk(id);
+    if (!topicPart) {
+      return {
+        status: 404,
+        message: `TopicPart with id ${id} not found`,
+      };
+    }
+    await topicPart.destroy();
+    return {
+      status: 200,
+      message: "TopicPart deleted successfully",
+    };
+  } catch (error) {
+    throw new Error(`Error deleting TopicPart: ${error.message}`);
+  }
 };
 
 module.exports = {
