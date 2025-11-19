@@ -1,4 +1,4 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
 const {
   getTopicWithRelations,
@@ -7,7 +7,8 @@ const {
   createTopic,
   addPartToTopic,
   getQuestionsByQuestionSetId,
-} = require("../controller/TopicController");
+  removePartFromTopic,
+} = require('../controller/TopicController');
 /**
  * @swagger
  * components:
@@ -55,7 +56,7 @@ const {
  *       500:
  *         description: Internal server error
  */
-router.get("/",createTopic);
+router.get('/', createTopic);
 
 /**
  * @swagger
@@ -84,7 +85,7 @@ router.get("/",createTopic);
  *                     $ref: '#/components/schemas/Topic'
  */
 
-router.get("/", getAllTopics);
+router.get('/', getAllTopics);
 
 /**
  * @swagger
@@ -109,7 +110,7 @@ router.get("/", getAllTopics);
  *       404:
  *         description: Topic or Part not found
  */
-router.post("/add-part", addPartToTopic);
+router.post('/add-part', addPartToTopic);
 
 /**
  * @swagger
@@ -134,7 +135,7 @@ router.post("/add-part", addPartToTopic);
  *       404:
  *         description: Topic or Part not found
  */
-router.post("/remove-part", removePartFromTopic);
+router.post('/remove-part', removePartFromTopic);
 
 /**
  * @swagger
@@ -157,9 +158,9 @@ router.post("/remove-part", removePartFromTopic);
  *       500:
  *         description: Internal server error
  */
-router.get("/",getQuestionsByQuestionSetId);
+router.get('/', getQuestionsByQuestionSetId);
 
-router.get("/detail", getTopicByName);
-router.get("/:id", getTopicWithRelations);
+router.get('/detail', getTopicByName);
+router.get('/:id', getTopicWithRelations);
 
 module.exports = router;

@@ -55,7 +55,7 @@ module.exports = (sequelize, DataTypes) => {
     },
     GroupID: {
       type: DataTypes.UUID,
-      allowNull: false,
+      allowNull: true,
     },
   });
 

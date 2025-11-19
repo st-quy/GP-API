@@ -1,5 +1,13 @@
-const { Question, TopicPart, QuestionSet, QuestionSetQuestion, Skill, Part } = require("../models");
-const { Op } = require("sequelize");
+const {
+  Question,
+  TopicPart,
+  QuestionSet,
+  QuestionSetQuestion,
+  Skill,
+  Part,
+} = require('../models');
+const { buildSpeakingAnswerContent } = require('../utils/speaking.util');
+const { v4: uuidv4 } = require('uuid');
 
 async function createQuestion(req) {
   try {
@@ -21,7 +29,7 @@ async function createQuestion(req) {
       return {
         status: 400,
         message:
-          "Type, SkillID, PartID, Sequence, Content, and GroupID are required fields",
+          'Type, SkillID, PartID, Sequence, Content, and GroupID are required fields',
       };
     }
 
@@ -37,11 +45,12 @@ async function createQuestion(req) {
       GroupContent,
       AnswerContent,
       GroupID,
+      GroupID,
     });
 
     return {
       status: 201,
-      message: "Question created successfully",
+      message: 'Question created successfully',
       data: newQuestion,
     };
   } catch (error) {
@@ -62,43 +71,53 @@ async function createQuestionGroup(req) {
     ) {
       return {
         status: 400,
-        message: "PartID, SkillId and questions[] are required",
+        message: 'PartID, SkillId and questions[] are required',
       };
     }
 
-    const SkillID = await Skill.findOne({
-      where: { Name: SkillName}
-    })
+    const skill = await Skill.findOne({ where: { Name: SkillName } });
+    if (!skill) {
+      return { status: 400, message: `Skill "${SkillName}" không tồn tại` };
+    }
+
     const GroupID = uuidv4();
 
     for (const q of questions) {
       if (!q.Type || !q.Content) {
         return {
           status: 400,
-          message: "Each question must include Type and Content",
+          message: 'Mỗi question phải có Type và Content',
         };
       }
     }
 
-    const payload = questions.map((q) => ({
-      Type: q.Type,
-      AudioKeys: q.AudioKeys || null,
-      ImageKeys: q.ImageKeys || null,
-      SkillID,
-      PartID,
-      Sequence: q.Sequence ?? null,
-      Content: q.Content,
-      SubContent: q.SubContent || null,
-      GroupContent: q.GroupContent || null,
-      AnswerContent: q.AnswerContent || null,
-      GroupID,
-    }));
+    const payload = questions.map((q, index) => {
+      const imageKeys = q.ImageKeys || [];
+
+      return {
+        Type: q.Type,
+        AudioKeys: q.AudioKeys || null,
+        ImageKeys: imageKeys,
+        SkillID: skill.ID,
+        PartID,
+        Sequence: q.Sequence ?? index + 1,
+        Content: q.Content,
+        SubContent: q.SubContent || null,
+        GroupContent: q.GroupContent || null,
+        AnswerContent:
+          q.AnswerContent ||
+          (q.Type === 'speaking'
+            ? buildSpeakingAnswerContent({ ...q, ImageKeys: imageKeys }, PartID)
+            : null),
+        GroupID,
+      };
+    });
 
     const created = await Question.bulkCreate(payload, { returning: true });
 
     return {
       status: 201,
-      message: "Question group created successfully",
+      message: 'Question group created successfully',
       data: created,
     };
   } catch (error) {
@@ -111,19 +130,20 @@ async function getQuestionsByPartID(req) {
     const { partId } = req.params;
 
     if (!partId) {
-      return { status: 400, message: "PartID is required" };
+      return { status: 400, message: 'PartID is required' };
     }
 
     const questions = await Question.findAll({
       where: { PartID: partId },
-      order: [["createdAt", "DESC"]],
+      order: [['createdAt', 'DESC']],
+      order: [['createdAt', 'DESC']],
       raw: true,
     });
 
     if (!questions || questions.length === 0) {
       return {
         status: 404,
-        message: "No questions found for this part",
+        message: 'No questions found for this part',
       };
     }
 
@@ -145,13 +165,13 @@ async function getQuestionByID(req) {
     if (!question) {
       return {
         status: 404,
-        message: "Question not found",
+        message: 'Question not found',
       };
     }
 
     return {
       status: 200,
-      message: "Question retrieved successfully",
+      message: 'Question retrieved successfully',
       data: question,
     };
   } catch (error) {
@@ -175,51 +195,50 @@ async function getQuestionsByQuestionSetID(req) {
       include: [
         {
           model: QuestionSetQuestion,
-          as: "Questions",
+          as: 'Questions',
           include: [
             {
               model: Question,
-              as: "Question",
+              as: 'Question',
               where: questionFilter,
               include: [
-                { model: Skill, as: "Skill", where: skillFilter },
-                { model: Part, as: "Part" }
-              ]
-            }
+                { model: Skill, as: 'Skill', where: skillFilter },
+                { model: Part, as: 'Part' },
+              ],
+            },
           ],
-          order: [["Sequence", "ASC"]],
-        }
+          order: [['Sequence', 'ASC']],
+        },
       ],
       order: [
-        [{ model: QuestionSetQuestion, as: "Questions" }, "Sequence", "ASC"]
-      ]
+        [{ model: QuestionSetQuestion, as: 'Questions' }, 'Sequence', 'ASC'],
+      ],
     });
 
     if (!questionSet) {
       return {
         status: 404,
-        message: `QuestionSet with id ${questionSetId} not found`
+        message: `QuestionSet with id ${questionSetId} not found`,
       };
     }
 
     const questions = questionSet.Questions.map((item) => ({
       ...item.Question.dataValues,
-      Sequence: item.Sequence
+      Sequence: item.Sequence,
     }));
 
-    const orderedQuestions = _.sortBy(questions, ["Sequence"]);
+    const orderedQuestions = _.sortBy(questions, ['Sequence']);
 
     return {
       status: 200,
-      message: "Questions fetched successfully",
+      message: 'Questions fetched successfully',
       data: {
         questionSetId,
         shuffleQuestions: questionSet.ShuffleQuestions,
         shuffleAnswers: questionSet.ShuffleAnswers,
-        questions: orderedQuestions
-      }
+        questions: orderedQuestions,
+      },
     };
-
   } catch (error) {
     throw new Error(
       `Error fetching questions for QuestionSet: ${error.message}`
@@ -243,13 +262,13 @@ async function getQuestionsByTopicID(req) {
         },
       ],
       where: { PartID: PartID },
-      order: [["createdAt", "DESC"]],
+      order: [['createdAt', 'DESC']],
       raw: true,
     });
     if (!questions || questions.length === 0) {
       return {
         status: 404,
-        message: "No questions found for this topic part",
+        message: 'No questions found for this topic part',
       };
     } else {
       return {
@@ -272,7 +291,7 @@ async function updateQuestion(req) {
     if (!question) {
       return {
         status: 404,
-        message: "Question not found",
+        message: 'Question not found',
       };
     }
 
@@ -280,7 +299,7 @@ async function updateQuestion(req) {
 
     return {
       status: 200,
-      message: "Question updated successfully",
+      message: 'Question updated successfully',
       data: question,
     };
   } catch (error) {
@@ -299,7 +318,7 @@ async function deleteQuestion(req) {
     if (deletedRows === 0) {
       return {
         status: 404,
-        message: "Question not found",
+        message: 'Question not found',
       };
     }
 
@@ -314,6 +333,7 @@ async function deleteQuestion(req) {
 
 module.exports = {
   createQuestion,
+  createQuestionGroup,
   createQuestionGroup,
   getQuestionByID,
   updateQuestion,

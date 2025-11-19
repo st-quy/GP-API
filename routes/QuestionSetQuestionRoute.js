@@ -1,11 +1,11 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
 
 const {
   addQuestionToQuestionSet,
   removeQuestionFromQuestionSet,
   getQuestionSetQuestionById,
-} = require("../controller/QuestionSetQuestionController");
+} = require('../controller/QuestionSetQuestionController');
 
 /**
  * @swagger
@@ -46,7 +46,7 @@ const {
  *       500:
  *         description: Internal server error
  */
-router.post("/", addQuestionToQuestionSet);
+router.post('/', addQuestionToQuestionSet);
 
 /**
  * @swagger
@@ -69,30 +69,7 @@ router.post("/", addQuestionToQuestionSet);
  *       500:
  *         description: Internal server error
  */
-router.get("/:id", getQuestionSetQuestionById);
-
-/**
- * @swagger
- * /question-set/{id}/questions:
- *   get:
- *     summary: Get all questions inside a QuestionSet (with optional shuffle)
- *     tags: [QuestionSetQuestion]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: ID of the QuestionSet
- *     responses:
- *       200:
- *         description: List of questions returned
- *       404:
- *         description: QuestionSet not found or empty
- *       500:
- *         description: Server error
- */
-router.get("/question-set/:id/questions", getQuestionsByQuestionSetId);
+router.get('/:id', getQuestionSetQuestionById);
 
 /**
  * @swagger
@@ -124,6 +101,6 @@ router.get("/question-set/:id/questions", getQuestionsByQuestionSetId);
  *       500:
  *         description: Internal server error
  */
-router.delete("/", removeQuestionFromQuestionSet);
+router.delete('/', removeQuestionFromQuestionSet);
 
 module.exports = router;

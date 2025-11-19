@@ -1,4 +1,4 @@
-const QuestionService = require("../services/QuestionService");
+const QuestionService = require('../services/QuestionService');
 
 async function createQuestion(req, res) {
   try {
@@ -42,6 +42,15 @@ async function createQuestionGroup(req, res) {
     res.status(result.status).json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+}
+
+async function createQuestionGroup(req, res) {
+  try {
+    const result = await QuestionService.createQuestionGroup(req);
+    res.status(result.status).json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
 }
 

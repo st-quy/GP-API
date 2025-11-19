@@ -1,15 +1,15 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
 
 const {
-  createQuestion,
+  createQuestionGroup,
   getQuestionsByPartID,
   getQuestionsByTopicID,
   getQuestionsByQuestionSetID,
   getQuestionByID,
   updateQuestion,
   deleteQuestion,
-} = require("../controller/QuestionController");
+} = require('../controller/QuestionController');
 
 /**
  * @swagger
@@ -99,8 +99,7 @@ const {
  *       500:
  *         description: Internal server error
  */
-router.get("/part/:partId", getQuestionsByPartID);
-
+router.get('/part/:partId', getQuestionsByPartID);
 
 /**
  * @swagger
@@ -150,7 +149,7 @@ router.get("/part/:partId", getQuestionsByPartID);
  *       500:
  *         description: Internal server error
  */
-router.get("/topic/:topicId", getQuestionsByTopicID);
+router.get('/topic/:topicId', getQuestionsByTopicID);
 
 /**
  * @swagger
@@ -212,7 +211,7 @@ router.get("/topic/:topicId", getQuestionsByTopicID);
  *       500:
  *         description: Internal server error
  */
-router.get("/:questionSetId", getQuestionsByQuestionSetID)
+router.get('/:questionSetId', getQuestionsByQuestionSetID);
 
 /**
  * @swagger
@@ -239,7 +238,7 @@ router.get("/:questionSetId", getQuestionsByQuestionSetID)
  *       500:
  *         description: Internal server error
  */
-router.get("/:questionId", getQuestionByID);
+router.get('/:questionId', getQuestionByID);
 
 /**
  * @swagger
@@ -265,7 +264,7 @@ router.get("/:questionId", getQuestionByID);
  *       500:
  *         description: Internal server error
  */
-router.post("/", createQuestion);
+router.post('/', createQuestionGroup);
 
 /**
  * @swagger
@@ -296,7 +295,7 @@ router.post("/", createQuestion);
  *       500:
  *         description: Internal server error
  */
-router.put("/:questionId", updateQuestion);
+router.put('/:questionId', updateQuestion);
 
 /**
  * @swagger
@@ -319,6 +318,6 @@ router.put("/:questionId", updateQuestion);
  *       500:
  *         description: Internal server error
  */
-router.delete("/:questionId", deleteQuestion);
+router.delete('/:questionId', deleteQuestion);
 
 module.exports = router;
