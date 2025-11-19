@@ -11,6 +11,22 @@ module.exports = {
     SPEAKING: "Speaking",
     "GRAMMAR AND VOCABULARY": "GrammarVocab",
   },
+  skillIDMapping: {
+    READING: "",
+    LISTENING: "",
+    WRITING: "",
+    SPEAKING: "",
+    GRAMMAR_VOCAB: "",
+  },
+  questionTypeMapping:{
+    WRITING: "writing",
+    SPEAKING: "speaking",
+    MULTIPLE_CHOICE: "multiple-choice",
+    ORDERING: "ordering",
+    DROPDOWN_LIST: "dropdown-list",
+    MATCHING: "matching",
+    LISTENING_QUESTION_GROUP: "listening-question-group",
+  },
   skillMappingLevel: {
     READING: "ReadingLevel",
     LISTENING: "ListeningLevel",

@@ -7,7 +7,7 @@ const createTopic = async (req, res) => {
     const result = await topicService.createTopic(req);
     return res.status(result.status).json(result);
   } catch (error) {
-    return res.status(400).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
   }
 };
 
@@ -42,10 +42,42 @@ const getAllTopics = async (req, res) => {
   }
 };
 
+const removePartFromTopic = async (req, res) => {
+  try {
+    const topics = await topicService.removePartFromTopic();
+    return res.status(topics.status).json(topics);
+  } catch (error) {
+    console.error("Error fetching all topics:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+const addPartToTopic = async (req, res) => {
+  try {
+    const topics = await topicService.addPartToTopic();
+    return res.status(topics.status).json(topics);
+  } catch (error) {
+    console.error("Error fetching all topics:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+const getQuestionsByQuestionSetId = async (req, res) => {
+  try {
+    const topics = await topicService.getQuestionsByQuestionSetId();
+    return res.status(topics.status).json(topics);
+  } catch (error) {
+    console.error("Error fetching all topics:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+
 module.exports = {
   getTopicWithRelations,
   getTopicByName,
   getAllTopics,
   createTopic,
-  getAllTopics,
+  removePartFromTopic,
+  addPartToTopic,
+  getQuestionsByQuestionSetId,
 };

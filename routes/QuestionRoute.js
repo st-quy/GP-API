@@ -4,6 +4,8 @@ const router = express.Router();
 const {
   createQuestion,
   getQuestionsByPartID,
+  getQuestionsByTopicID,
+  getQuestionsByQuestionSetID,
   getQuestionByID,
   updateQuestion,
   deleteQuestion,
@@ -98,6 +100,119 @@ const {
  *         description: Internal server error
  */
 router.get("/part/:partId", getQuestionsByPartID);
+
+
+/**
+ * @swagger
+ * /questions/topic/{topicId}:
+ *   get:
+ *     summary: Get all questions by Topic ID
+ *     tags: [Question]
+ *     parameters:
+ *       - in: path
+ *         name: topicId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: ID of the topic to fetch questions for
+ *       - in: query
+ *         name: questionType
+ *         schema:
+ *           type: string
+ *         required: false
+ *         description: Filter by question type (MCQ, True/False, etc.)
+ *       - in: query
+ *         name: skillName
+ *         schema:
+ *           type: string
+ *         required: false
+ *         description: Filter by skill name (Listening, Reading, etc.)
+ *     responses:
+ *       200:
+ *         description: List of questions for the given topic
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: number
+ *                   example: 200
+ *                 message:
+ *                   type: string
+ *                   example: Questions fetched successfully
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Question'
+ *       404:
+ *         description: Topic or questions not found
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/topic/:topicId", getQuestionsByTopicID);
+
+/**
+ * @swagger
+ * /questions/questionset/{questionSetId}:
+ *   get:
+ *     summary: Get all questions in a QuestionSet by QuestionSet ID
+ *     tags: [Question]
+ *     parameters:
+ *       - in: path
+ *         name: questionSetId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: ID of the QuestionSet to fetch questions for
+ *       - in: query
+ *         name: questionType
+ *         schema:
+ *           type: string
+ *         required: false
+ *         description: Filter questions by type (e.g., MCQ, True/False)
+ *       - in: query
+ *         name: skillName
+ *         schema:
+ *           type: string
+ *         required: false
+ *         description: Filter questions by skill name (e.g., Listening, Speaking)
+ *     responses:
+ *       200:
+ *         description: Questions fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: number
+ *                   example: 200
+ *                 message:
+ *                   type: string
+ *                   example: Questions fetched successfully
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     questionSetId:
+ *                       type: string
+ *                       example: "b3fdaae4-45a2-4ac7-b62e-e3b108f36cf0"
+ *                     shuffleQuestions:
+ *                       type: boolean
+ *                       example: false
+ *                     shuffleAnswers:
+ *                       type: boolean
+ *                       example: false
+ *                     questions:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Question'
+ *       404:
+ *         description: QuestionSet not found
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/:questionSetId", getQuestionsByQuestionSetID)
 
 /**
  * @swagger

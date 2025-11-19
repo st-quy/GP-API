@@ -1,4 +1,4 @@
-const { Question, TopicPart } = require("../models");
+const { Question, TopicPart, QuestionSet, QuestionSetQuestion, Skill, Part } = require("../models");
 const { Op } = require("sequelize");
 
 async function createQuestion(req) {
@@ -51,11 +51,11 @@ async function createQuestion(req) {
 
 async function createQuestionGroup(req) {
   try {
-    const { PartID, Skill, questions } = req.body;
+    const { PartID, SkillName, questions } = req.body;
 
     if (
       !PartID ||
-      !SkillCode ||
+      !SkillName ||
       !questions ||
       !Array.isArray(questions) ||
       questions.length === 0
@@ -66,47 +66,31 @@ async function createQuestionGroup(req) {
       };
     }
 
+    const SkillID = await Skill.findOne({
+      where: { Name: SkillName}
+    })
     const GroupID = uuidv4();
 
-    // This is a placeholder mapping, replace with actual logic as needed
-    // Can map Question Type to Questions here base on which types the skill uses
-    // Should be mapping skills and types as constants in /helper/constants.js file for better maintainability
-    
-    let SkillID;
-    switch (Skill.toLowerCase()) {
-      case "speaking":
-        SkillID = "";
-        break;
-      case "listening":
-        SkillID = "";
-        break;
-      case "reading":
-        SkillID = "";
-        break;
-      case "writing":
-        SkillID = "";
-        break;
-      case "grammarVocab":
-        SkillID = "";
-        break;
-      default:
+    for (const q of questions) {
+      if (!q.Type || !q.Content) {
         return {
           status: 400,
-          message: "",
+          message: "Each question must include Type and Content",
         };
+      }
     }
 
     const payload = questions.map((q) => ({
-      Type: item.Type,
-      AudioKeys: item.AudioKeys || null,
-      ImageKeys: item.ImageKeys || null,
+      Type: q.Type,
+      AudioKeys: q.AudioKeys || null,
+      ImageKeys: q.ImageKeys || null,
       SkillID,
       PartID,
-      Sequence: item.Sequence ?? null,
-      Content: item.Content,
-      SubContent: item.SubContent || null,
-      GroupContent: item.GroupContent || null,
-      AnswerContent: item.AnswerContent || null,
+      Sequence: q.Sequence ?? null,
+      Content: q.Content,
+      SubContent: q.SubContent || null,
+      GroupContent: q.GroupContent || null,
+      AnswerContent: q.AnswerContent || null,
       GroupID,
     }));
 
@@ -172,6 +156,74 @@ async function getQuestionByID(req) {
     };
   } catch (error) {
     throw new Error(`Error fetching question: ${error.message}`);
+  }
+}
+
+async function getQuestionsByQuestionSetID(req) {
+  try {
+    const { questionSetId } = req.params;
+    const { questionType, skillName } = req.query;
+
+    const questionFilter = {};
+    if (questionType) questionFilter.Type = questionType;
+
+    const skillFilter = {};
+    if (skillName) skillFilter.Name = skillName;
+
+    const questionSet = await QuestionSet.findOne({
+      where: { ID: questionSetId },
+      include: [
+        {
+          model: QuestionSetQuestion,
+          as: "Questions",
+          include: [
+            {
+              model: Question,
+              as: "Question",
+              where: questionFilter,
+              include: [
+                { model: Skill, as: "Skill", where: skillFilter },
+                { model: Part, as: "Part" }
+              ]
+            }
+          ],
+          order: [["Sequence", "ASC"]],
+        }
+      ],
+      order: [
+        [{ model: QuestionSetQuestion, as: "Questions" }, "Sequence", "ASC"]
+      ]
+    });
+
+    if (!questionSet) {
+      return {
+        status: 404,
+        message: `QuestionSet with id ${questionSetId} not found`
+      };
+    }
+
+    const questions = questionSet.Questions.map((item) => ({
+      ...item.Question.dataValues,
+      Sequence: item.Sequence
+    }));
+
+    const orderedQuestions = _.sortBy(questions, ["Sequence"]);
+
+    return {
+      status: 200,
+      message: "Questions fetched successfully",
+      data: {
+        questionSetId,
+        shuffleQuestions: questionSet.ShuffleQuestions,
+        shuffleAnswers: questionSet.ShuffleAnswers,
+        questions: orderedQuestions
+      }
+    };
+
+  } catch (error) {
+    throw new Error(
+      `Error fetching questions for QuestionSet: ${error.message}`
+    );
   }
 }
 
@@ -268,4 +320,5 @@ module.exports = {
   deleteQuestion,
   getQuestionsByPartID,
   getQuestionsByTopicID,
+  getQuestionsByQuestionSetID,
 };

@@ -1,13 +1,81 @@
-const { Topic, Part, Question, Skill } = require("../models");
+const {
+  QuestionSet,
+  QuestionSetQuestion,
+  Question,
+  Skill,
+  Part,
+  Topic,
+} = require("../models");
+const { Op } = require("sequelize");
+
+const getQuestionsByQuestionSetId = async (req) => {
+  try {
+    const { questionSetId } = req.params;
+
+    const questionSet = await QuestionSet.findByPk(questionSetId, {
+      include: [
+        {
+          model: QuestionSetQuestion,
+          as: "Questions",
+          include: [
+            {
+              model: Question,
+              as: "Question",
+              include: [
+                { model: Skill, as: "Skill" },
+                { model: Part, as: "Part" },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    if (!questionSet) {
+      return res.status(404).json({ message: "QuestionSet not found" });
+    }
+
+    let questions = questionSet.Questions.map((item) => ({
+      ...item.Question.dataValues,
+      Sequence: item.Sequence,
+    }));
+
+    // if (questionSet.ShuffleQuestions) {
+    //   questions = shuffleByGroup(questions);
+    // } else {
+    //   questions = _.sortBy(questions, ["Sequence"]);
+    // }
+
+    // if (questionSet.ShuffleAnswers) {
+    //   questions = questions.map((q) => ({
+    //     ...q,
+    //     AnswerContent: {
+    //       ...q.AnswerContent,
+    //       options: _.shuffle(q.AnswerContent?.options || []),
+    //     },
+    //   }));
+    // }
+
+    return {
+      questionSetId,
+      shuffleQuestions: questionSet.ShuffleQuestions,
+      shuffleAnswers: questionSet.ShuffleAnswers,
+      questions,
+    };
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
 
 const createTopic = async (req) => {
   try {
-    const {Name} = req.body; 
+    const { Name } = req.body;
     if (!Name) {
       throw new Error("Topic Name is required");
     }
     const newTopic = await Topic.create({
-      Name
+      Name,
     });
     return {
       status: 201,
@@ -28,7 +96,7 @@ const getAllTopics = async () => {
       data: topics,
     };
   } catch (error) {
-     throw new Error(`Error get all topic: ${error.message}`);
+    throw new Error(`Error get all topic: ${error.message}`);
   }
 };
 
@@ -113,7 +181,6 @@ const getTopicByName = async (req, res) => {
   }
 };
 
-
 async function addPartToTopic(req, res) {
   try {
     const { topicId, partId } = req.body;
@@ -147,7 +214,7 @@ async function removePartFromTopic(req, res) {
       return res.status(404).json({ message: "Topic or Part not found" });
     }
 
-    await topic.removePart(part); 
+    await topic.removePart(part);
 
     return res.status(200).json({
       message: "Part removed from Topic successfully",
@@ -165,4 +232,5 @@ module.exports = {
   removePartFromTopic,
   getTopicWithRelations,
   getTopicByName,
+  getQuestionsByQuestionSetId,
 };

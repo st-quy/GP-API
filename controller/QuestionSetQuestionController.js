@@ -32,20 +32,8 @@ const removeQuestionFromQuestionSet = async (req, res) => {
   }
 };
 
-const getQuestionsByQuestionSetId = async (req, res) => {
-  try {
-    const result = await QuestionSetQuestionService.getQuestionsByQuestionSetId(
-      req
-    );
-    return res.status(result.status).json(result);
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
-  }
-};
-
 module.exports = {
   addQuestionToQuestionSet,
   removeQuestionFromQuestionSet,
   getQuestionSetQuestionById,
-  getQuestionsByQuestionSetId,
 };
