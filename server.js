@@ -29,7 +29,7 @@ const sslOptions = {
 };
 
 db.sequelize
-  .sync({ force: false })
+  .sync({ alter: false })
   // .authenticate()
   .then(async () => {
     console.log("Database synchronized and models updated successfully.");
