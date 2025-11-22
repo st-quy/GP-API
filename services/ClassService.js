@@ -4,9 +4,9 @@ const { Op, Sequelize } = require("sequelize");
 
 async function findAll(req) {
   sequelizePaginate.paginate(Class);
-  const { page = 1, limit = 10, teacherId, searchName } = req.query;
+  const { page = 1, limit, teacherId, searchName } = req.query;
   const parsedPage = parseInt(page, 10);
-  const parsedLimit = parseInt(limit, 10);
+  const parsedLimit = limit ? parseInt(limit, 10) : null;
   try {
     let whereCondition = {};
     if (teacherId) {
@@ -20,7 +20,7 @@ async function findAll(req) {
 
     const options = {
       page: parsedPage,
-      paginate: parsedLimit,
+      paginate: parsedLimit || undefined,
       where: whereCondition,
       include: [
         {
