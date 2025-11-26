@@ -1,17 +1,58 @@
-const { Part } = require("../models");
+const { Part, Skill } = require('../models');
+
+/**
+ * Helper: resolve Skill từ skillId hoặc skillName
+ */
+async function resolveSkill({ skillId, skillName }) {
+  if (!skillId && !skillName) {
+    return null;
+  }
+
+  let skill = null;
+
+  if (skillId) {
+    skill = await Skill.findByPk(skillId);
+    if (!skill) {
+      throw new Error(`Skill with id ${skillId} not found`);
+    }
+  } else if (skillName) {
+    skill = await Skill.findOne({ where: { Name: skillName } });
+    if (!skill) {
+      throw new Error(`Skill "${skillName}" not found`);
+    }
+  }
+
+  return skill;
+}
 
 async function createPart(req) {
   try {
-    const { content, subContent, sequence } = req.body;
-    if (!content) return { status: 400, message: "Content is required" };
+    const { content, subContent, sequence, skillId, skillName } = req.body;
+
+    if (!content) {
+      return { status: 400, message: 'Content is required' };
+    }
+
+    let skill = null;
+    let SkillID = null;
+
+    try {
+      skill = await resolveSkill({ skillId, skillName });
+      SkillID = skill ? skill.ID : null;
+    } catch (err) {
+      return { status: 400, message: err.message };
+    }
+
     const newPart = await Part.create({
       Content: content,
       SubContent: subContent || null,
       Sequence: sequence ?? null,
+      SkillID,
     });
+
     return {
       status: 201,
-      message: "Part created successfully",
+      message: 'Part created successfully',
       data: newPart,
     };
   } catch (error) {
@@ -22,21 +63,40 @@ async function createPart(req) {
 async function updatePart(req) {
   try {
     const { partId } = req.params;
-    const { content, subContent, sequence } = req.body;
+    const { content, subContent, sequence, skillId, skillName } = req.body;
+
     const part = await Part.findByPk(partId);
     if (!part) {
       return {
         status: 404,
         message: `Part with id ${partId} not found`,
       };
-    } else {
-      await part.update({
-        Content: content ?? part.Content,
-        SubContent: subContent ?? part.SubContent,
-        Sequence: sequence ?? part.Sequence,
-      });
-      return { status: 200, message: "Part updated successfully", data: part };
     }
+
+    let SkillID = part.SkillID;
+
+    // Nếu FE gửi skillId / skillName thì update luôn Skill cho Part
+    if (skillId || skillName) {
+      try {
+        const skill = await resolveSkill({ skillId, skillName });
+        SkillID = skill ? skill.ID : null;
+      } catch (err) {
+        return { status: 400, message: err.message };
+      }
+    }
+
+    await part.update({
+      Content: content ?? part.Content,
+      SubContent: subContent ?? part.SubContent,
+      Sequence: sequence ?? part.Sequence,
+      SkillID,
+    });
+
+    return {
+      status: 200,
+      message: 'Part updated successfully',
+      data: part,
+    };
   } catch (error) {
     throw new Error(`Error updating part: ${error.message}`);
   }
@@ -45,24 +105,76 @@ async function updatePart(req) {
 async function getPartByID(req) {
   try {
     const { partId } = req.params;
-    const part = await Part.findOne({ where: { ID: partId } });
-    if (!part)
+    const part = await Part.findOne({
+      where: { ID: partId },
+      include: [
+        {
+          model: Skill,
+          as: 'Skill',
+          attributes: ['ID', 'Name'],
+        },
+      ],
+    });
+
+    if (!part) {
       return {
         status: 404,
         message: `Part with id ${partId} not found`,
       };
-    return { status: 200, message: "Part fetched successfully", data: part };
+    }
+
+    return {
+      status: 200,
+      message: 'Part fetched successfully',
+      data: part,
+    };
   } catch (error) {
     throw new Error(`Error fetching part: ${error.message}`);
   }
 }
 
-async function getAllPart() {
+/**
+ * GET /parts?skillId=...&skillName=...
+ * - Nếu không truyền skill => trả về tất cả Part
+ * - Nếu truyền skillId / skillName => filter theo Skill
+ */
+async function getAllPart(req) {
   try {
-    const parts = await Part.findAll({ order: [["createdAt", "DESC"]] });
+    const { skillId, skillName } = req.query || {};
+
+    let where = {};
+
+    if (skillId || skillName) {
+      try {
+        const skill = await resolveSkill({ skillId, skillName });
+        if (!skill) {
+          return {
+            status: 400,
+            message: 'Skill not found',
+          };
+        }
+        // Filter theo SkillID
+        where.SkillID = skill.ID;
+      } catch (err) {
+        return { status: 400, message: err.message };
+      }
+    }
+
+    const parts = await Part.findAll({
+      where,
+      order: [['createdAt', 'DESC']],
+      include: [
+        {
+          model: Skill,
+          as: 'Skill',
+          attributes: ['ID', 'Name'],
+        },
+      ],
+    });
+
     return {
       status: 200,
-      message: "Parts fetched successfully",
+      message: 'Parts fetched successfully',
       data: parts,
     };
   } catch (error) {
@@ -80,10 +192,11 @@ async function deletePart(req) {
         message: `Part with id ${partId} not found`,
       };
     }
+
     await part.destroy();
     return {
       status: 200,
-      message: "Part deleted successfully",
+      message: 'Part deleted successfully',
     };
   } catch (error) {
     throw new Error(`Error deleting part: ${error.message}`);

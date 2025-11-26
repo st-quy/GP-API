@@ -43,14 +43,11 @@ db.QuestionSet = require('./QuestionSet')(sequelize, DataTypes);
 db.QuestionSetQuestion = require('./QuestionSetQuestion')(sequelize, DataTypes);
 
 // Relationships
+// User <-> Role
 db.User.belongsToMany(db.Role, { through: db.UserRole, foreignKey: 'UserID' });
 db.Role.belongsToMany(db.User, { through: db.UserRole, foreignKey: 'RoleID' });
 
-// Old topic part relationship
-// db.Topic.hasMany(db.Part, { foreignKey: "TopicID" });
-// db.Part.belongsTo(db.Topic, { foreignKey: "TopicID" });
-
-// New many-to-many relationship between Topic and Part
+// Topic <-> Part (M:N) qua TopicPart
 db.Topic.belongsToMany(db.Part, {
   through: db.TopicPart,
   foreignKey: 'TopicID',
@@ -65,13 +62,15 @@ db.Part.belongsToMany(db.Topic, {
   as: 'Topics',
 });
 
+// Part <-> Question (1:N)
 db.Part.hasMany(db.Question, { foreignKey: 'PartID' });
 db.Question.belongsTo(db.Part, { foreignKey: 'PartID' });
 
-db.Question.belongsTo(db.Skill, { foreignKey: 'SkillID' });
-db.Skill.hasMany(db.Question, { foreignKey: 'SkillID', as: 'Questions' });
+// Skill <-> Part (1:N)  👈 NEW
+db.Part.belongsTo(db.Skill, { foreignKey: 'SkillID', as: 'Skill' });
+db.Skill.hasMany(db.Part, { foreignKey: 'SkillID', as: 'Parts' });
 
-// NEW: QuestionSet <-> Question (M:N)
+// QuestionSet <-> Question (M:N) - giữ nguyên nếu bạn còn dùng
 db.QuestionSet.belongsToMany(db.Question, {
   through: db.QuestionSetQuestion,
   foreignKey: 'QuestionSetID',
@@ -86,32 +85,49 @@ db.Question.belongsToMany(db.QuestionSet, {
   as: 'QuestionSets',
 });
 
+db.Question.belongsTo(db.User, { as: 'creator', foreignKey: 'CreatedBy' });
+db.Question.belongsTo(db.User, { as: 'updater', foreignKey: 'UpdatedBy' });
+
+db.User.hasMany(db.Question, {
+  foreignKey: 'CreatedBy',
+  as: 'createdQuestions',
+});
+db.User.hasMany(db.Question, {
+  foreignKey: 'UpdatedBy',
+  as: 'updatedQuestions',
+});
+// StudentAnswer relations
 db.StudentAnswer.belongsTo(db.User, { foreignKey: 'StudentID' });
 db.StudentAnswer.belongsTo(db.Topic, { foreignKey: 'TopicID' });
 db.StudentAnswer.belongsTo(db.Question, { foreignKey: 'QuestionID' });
+db.StudentAnswer.belongsTo(db.Session, { foreignKey: 'SessionID' });
 
+// StudentAnswerDraft relations (thêm Session)
 db.StudentAnswerDraft.belongsTo(db.User, { foreignKey: 'StudentID' });
 db.StudentAnswerDraft.belongsTo(db.Topic, { foreignKey: 'TopicID' });
 db.StudentAnswerDraft.belongsTo(db.Question, { foreignKey: 'QuestionID' });
+db.StudentAnswerDraft.belongsTo(db.Session, { foreignKey: 'SessionID' });
 
+// Class <-> User, Session
 db.User.hasMany(db.Class, { foreignKey: 'UserID' });
 db.Class.belongsTo(db.User, { foreignKey: 'UserID' });
 
 db.Class.hasMany(db.Session, { foreignKey: 'ClassID' });
+db.Session.belongsTo(db.Class, { foreignKey: 'ClassID', as: 'Classes' });
 
+// Topic <-> Session (examSet)
 db.Topic.hasMany(db.Session, { foreignKey: 'examSet' });
 db.Session.belongsTo(db.Topic, { foreignKey: 'examSet' });
 
-db.Session.belongsTo(db.Class, { foreignKey: 'ClassID', as: 'Classes' });
-// db.Session.hasMany(db.SessionParticipant, { foreignKey: "SessionID" });
+// Session <-> SessionParticipant
 db.Session.hasMany(db.SessionParticipant, {
   foreignKey: 'SessionID',
   as: 'SessionParticipants',
 });
-
 db.SessionParticipant.belongsTo(db.Session, { foreignKey: 'SessionID' });
 db.SessionParticipant.belongsTo(db.User, { foreignKey: 'UserID' });
 
+// SessionRequest
 db.SessionRequest.belongsTo(db.Session, { foreignKey: 'SessionID' });
 db.SessionRequest.belongsTo(db.User, { foreignKey: 'UserID' });
 

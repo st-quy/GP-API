@@ -1,5 +1,6 @@
+// models/Part.js
 module.exports = (sequelize, DataTypes) => {
-  const Part = sequelize.define("Part", {
+  const Part = sequelize.define('Part', {
     ID: {
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
@@ -16,6 +17,14 @@ module.exports = (sequelize, DataTypes) => {
     Sequence: {
       type: DataTypes.INTEGER,
       allowNull: true,
+    },
+    SkillID: {
+      type: DataTypes.UUID,
+      allowNull: true, // nếu DB mới thì có thể set false sau
+      references: {
+        model: 'Skills',
+        key: 'ID',
+      },
     },
   });
 
