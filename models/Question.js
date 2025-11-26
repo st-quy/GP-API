@@ -1,5 +1,6 @@
+// models/Question.js
 module.exports = (sequelize, DataTypes) => {
-  const Question = sequelize.define("Question", {
+  const Question = sequelize.define('Question', {
     ID: {
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
@@ -17,16 +18,12 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.ARRAY(DataTypes.TEXT),
       allowNull: true,
     },
-    SkillID: {
-      type: DataTypes.UUID,
-      allowNull: false,
-    },
     PartID: {
       type: DataTypes.UUID,
       allowNull: false,
       references: {
-        model: "Parts",
-        key: "ID",
+        model: 'Parts',
+        key: 'ID',
       },
     },
     Sequence: {
@@ -48,6 +45,26 @@ module.exports = (sequelize, DataTypes) => {
     AnswerContent: {
       type: DataTypes.JSON,
       allowNull: true,
+    },
+    GroupID: {
+      type: DataTypes.UUID,
+      allowNull: true,
+    },
+    CreatedBy: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'Users',
+        key: 'ID',
+      },
+    },
+    UpdatedBy: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'Users',
+        key: 'ID',
+      },
     },
   });
 

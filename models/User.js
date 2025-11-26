@@ -1,6 +1,6 @@
 module.exports = (sequelize, DataTypes) => {
   const User = sequelize.define(
-    "User",
+    'User',
     {
       ID: {
         type: DataTypes.UUID,
@@ -35,11 +35,7 @@ module.exports = (sequelize, DataTypes) => {
         unique: true,
         allowNull: true,
       },
-      roleIDs: {
-        type: DataTypes.ARRAY(DataTypes.STRING),
-        allowNull: false,
-        defaultValue: ["student"],
-      },
+
       password: {
         type: DataTypes.STRING,
         allowNull: false,
@@ -58,8 +54,8 @@ module.exports = (sequelize, DataTypes) => {
       },
       dob: {
         type: DataTypes.STRING,
-        allowNull: true
-      }
+        allowNull: true,
+      },
     },
     {
       getterMethods: {

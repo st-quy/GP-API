@@ -1,21 +1,21 @@
-const jwt = require("jsonwebtoken");
-const { User } = require("../models");
+const jwt = require('jsonwebtoken');
+const { User } = require('../models');
 const JWT_SECRET = process.env.JWT_SECRET;
 const EMAIL_SECRET = process.env.EMAIL_SECRET;
 
-async function generateJwtAccess(user) {
+async function generateJwtAccess(jwtPayload) {
   const payload = {
-    userId: user.ID,
-    role: user.roleIDs,
-    lastName: user.lastName,
-    firstName: user.firstName,
-    email: user.email,
-    phone: user.phone,
-    class: user.class,
-    studentCode: user.studentCode,
-    teacherCode: user.teacherCode,
+    userId: jwtPayload.user.ID,
+    role: jwtPayload.roles,
+    lastName: jwtPayload.user.lastName,
+    firstName: jwtPayload.user.firstName,
+    email: jwtPayload.user.email,
+    phone: jwtPayload.user.phone,
+    class: jwtPayload.user.class,
+    studentCode: jwtPayload.user.studentCode,
+    teacherCode: jwtPayload.user.teacherCode,
   };
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "1d" });
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: '1d' });
 }
 const generateToken = (payload, expiresIn) => {
   const token = jwt.sign(payload, EMAIL_SECRET, { expiresIn });
@@ -27,7 +27,7 @@ async function generateJwtRefresh(user) {
   const payload = {
     userId: user.user_id,
   };
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" });
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 }
 
 function validateToken(token) {
@@ -57,12 +57,12 @@ async function refreshToken(refreshToken) {
   const decoded = jwt.verify(refreshToken, JWT_SECRET);
 
   if (!decoded) {
-    throw new Error("Invalid or expired refresh token");
+    throw new Error('Invalid or expired refresh token');
   }
 
   const user = await User.findByPk(decoded.userId); // Tìm user từ DB
   if (!user) {
-    throw new Error("User not found");
+    throw new Error('User not found');
   }
 
   const newAccessToken = await generateJwtAccess(user);
