@@ -1,5 +1,14 @@
 const QuestionService = require('../services/QuestionService');
 
+async function getAllQuestions(req, res) {
+  try {
+    const result = await QuestionService.getAllQuestions(req);
+    res.status(result.status).json(result);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+}
+
 async function createQuestion(req, res) {
   try {
     const result = await QuestionService.createQuestion(req);
@@ -90,4 +99,5 @@ module.exports = {
   getQuestionByID,
   updateQuestion,
   deleteQuestion,
+  getAllQuestions,
 };

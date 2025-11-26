@@ -56,7 +56,7 @@ const {
  *       500:
  *         description: Internal server error
  */
-router.get('/', createTopic);
+router.post('', createTopic);
 
 /**
  * @swagger
@@ -85,7 +85,7 @@ router.get('/', createTopic);
  *                     $ref: '#/components/schemas/Topic'
  */
 
-router.get('/', getAllTopics);
+router.get('', getAllTopics);
 
 /**
  * @swagger

@@ -9,7 +9,10 @@ const {
   getQuestionByID,
   updateQuestion,
   deleteQuestion,
+  getAllQuestions,
 } = require('../controller/QuestionController');
+
+router.get('/', getAllQuestions);
 
 /**
  * @swagger

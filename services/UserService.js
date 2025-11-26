@@ -1,9 +1,9 @@
-const bcrypt = require("bcrypt");
-const { User } = require("../models");
-const jwtUtils = require("../helpers/jwt");
-const nodemailer = require("nodemailer");
-const jwt = require("jsonwebtoken");
-const { Op } = require("sequelize");
+const bcrypt = require('bcrypt');
+const { User, Role } = require('../models');
+const jwtUtils = require('../helpers/jwt');
+const nodemailer = require('nodemailer');
+const jwt = require('jsonwebtoken');
+const { Op } = require('sequelize');
 
 // Logic for user registration
 async function registerUser(data) {
@@ -42,28 +42,28 @@ async function registerUser(data) {
 
     return {
       status: 200,
-      message: "Register Successfully",
+      message: 'Register Successfully',
       data: userWithoutPassword,
     };
   } catch (error) {
-    if (error.name === "SequelizeUniqueConstraintError") {
+    if (error.name === 'SequelizeUniqueConstraintError') {
       const messages = error.errors.map((err) => {
         switch (err.path) {
-          case "email":
-            return "Email already exists";
-          case "phone":
-            return "Phone already exists";
-          case "studentCode":
-            return "Student Code already exists";
-          case "teacherCode":
-            return "Teacher Code already exists";
+          case 'email':
+            return 'Email already exists';
+          case 'phone':
+            return 'Phone already exists';
+          case 'studentCode':
+            return 'Student Code already exists';
+          case 'teacherCode':
+            return 'Teacher Code already exists';
           default:
             return `${err.path} already exists`;
         }
       });
       return {
         status: 400,
-        message: "Validation Error",
+        message: 'Validation Error',
         errors: messages,
       };
     }
@@ -71,7 +71,7 @@ async function registerUser(data) {
     // ❗ Catch all other unexpected errors
     return {
       status: 500,
-      message: "Internal Server Error",
+      message: 'Internal Server Error',
       error: error.message,
     };
   }
@@ -80,26 +80,55 @@ async function registerUser(data) {
 // Logic for user login
 async function loginUser(email, password) {
   try {
-    const user = await User.findOne({ where: { email } });
+    // 1. Tìm user + roles
+    const user = await User.findOne({
+      where: { email },
+      include: [
+        {
+          model: Role,
+          attributes: ['Name'],
+          through: { attributes: [] }, // ẩn bảng trung gian UserRole
+        },
+      ],
+    });
+
     if (!user) {
-      throw new Error("Invalid email or password");
+      throw new Error('Invalid email or password');
     }
 
+    // 2. Check password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      throw new Error("Invalid email or password");
+      throw new Error('Invalid email or password');
     }
 
-    // Generate new access token and refresh token
-    const accessToken = await jwtUtils.generateJwtAccess(user);
-    const refreshToken = await jwtUtils.generateJwtRefresh(user);
+    // 3. Lấy danh sách role
+    const roles = (user.Roles || []).map((role) => role.Name);
 
+    // 4. Payload cho JWT (tùy bạn muốn truyền gì)
+    const jwtPayload = {
+      user,
+      roles,
+    };
+
+    // 5. Generate token
+    const accessToken = await jwtUtils.generateJwtAccess(jwtPayload);
+    const refreshToken = await jwtUtils.generateJwtRefresh(jwtPayload);
+
+    // 6. Trả response (có thể trả kèm user + roles)
     return {
       status: 200,
-      message: "Login Successfully",
+      message: 'Login Successfully',
       data: {
         access_token: accessToken,
         refresh_token: refreshToken,
+        user: {
+          id: user.ID,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          roles,
+        },
       },
     };
   } catch (error) {
@@ -109,11 +138,43 @@ async function loginUser(email, password) {
 
 async function getUserById(userId) {
   try {
-    const user = await User.findOne({ where: { ID: userId } });
+    const user = await User.findOne({
+      where: { ID: userId },
+      include: [
+        {
+          model: Role,
+          attributes: ['Name'],
+          through: { attributes: [] }, // ẩn bảng trung gian UserRole
+        },
+      ],
+    });
+
     if (!user) {
-      throw new Error("User not found");
+      return {
+        status: 404,
+        message: 'User not found',
+        data: null,
+      };
     }
-    return user;
+
+    // Convert sang plain object
+    const plainUser = user.toJSON();
+
+    // Lấy danh sách role
+    const roles = (plainUser.Roles || []).map((role) => role.Name);
+
+    // Xoá field nhạy cảm
+    delete plainUser.password;
+    delete plainUser.Roles; // vì ta map ra roles riêng
+
+    return {
+      status: 200,
+      message: 'Get user successfully',
+      data: {
+        ...plainUser,
+        roles, // ['student', 'teacher', ...]
+      },
+    };
   } catch (error) {
     throw new Error(`Error fetching user: ${error.message}`);
   }
@@ -123,7 +184,7 @@ async function updateUser(userId, data) {
   try {
     const user = await User.findOne({ where: { ID: userId } });
     if (!user) {
-      throw new Error("User not found");
+      throw new Error('User not found');
     }
 
     if (data.phone) {
@@ -137,14 +198,14 @@ async function updateUser(userId, data) {
       });
 
       if (existingPhone && existingPhone.ID !== userId) {
-        throw new Error("Phone number already exists");
+        throw new Error('Phone number already exists');
       }
     }
 
     await user.update(data);
     return {
       status: 200,
-      message: "User updated successfully",
+      message: 'User updated successfully',
       data: user,
     };
   } catch (error) {
@@ -157,12 +218,12 @@ async function changePassword(userId, oldPassword, newPassword) {
   try {
     const user = await User.findOne({ where: { ID: userId } });
     if (!user) {
-      throw new Error("User not found");
+      throw new Error('User not found');
     }
 
     const isPasswordValid = await bcrypt.compare(oldPassword, user.password);
     if (!isPasswordValid) {
-      throw new Error("Invalid old password");
+      throw new Error('Invalid old password');
     }
 
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
@@ -170,7 +231,7 @@ async function changePassword(userId, oldPassword, newPassword) {
 
     return {
       status: 200,
-      message: "Password changed successfully",
+      message: 'Password changed successfully',
     };
   } catch (error) {
     throw new Error(`Error changing password: ${error.message}`);
@@ -179,7 +240,7 @@ async function changePassword(userId, oldPassword, newPassword) {
 
 async function sendResetPasswordEmail(email, host) {
   const transporter = nodemailer.createTransport({
-    service: "gmail",
+    service: 'gmail',
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
@@ -188,7 +249,7 @@ async function sendResetPasswordEmail(email, host) {
   try {
     const user = await User.findOne({ where: { email } });
     if (!user) {
-      throw new Error("User with this email does not exist");
+      throw new Error('User with this email does not exist');
     }
 
     // const resetToken = await jwt.sign({ userId: user.ID }, process.env.JWT_SECRET, {
@@ -221,7 +282,7 @@ async function sendResetPasswordEmail(email, host) {
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: user.email,
-      subject: "🔐 Your Password Has Been Reset",
+      subject: '🔐 Your Password Has Been Reset',
       html: `
     <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ddd;">
       <h2 style="color: #333;">🔐 Password Reset Successful</h2>
@@ -236,7 +297,7 @@ async function sendResetPasswordEmail(email, host) {
 
     await transporter.sendMail(mailOptions);
 
-    return { status: 200, message: "Password reset link sent to your email" };
+    return { status: 200, message: 'Password reset link sent to your email' };
   } catch (error) {
     throw new Error(`Error sending reset email: ${error.message}`);
   }
@@ -246,12 +307,12 @@ async function resetPassword(token, newPassword) {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findByPk(decoded.userId);
-    if (!user) throw new Error("Invalid or expired token");
+    if (!user) throw new Error('Invalid or expired token');
 
     user.password = await bcrypt.hash(newPassword, 10);
     await user.save();
 
-    return { status: 200, message: "Password has been updated successfully" };
+    return { status: 200, message: 'Password has been updated successfully' };
   } catch (error) {
     throw new Error(`Reset password failed: ${error.message}`);
   }
@@ -261,14 +322,14 @@ async function logoutUser(userId) {
   try {
     const user = await User.findByPk(userId);
     if (!user) {
-      throw new Error("User không tồn tại");
+      throw new Error('User không tồn tại');
     }
 
     user.refresh_token = null;
     user.refresh_token_expires = null;
     await user.save();
 
-    return { status: 200, message: "Logout thành công" };
+    return { status: 200, message: 'Logout thành công' };
   } catch (error) {
     throw new Error(`Logout thất bại: ${error.message}`);
   }
@@ -276,17 +337,17 @@ async function logoutUser(userId) {
 
 async function getAllUsersByRoleTeacher(req) {
   try {
-    const { page = 1, limit = 10, search = "", status } = req.query;
+    const { page = 1, limit = 10, search = '', status } = req.query;
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
     const searchTerms = search
       .trim()
-      .split(" ")
+      .split(' ')
       .filter((term) => term);
 
     const whereClause = {
       roleIDs: {
-        [Op.contains]: ["teacher"],
+        [Op.contains]: ['teacher'],
       },
     };
 
@@ -308,12 +369,12 @@ async function getAllUsersByRoleTeacher(req) {
       where: whereClause,
       offset,
       limit: parseInt(limit),
-      order: [["updatedAt", "DESC"]],
+      order: [['updatedAt', 'DESC']],
     });
 
     return {
       status: 200,
-      message: "Teachers fetched successfully",
+      message: 'Teachers fetched successfully',
       data: {
         teachers,
         pagination: {
@@ -333,13 +394,13 @@ async function deleteUser(userId) {
   try {
     const user = await User.findByPk(userId);
     if (!user) {
-      throw new Error("User not found with ID: " + userId);
+      throw new Error('User not found with ID: ' + userId);
     }
     const result = await user.destroy();
 
     return {
       status: 200,
-      message: "User deleted successfully",
+      message: 'User deleted successfully',
     };
   } catch (error) {
     throw new Error(`Error deleting user: ${error.message}`);
