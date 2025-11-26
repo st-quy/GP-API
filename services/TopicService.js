@@ -5,8 +5,8 @@ const {
   Skill,
   Part,
   Topic,
-} = require("../models");
-const { Op } = require("sequelize");
+} = require('../models');
+const { Op } = require('sequelize');
 
 const getQuestionsByQuestionSetId = async (req) => {
   try {
@@ -16,14 +16,14 @@ const getQuestionsByQuestionSetId = async (req) => {
       include: [
         {
           model: QuestionSetQuestion,
-          as: "Questions",
+          as: 'Questions',
           include: [
             {
               model: Question,
-              as: "Question",
+              as: 'Question',
               include: [
-                { model: Skill, as: "Skill" },
-                { model: Part, as: "Part" },
+                { model: Skill, as: 'Skill' },
+                { model: Part, as: 'Part' },
               ],
             },
           ],
@@ -32,7 +32,7 @@ const getQuestionsByQuestionSetId = async (req) => {
     });
 
     if (!questionSet) {
-      return res.status(404).json({ message: "QuestionSet not found" });
+      return res.status(404).json({ message: 'QuestionSet not found' });
     }
 
     let questions = questionSet.Questions.map((item) => ({
@@ -64,7 +64,7 @@ const getQuestionsByQuestionSetId = async (req) => {
     };
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: 'Server error' });
   }
 };
 
@@ -72,14 +72,14 @@ const createTopic = async (req) => {
   try {
     const { Name } = req.body;
     if (!Name) {
-      throw new Error("Topic Name is required");
+      throw new Error('Topic Name is required');
     }
     const newTopic = await Topic.create({
       Name,
     });
     return {
       status: 201,
-      message: "Topic created successfully",
+      message: 'Topic created successfully',
       data: newTopic,
     };
   } catch (error) {
@@ -90,9 +90,11 @@ const createTopic = async (req) => {
 const getAllTopics = async () => {
   try {
     const topics = await Topic.findAll();
+    console.log(topics, 'topics');
+
     return {
       status: 200,
-      message: "Get all topic successfully",
+      message: 'Get all topic successfully',
       data: topics,
     };
   } catch (error) {
@@ -105,14 +107,14 @@ const getTopicWithRelations = async (req, res) => {
     const topicId = req.params.id;
     const { questionType, skillName } = req.query;
 
-    const questionFilter = {};
+    const questionWhere = {};
     if (questionType) {
-      questionFilter.Type = questionType;
+      questionWhere.Type = questionType;
     }
 
-    const skillFilter = {};
+    const skillWhere = {};
     if (skillName) {
-      skillFilter.Name = skillName;
+      skillWhere.Name = skillName;
     }
 
     const topic = await Topic.findOne({
@@ -120,39 +122,43 @@ const getTopicWithRelations = async (req, res) => {
       include: [
         {
           model: Part,
-          order: [["Sequence", "ASC"]],
+          as: 'Parts',
           include: [
             {
+              model: Skill,
+              as: 'Skill',
+              ...(skillName && {
+                where: skillWhere,
+                required: true,
+              }),
+            },
+            {
               model: Question,
-              where: questionFilter,
-              order: [["Sequence", "ASC"]],
-              include: [
-                {
-                  model: Skill,
-                  where: skillFilter,
-                },
-                {
-                  model: Part,
-                },
-              ],
+              ...(questionType && {
+                where: questionWhere,
+                required: true,
+              }),
             },
           ],
         },
       ],
       order: [
-        [Part, Question, "Sequence", "ASC"],
-        [Part, "Sequence", "ASC"],
+        // sort Part theo Sequence
+        [{ model: Part, as: 'Parts' }, 'Sequence', 'ASC'],
+        // sort Question trong mỗi Part theo Sequence
+        [{ model: Part, as: 'Parts' }, { model: Question }, 'Sequence', 'ASC'],
       ],
+      distinct: true, // tránh duplicate khi join M:N
     });
 
     if (!topic) {
-      return res.status(404).json({ message: "Topic not found" });
+      return res.status(404).json({ message: 'Topic not found' });
     }
 
     return res.status(200).json(topic);
   } catch (error) {
-    console.error("Error fetching topic with relations:", error);
-    return res.status(500).json({ message: "Internal server error" });
+    console.error('Error fetching topic with relations:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
@@ -168,16 +174,16 @@ const getTopicByName = async (req, res) => {
     });
 
     if (!topic) {
-      return res.status(404).json({ message: "Topic not found" });
+      return res.status(404).json({ message: 'Topic not found' });
     }
 
     return res.status(200).json({
-      message: "Get topic by name successfully",
+      message: 'Get topic by name successfully',
       data: topic,
     });
   } catch (error) {
-    console.error("Error fetching topic by name:", error);
-    return res.status(500).json({ message: "Internal server error" });
+    console.error('Error fetching topic by name:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
@@ -189,17 +195,17 @@ async function addPartToTopic(req, res) {
     const part = await Part.findByPk(partId);
 
     if (!topic || !part) {
-      return res.status(404).json({ message: "Topic or Part not found" });
+      return res.status(404).json({ message: 'Topic or Part not found' });
     }
 
     await topic.addPart(part);
 
     return res.status(200).json({
-      message: "Part added to Topic successfully",
+      message: 'Part added to Topic successfully',
     });
   } catch (error) {
-    console.error("Error adding Part to Topic:", error);
-    return res.status(500).json({ message: "Internal server error" });
+    console.error('Error adding Part to Topic:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 }
 
@@ -211,17 +217,17 @@ async function removePartFromTopic(req, res) {
     const part = await Part.findByPk(partId);
 
     if (!topic || !part) {
-      return res.status(404).json({ message: "Topic or Part not found" });
+      return res.status(404).json({ message: 'Topic or Part not found' });
     }
 
     await topic.removePart(part);
 
     return res.status(200).json({
-      message: "Part removed from Topic successfully",
+      message: 'Part removed from Topic successfully',
     });
   } catch (error) {
-    console.error("Error removing Part from Topic:", error);
-    return res.status(500).json({ message: "Internal server error" });
+    console.error('Error removing Part from Topic:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 }
 
