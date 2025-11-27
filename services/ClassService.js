@@ -1,6 +1,6 @@
-const { Class, sequelize, User, Role } = require("../models");
-const sequelizePaginate = require("sequelize-paginate");
-const { Op, Sequelize } = require("sequelize");
+const { Class, sequelize, User, Role } = require('../models');
+const sequelizePaginate = require('sequelize-paginate');
+const { Op, Sequelize } = require('sequelize');
 
 async function findAll(req) {
   sequelizePaginate.paginate(Class);
@@ -14,7 +14,7 @@ async function findAll(req) {
     }
     if (searchName) {
       whereCondition.className = {
-        [Op.like]: `%${searchName}%`
+        [Op.like]: `%${searchName}%`,
       };
     }
 
@@ -24,7 +24,7 @@ async function findAll(req) {
       where: whereCondition,
       include: [
         {
-          association: "Sessions",
+          association: 'Sessions',
         },
       ],
       attributes: {
@@ -33,11 +33,11 @@ async function findAll(req) {
             sequelize.literal(
               '(SELECT COUNT(*) FROM "Sessions" WHERE "Sessions"."ClassID" = "Classes"."ID")'
             ),
-            "numberOfSessions",
+            'numberOfSessions',
           ],
         ],
       },
-      order: [["createdAt", "DESC"]]
+      order: [['createdAt', 'DESC']],
     };
 
     const result = await Class.paginate(options);
@@ -45,7 +45,7 @@ async function findAll(req) {
 
     return {
       status: 200,
-      message: "Classes fetched successfully",
+      message: 'Classes fetched successfully',
       data: result.docs,
       pagination: {
         currentPage: parseInt(req.query.page) || 1,
@@ -53,7 +53,7 @@ async function findAll(req) {
         itemsOnPage: result.docs.length,
         totalPages: result.pages,
         totalItems: totalCount,
-      }
+      },
     };
   } catch (error) {
     throw new Error(`Error fetching classes: ${error.message}`);
@@ -65,29 +65,42 @@ async function createClass(req) {
     const { className, userId } = req.body;
 
     if (!className || !userId) {
-      throw new Error("Class name and user ID are required");
+      throw new Error('Class name and user ID are required');
     }
 
-    // Check if class name already exists
+    // 1. Check class name trùng
     const existingClass = await Class.findOne({
-      where: { className }
+      where: { className },
     });
 
     if (existingClass) {
-      throw new Error("Class name already exists");
+      throw new Error('Class name already exists');
     }
 
-    const user = await User.findByPk(userId);
+    // 2. Tìm user + roles
+    const user = await User.findByPk(userId, {
+      include: [
+        {
+          model: Role,
+          attributes: ['Name'],
+          through: { attributes: [] }, // ẩn bảng UserRole
+        },
+      ],
+    });
 
     if (!user) {
-      throw new Error("User not found");
-    } else {
-      const hasTeacherRole = user.roleIDs.includes("teacher");
-      if (!hasTeacherRole) {
-        throw new Error("Only teachers can create classes");
-      }
+      throw new Error('User not found');
     }
 
+    // 3. Check user có role "teacher" không
+    const roles = (user.Roles || []).map((r) => r.Name);
+    const hasTeacherRole = roles.includes('teacher');
+
+    if (!hasTeacherRole) {
+      throw new Error('Only teachers can create classes');
+    }
+
+    // 4. Tạo class
     const newClass = await Class.create({
       className,
       UserID: userId,
@@ -95,7 +108,7 @@ async function createClass(req) {
 
     return {
       status: 200,
-      message: "Class created successfully",
+      message: 'Class created successfully',
       data: newClass,
     };
   } catch (error) {
@@ -111,10 +124,10 @@ async function getClassDetailById(req) {
       where: { ID: classId },
       include: [
         {
-          association: "Sessions",
+          association: 'Sessions',
           include: [
             {
-              association: "SessionParticipants",
+              association: 'SessionParticipants',
             },
           ],
         },
@@ -127,7 +140,7 @@ async function getClassDetailById(req) {
 
     return {
       status: 200,
-      message: "Class details fetched successfully",
+      message: 'Class details fetched successfully',
       data: classDetail,
     };
   } catch (error) {
@@ -141,7 +154,7 @@ async function updateClass(req) {
     const { classId } = req.params;
 
     if (!className) {
-      throw new Error("Class name is required");
+      throw new Error('Class name is required');
     }
 
     const [updatedRows] = await Class.update(
@@ -155,7 +168,7 @@ async function updateClass(req) {
     }
     return {
       status: 200,
-      message: "Class updated successfully",
+      message: 'Class updated successfully',
       data: updatedRows,
     };
   } catch (error) {

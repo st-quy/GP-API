@@ -1,7 +1,7 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
 
-const { getFileURL } = require("../controller/MinIOController");
+const { getFileURL, getUploadUrl } = require('../controller/MinIOController');
 
 /**
  * @swagger
@@ -32,5 +32,8 @@ const { getFileURL } = require("../controller/MinIOController");
  *       500:
  *         description: Server error
  */
-router.get("/", getFileURL);
+router.get('/', getFileURL);
+
+router.post('/upload-url', getUploadUrl);
+
 module.exports = router;
