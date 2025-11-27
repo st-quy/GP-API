@@ -281,7 +281,31 @@ async function getQuestionByID(req) {
   try {
     const { questionId } = req.params;
 
-    const question = await Question.findByPk(questionId);
+    const question = await Question.findByPk(questionId, {
+      include: [
+        {
+          model: Part,
+          include: [
+            {
+              model: Skill,
+              as: 'Skill',
+              attributes: ['ID', 'Name'],
+            },
+          ],
+        },
+        {
+          model: User,
+          as: 'creator',
+          attributes: ['ID', 'firstName', 'lastName', 'email'],
+        },
+        {
+          model: User,
+          as: 'updater',
+          attributes: ['ID', 'firstName', 'lastName', 'email'],
+        },
+      ],
+    });
+
     if (!question) {
       return {
         status: 404,

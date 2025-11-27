@@ -66,9 +66,12 @@ async function createQuestionGroup(req, res) {
 async function getQuestionByID(req, res) {
   try {
     const result = await QuestionService.getQuestionByID(req);
-    res.status(result.status).json(result);
-  } catch (error) {
-    res.status(404).json({ error: error.message });
+    return res.status(result.status).json(result);
+  } catch (err) {
+    console.error('getQuestionByID error:', err);
+    return res.status(500).json({
+      message: 'Internal server error',
+    });
   }
 }
 
