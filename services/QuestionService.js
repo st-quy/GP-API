@@ -168,6 +168,7 @@ async function createQuestion(req) {
 async function createQuestionGroup(req) {
   try {
     const { PartID, SkillName, questions } = req.body;
+    const userId = req.user.userId;
 
     if (
       !PartID ||
@@ -230,6 +231,8 @@ async function createQuestionGroup(req) {
         GroupContent: q.GroupContent || null,
         AnswerContent: answerContent,
         GroupID,
+        CreatedBy: userId,
+        UpdatedBy: userId,
       };
     });
 
