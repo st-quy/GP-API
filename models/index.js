@@ -96,6 +96,18 @@ db.User.hasMany(db.Question, {
   foreignKey: 'UpdatedBy',
   as: 'updatedQuestions',
 });
+
+db.Topic.belongsTo(db.User, { as: 'creator', foreignKey: 'CreatedBy' });
+db.Topic.belongsTo(db.User, { as: 'updater', foreignKey: 'UpdatedBy' });
+
+db.User.hasMany(db.Topic, {
+  foreignKey: 'CreatedBy',
+  as: 'createdTopics',
+});
+db.User.hasMany(db.Topic, {
+  foreignKey: 'UpdatedBy',
+  as: 'updatedTopics',
+});
 // StudentAnswer relations
 db.StudentAnswer.belongsTo(db.User, { foreignKey: 'StudentID' });
 db.StudentAnswer.belongsTo(db.Topic, { foreignKey: 'TopicID' });
