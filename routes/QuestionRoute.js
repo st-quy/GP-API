@@ -214,7 +214,7 @@ router.get('/topic/:topicId', getQuestionsByTopicID);
  *       500:
  *         description: Internal server error
  */
-router.get('/:questionSetId', getQuestionsByQuestionSetID);
+// router.get('/:questionSetId', getQuestionsByQuestionSetID);
 
 /**
  * @swagger
