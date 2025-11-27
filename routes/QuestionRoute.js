@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { allowAnonymous, authorize } = require('../middleware/AuthMiddleware');
 
 const {
   createQuestionGroup,
@@ -267,7 +268,7 @@ router.get('/:questionId', getQuestionByID);
  *       500:
  *         description: Internal server error
  */
-router.post('/', createQuestionGroup);
+router.post('/', allowAnonymous, createQuestionGroup);
 
 /**
  * @swagger

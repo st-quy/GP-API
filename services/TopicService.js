@@ -90,7 +90,6 @@ const createTopic = async (req) => {
 const getAllTopics = async () => {
   try {
     const topics = await Topic.findAll();
-    console.log(topics, 'topics');
 
     return {
       status: 200,
