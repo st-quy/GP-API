@@ -158,7 +158,7 @@ router.post('/remove-part', removePartFromTopic);
  *       500:
  *         description: Internal server error
  */
-router.get('/', getQuestionsByQuestionSetId);
+// router.get('/', getQuestionsByQuestionSetId);
 
 router.get('/detail', getTopicByName);
 router.get('/:id', getTopicWithRelations);

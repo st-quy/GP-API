@@ -16,6 +16,22 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: TOPIC_STATUS.DRAFT,
     },
+    CreatedBy: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'Users',
+        key: 'ID',
+      },
+    },
+    UpdatedBy: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'Users',
+        key: 'ID',
+      },
+    },
   });
 
   return Topic;
