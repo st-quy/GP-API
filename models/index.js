@@ -39,8 +39,6 @@ db.StudentAnswerDraft = require('./StudentAnswerDraft')(sequelize, DataTypes);
 db.Skill = require('./Skill')(sequelize, DataTypes);
 db.Class = require('./Class')(sequelize, DataTypes);
 db.TopicPart = require('./TopicPart')(sequelize, DataTypes);
-db.QuestionSet = require('./QuestionSet')(sequelize, DataTypes);
-db.QuestionSetQuestion = require('./QuestionSetQuestion')(sequelize, DataTypes);
 
 // Relationships
 // User <-> Role
@@ -69,21 +67,6 @@ db.Question.belongsTo(db.Part, { foreignKey: 'PartID' });
 // Skill <-> Part (1:N)  👈 NEW
 db.Part.belongsTo(db.Skill, { foreignKey: 'SkillID', as: 'Skill' });
 db.Skill.hasMany(db.Part, { foreignKey: 'SkillID', as: 'Parts' });
-
-// QuestionSet <-> Question (M:N) - giữ nguyên nếu bạn còn dùng
-db.QuestionSet.belongsToMany(db.Question, {
-  through: db.QuestionSetQuestion,
-  foreignKey: 'QuestionSetID',
-  otherKey: 'QuestionID',
-  as: 'Questions',
-});
-
-db.Question.belongsToMany(db.QuestionSet, {
-  through: db.QuestionSetQuestion,
-  foreignKey: 'QuestionID',
-  otherKey: 'QuestionSetID',
-  as: 'QuestionSets',
-});
 
 db.Question.belongsTo(db.User, { as: 'creator', foreignKey: 'CreatedBy' });
 db.Question.belongsTo(db.User, { as: 'updater', foreignKey: 'UpdatedBy' });

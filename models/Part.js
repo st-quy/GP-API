@@ -20,7 +20,7 @@ module.exports = (sequelize, DataTypes) => {
     },
     SkillID: {
       type: DataTypes.UUID,
-      allowNull: true, // nếu DB mới thì có thể set false sau
+      allowNull: true,
       references: {
         model: 'Skills',
         key: 'ID',

@@ -46,10 +46,6 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.JSON,
       allowNull: true,
     },
-    GroupID: {
-      type: DataTypes.UUID,
-      allowNull: true,
-    },
     CreatedBy: {
       type: DataTypes.UUID,
       allowNull: true,

@@ -1,12 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { allowAnonymous, authorize } = require('../middleware/AuthMiddleware');
 
 const {
   createQuestionGroup,
   getQuestionsByPartID,
   getQuestionsByTopicID,
-  getQuestionsByQuestionSetID,
   getQuestionByID,
   updateQuestion,
   deleteQuestion,
@@ -157,68 +155,6 @@ router.get('/topic/:topicId', getQuestionsByTopicID);
 
 /**
  * @swagger
- * /questions/questionset/{questionSetId}:
- *   get:
- *     summary: Get all questions in a QuestionSet by QuestionSet ID
- *     tags: [Question]
- *     parameters:
- *       - in: path
- *         name: questionSetId
- *         schema:
- *           type: string
- *         required: true
- *         description: ID of the QuestionSet to fetch questions for
- *       - in: query
- *         name: questionType
- *         schema:
- *           type: string
- *         required: false
- *         description: Filter questions by type (e.g., MCQ, True/False)
- *       - in: query
- *         name: skillName
- *         schema:
- *           type: string
- *         required: false
- *         description: Filter questions by skill name (e.g., Listening, Speaking)
- *     responses:
- *       200:
- *         description: Questions fetched successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: number
- *                   example: 200
- *                 message:
- *                   type: string
- *                   example: Questions fetched successfully
- *                 data:
- *                   type: object
- *                   properties:
- *                     questionSetId:
- *                       type: string
- *                       example: "b3fdaae4-45a2-4ac7-b62e-e3b108f36cf0"
- *                     shuffleQuestions:
- *                       type: boolean
- *                       example: false
- *                     shuffleAnswers:
- *                       type: boolean
- *                       example: false
- *                     questions:
- *                       type: array
- *                       items:
- *                         $ref: '#/components/schemas/Question'
- *       404:
- *         description: QuestionSet not found
- *       500:
- *         description: Internal server error
- */
-// router.get('/:questionSetId', getQuestionsByQuestionSetID);
-
-/**
- * @swagger
  * /questions/{questionId}:
  *   get:
  *     summary: Get a question by ID
@@ -268,7 +204,7 @@ router.get('/:questionId', getQuestionByID);
  *       500:
  *         description: Internal server error
  */
-router.post('/', allowAnonymous, createQuestionGroup);
+router.post('/', createQuestionGroup);
 
 /**
  * @swagger

@@ -154,7 +154,9 @@ const getTopicWithRelations = async (req, res) => {
       return res.status(404).json({ message: 'Topic not found' });
     }
 
-    return res.status(200).json(topic);
+    // Convert Sequelize instance -> plain object (loại bỏ circular)
+    const plainTopic = topic.get({ plain: true });
+    return plainTopic;
   } catch (error) {
     console.error('Error fetching topic with relations:', error);
     return res.status(500).json({ message: 'Internal server error' });

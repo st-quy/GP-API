@@ -58,24 +58,8 @@ function authorize(allowedRoles = []) {
  * Middleware to mark routes as AllowAnonymous
  */
 function allowAnonymous(req, res, next) {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res
-      .status(401)
-      .json({ message: 'Unauthorized: Missing or malformed token' });
-  }
-  const token = authHeader.split(' ')[1];
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-
-    // Attach the decoded user information to the request object
-    req.user = decoded;
-    req.allowAnonymous = true;
-    next();
-  } catch (error) {
-    return res.status(401).json({ message: 'Invalid or expired token' });
-  }
+  req.allowAnonymous = true;
+  next();
 }
 
 module.exports = { authorize, allowAnonymous };

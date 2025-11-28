@@ -27,10 +27,5 @@ router.use('/presigned-url', File);
 router.use('/questions', require('./QuestionRoute'));
 router.use('/parts', require('./PartRoute'));
 router.use('/topicparts', require('./TopicPartRoute'));
-router.use('/question-set', require('./QuestionSetRoute'));
-router.use('/question-set-questions', require('./QuestionSetQuestionRoute'));
-
-// Add more routes here as needed
-// router.use("/another-route", anotherRoute);
 
 module.exports = router;

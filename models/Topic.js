@@ -16,6 +16,16 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: TOPIC_STATUS.DRAFT,
     },
+    ShuffleQuestions: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    ShuffleAnswers: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
     CreatedBy: {
       type: DataTypes.UUID,
       allowNull: true,

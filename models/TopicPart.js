@@ -22,14 +22,6 @@ module.exports = (sequelize, DataTypes) => {
         key: 'ID',
       },
     },
-    QuestionSetID: {
-      type: DataTypes.UUID,
-      allowNull: true,
-      references: {
-        model: 'QuestionSets',
-        key: 'ID',
-      },
-    },
   });
 
   return TopicPart;
