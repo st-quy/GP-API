@@ -41,88 +41,93 @@ module.exports = {
       const DATA = [
         // WRITING — PART 1
         {
-          PartContent: 'WR_P1_ShortAnswers',
+          PartContent:
+            'Part 1: You want to join the Fitness Club. You have 5 messages from a member of the club. Write short answers (1-5 words) to each message. Recommended time: 3 minutes.',
           Sequence: 1,
           Content: 'Where are you from?',
           SubContent: null,
         },
         {
-          PartContent: 'WR_P1_ShortAnswers',
+          PartContent:
+            'Part 1: You want to join the Fitness Club. You have 5 messages from a member of the club. Write short answers (1-5 words) to each message. Recommended time: 3 minutes.',
           Sequence: 2,
-          Content: 'Please tell me about your favorite film star.',
+          Content: 'What’s the weather like today?',
           SubContent: null,
         },
         {
-          PartContent: 'WR_P1_ShortAnswers',
+          PartContent:
+            'Part 1: You want to join the Fitness Club. You have 5 messages from a member of the club. Write short answers (1-5 words) to each message. Recommended time: 3 minutes.',
           Sequence: 3,
           Content: 'What do you do in your free time?',
           SubContent: null,
         },
         {
-          PartContent: 'WR_P1_ShortAnswers',
+          PartContent:
+            'Part 1: You want to join the Fitness Club. You have 5 messages from a member of the club. Write short answers (1-5 words) to each message. Recommended time: 3 minutes.',
           Sequence: 4,
-          Content:
-            'Please tell me about the last time you saw an advertisement.',
+          Content: 'What is your first language?',
+          SubContent: null,
+        },
+        {
+          PartContent:
+            'Part 1: You want to join the Fitness Club. You have 5 messages from a member of the club. Write short answers (1-5 words) to each message. Recommended time: 3 minutes.',
+          Sequence: 5,
+          Content: 'Who do you usually go to the movies with?',
           SubContent: null,
         },
 
         // WRITING — PART 2
         {
-          PartContent: 'WR_P2_Form',
-          Sequence: 6,
-          Content: 'Please write about your ideal house.',
+          PartContent:
+            'Part 2: You are a new member of the Fitness Club. Fill in the form. Write in sentences. Use 20-30 words. Recommended time: 7 minutes.',
+          Sequence: 1,
+          Content:
+            'Please tell us the classes you want to take and what times and days are suitable for you.',
           SubContent: '',
         },
 
         // WRITING — PART 3
         {
-          PartContent: 'WR_P3_Chatroom',
-          Sequence: 4,
-          Content: 'What kind of accommodation do you live in now?',
-          SubContent: '',
-        },
-        {
-          PartContent: 'WR_P3_Chatroom',
-          Sequence: 5,
-          Content: 'Which part of the house would you like to change?',
-          SubContent: '',
-        },
-        {
-          PartContent: 'WR_P3_Chatroom',
-          Sequence: 7,
+          PartContent:
+            'Part 3: You are a member of the Fitness Club. You are talking to other members in a chat room. Reply to their questions. Write in sentences. Use 30-40 words per answer. Recommended time: 10 minutes.',
+          Sequence: 1,
           Content:
-            'Hannah: Hi! Welcome to the club. I really enjoy watching TV programs about houses. How about you? Are you interested in these programs?',
+            'Ben: Hi! Welcome to the club. How did you hear about the club?',
           SubContent: '',
         },
         {
-          PartContent: 'WR_P3_Chatroom',
-          Sequence: 8,
+          PartContent:
+            'Part 3: You are a member of the Fitness Club. You are talking to other members in a chat room. Reply to their questions. Write in sentences. Use 30-40 words per answer. Recommended time: 10 minutes.',
+          Sequence: 2,
           Content:
-            'Jack: Hello! Have you ever had any problems with your neighbors?',
+            'Quinn: Hi! I really hope my body can be fit. What do you hope to achieve by joining the club?',
           SubContent: '',
         },
         {
-          PartContent: 'WR_P3_Chatroom',
-          Sequence: 9,
+          PartContent:
+            'Part 3: You are a member of the Fitness Club. You are talking to other members in a chat room. Reply to their questions. Write in sentences. Use 30-40 words per answer. Recommended time: 10 minutes.',
+          Sequence: 3,
           Content:
-            'Nira: Welcome! Houses should be built in a way that is environmentally friendly. Do you agree?',
+            'Chris: What do you think of the fitness club facilities? Should we change anything?',
           SubContent: '',
         },
 
         // WRITING — PART 4
         {
-          PartContent: 'WR_P4_Emails',
+          PartContent:
+            'Part 4: You are a member of the Fitness Club. You have received this email from the club manager. ',
           Sequence: 10,
           Content:
-            'Write an email to your friend. Share your thoughts on this piece of news and your suggestions. Write about 50 words. Recommended time: 10 minutes.',
+            'Write an email to your friend who is also a member of the club. Write about your feelings and opinions on the situation. Write about 50 words. Recommended time: 10 minutes',
           SubContent:
             '* (You’re allowed to write up to 75 words without affecting your grade).',
         },
         {
-          PartContent: 'WR_P4_Emails',
+          PartContent:
+            'Part 4: You are a member of the Fitness Club. You have received this email from the club manager. ',
           Sequence: 11,
           Content:
-            'Write an email to the club president. Express your feelings about this piece of news and your suggestions. Write about 120-150 words. Recommended time: 20 minutes.',
+            'Write an email to the manager of the club. Write about your feelings and opinions on the situation. Write about 120-150 words. Recommended time: 20 minutes.',
           SubContent:
             '* (You’re allowed to write up to 225 words without affecting your grade).',
         },

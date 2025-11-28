@@ -1,4 +1,4 @@
-const { Op, where } = require("sequelize");
+const { Op, where } = require('sequelize');
 const {
   Session,
   SessionParticipant,
@@ -8,13 +8,13 @@ const {
   Question,
   Part,
   Skill,
-} = require("../models"); // Ensure models are imported
+} = require('../models'); // Ensure models are imported
 const {
   skillMapping,
   pointsPerQuestion,
   level,
   skillMappingLevel,
-} = require("../helpers/constants");
+} = require('../helpers/constants');
 
 async function getParticipantExamBySession(req) {
   try {
@@ -24,7 +24,7 @@ async function getParticipantExamBySession(req) {
     if (!sessionParticipantId || !skillName) {
       return {
         status: 400,
-        message: "Missing required fields: sessionParticipantId or skillName",
+        message: 'Missing required fields: sessionParticipantId or skillName',
       };
     }
 
@@ -41,7 +41,7 @@ async function getParticipantExamBySession(req) {
     if (!sessionParticipant) {
       return {
         status: 404,
-        message: "Session participant not found",
+        message: 'Session participant not found',
       };
     }
 
@@ -50,12 +50,12 @@ async function getParticipantExamBySession(req) {
         {
           model: Part,
           required: true,
-          order: [["Sequence", "ASC"]],
+          order: [['Sequence', 'ASC']],
           include: [
             {
               model: Question,
               required: true,
-              order: [["Sequence", "ASC"]],
+              order: [['Sequence', 'ASC']],
               include: [
                 {
                   model: Skill,
@@ -74,7 +74,7 @@ async function getParticipantExamBySession(req) {
     if (!topic) {
       return {
         status: 404,
-        message: "Topic not found",
+        message: 'Topic not found',
       };
     }
 
@@ -135,7 +135,7 @@ async function getParticipantExamBySession(req) {
 
 async function suggestLevels(score, skillName) {
   try {
-    if (skillName === "LISTENING") {
+    if (skillName === 'LISTENING') {
       if (score < 8) return level.X;
       else if (score < 16) return level.A1;
       else if (score < 24) return level.A2;
@@ -144,7 +144,7 @@ async function suggestLevels(score, skillName) {
       else return level.C;
     }
 
-    if (skillName === "READING") {
+    if (skillName === 'READING') {
       if (score < 8) return level.X;
       else if (score < 16) return level.A1;
       else if (score < 26) return level.A2;
@@ -153,7 +153,7 @@ async function suggestLevels(score, skillName) {
       else return level.C;
     }
 
-    if (skillName === "WRITING") {
+    if (skillName === 'WRITING') {
       if (score < 6) return level.X;
       else if (score < 18) return level.A1;
       else if (score < 26) return level.A2;
@@ -162,7 +162,7 @@ async function suggestLevels(score, skillName) {
       else return level.C;
     }
 
-    if (skillName === "SPEAKING") {
+    if (skillName === 'SPEAKING') {
       if (score < 4) return level.X;
       else if (score < 16) return level.A1;
       else if (score < 26) return level.A2;
@@ -188,7 +188,7 @@ async function calculateTotalPoints(
     if (!participant) {
       return {
         status: 404,
-        message: "Session participant not found",
+        message: 'Session participant not found',
       };
     }
 
@@ -213,7 +213,7 @@ async function calculateTotalPoints(
 
     const levelSkill = await suggestLevels(skillScore, skillName.toUpperCase());
 
-    if (skillName === skillMapping["GRAMMAR AND VOCABULARY"]) {
+    if (skillName === skillMapping['GRAMMAR AND VOCABULARY']) {
       await SessionParticipant.update(
         { [skillName]: skillScore },
         { where: { ID: sessionParticipantId } }
@@ -245,7 +245,7 @@ async function calculatePoints(req) {
     if (!sessionParticipantId || !skillName) {
       return {
         status: 400,
-        message: "Missing required fields: sessionParticipantId or skillName",
+        message: 'Missing required fields: sessionParticipantId or skillName',
       };
     }
 
@@ -273,13 +273,30 @@ async function calculatePoints(req) {
         TopicID: sessionParticipant.Session.examSet,
         SessionID: sessionParticipant.SessionID,
       },
-      include: [{ model: Question, include: [Skill] }],
+      include: [
+        {
+          model: Question,
+          as: 'Question',
+          include: [
+            {
+              model: Part,
+              as: 'Part',
+              include: [
+                {
+                  model: Skill,
+                  as: 'Skill',
+                },
+              ],
+            },
+          ],
+        },
+      ],
     });
 
     if (answers.length === 0) {
       return {
         status: 404,
-        message: "No answers found for the student",
+        message: 'No answers found for the student',
       };
     }
 
@@ -292,19 +309,18 @@ async function calculatePoints(req) {
 
       const typeOfQuestion = answer.Question.Type;
 
-      const skillType = answer.Question.Skill.Name;
-
+      const skillType = answer.Question.Part.Skill.Name;
       if (skillType !== skillName) {
         return;
       }
 
       const correctContent = answer.Question.AnswerContent;
 
-      if (typeOfQuestion === "multiple-choice") {
+      if (typeOfQuestion === 'multiple-choice') {
         if (correctContent.correctAnswer === answer.AnswerText) {
           totalPoints += pointPerQuestion;
         }
-      } else if (typeOfQuestion === "matching") {
+      } else if (typeOfQuestion === 'matching') {
         const studentAnswers = JSON.parse(answer.AnswerText);
         const correctAnswers = correctContent.correctAnswer;
 
@@ -317,7 +333,7 @@ async function calculatePoints(req) {
             totalPoints += pointPerQuestion;
           }
         });
-      } else if (typeOfQuestion === "ordering") {
+      } else if (typeOfQuestion === 'ordering') {
         const studentAnswers = JSON.parse(answer.AnswerText).sort(
           (a, b) => a.value - b.value
         );
@@ -334,13 +350,13 @@ async function calculatePoints(req) {
             totalPoints += pointPerQuestion;
           }
         }
-      } else if (typeOfQuestion === "dropdown-list") {
+      } else if (typeOfQuestion === 'dropdown-list') {
         const studentAnswers = JSON.parse(answer.AnswerText).map((item) => ({
-          key: item.key.split(".")[0].trim(),
+          key: item.key.split('.')[0].trim(),
           value: item.value,
         }));
         const correctAnswers = correctContent.correctAnswer.filter(
-          (item) => item.key !== "0"
+          (item) => item.key !== '0'
         );
 
         correctAnswers.forEach((correct, index) => {
@@ -353,7 +369,7 @@ async function calculatePoints(req) {
             totalPoints += pointPerQuestion;
           }
         });
-      } else if (typeOfQuestion === "listening-questions-group") {
+      } else if (typeOfQuestion === 'listening-questions-group') {
         const studentAnswers = JSON.parse(answer.AnswerText);
         const correctList = correctContent.groupContent.listContent;
 
@@ -384,7 +400,7 @@ async function calculatePoints(req) {
     );
 
     return {
-      message: "Points calculated successfully",
+      message: 'Points calculated successfully',
       points: totalPoints,
       sessionParticipant: updatedSessionParticipant,
     };
@@ -403,18 +419,18 @@ async function calculatePointForWritingAndSpeaking(req) {
   try {
     if (
       !sessionParticipantID ||
-      typeof teacherGradedScore !== "number" ||
+      typeof teacherGradedScore !== 'number' ||
       teacherGradedScore < 0 ||
       !skillName
     ) {
       return {
         status: 400,
         message:
-          "Missing or invalid required fields: sessionParticipantID, teacherGradedScore or skillName",
+          'Missing or invalid required fields: sessionParticipantID, teacherGradedScore or skillName',
       };
     }
 
-    if (skillName !== "WRITING" && skillName !== "SPEAKING") {
+    if (skillName !== 'WRITING' && skillName !== 'SPEAKING') {
       return {
         status: 400,
         message: `Invalid skill name: ${skillName}`,
@@ -422,13 +438,13 @@ async function calculatePointForWritingAndSpeaking(req) {
     }
 
     if (
-      typeof teacherGradedScore !== "number" ||
+      typeof teacherGradedScore !== 'number' ||
       teacherGradedScore < 0 ||
       teacherGradedScore > 50
     ) {
       return {
         status: 400,
-        message: "Invalid teacher graded score",
+        message: 'Invalid teacher graded score',
       };
     }
 
@@ -442,7 +458,7 @@ async function calculatePointForWritingAndSpeaking(req) {
       await Promise.all(
         studentAnswers.map(({ studentAnswerId, messageContent }) =>
           StudentAnswer.update(
-            { Comment: messageContent ?? "" },
+            { Comment: messageContent ?? '' },
             { where: { ID: studentAnswerId } }
           )
         )
@@ -462,7 +478,7 @@ async function calculatePointForWritingAndSpeaking(req) {
     });
     return {
       status: 200,
-      message: "Writing points calculated successfully",
+      message: 'Writing points calculated successfully',
       data: {
         sessionParticipant: updatedSessionParticipant[formattedSkillName],
       },
