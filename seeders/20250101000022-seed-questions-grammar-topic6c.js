@@ -16,7 +16,7 @@ module.exports = {
         `
         SELECT "ID","Content"
         FROM "Parts"
-        WHERE "Content" IN ('GV_P1_InfoRecognition','GV_P2_Vocab');
+        WHERE "Content" IN ('Part 1','Part 2');
         `,
         { type: Sequelize.QueryTypes.SELECT, transaction: t }
       );
@@ -31,8 +31,8 @@ module.exports = {
         return found.ID;
       };
 
-      const PART1 = getPart('GV_P1_InfoRecognition');
-      const PART2 = getPart('GV_P2_Vocab');
+      const PART1 = getPart('Part 1');
+      const PART2 = getPart('Part 2');
 
       // ---------------------------------------------
       // 2) Fetch existing questions to avoid duplicates

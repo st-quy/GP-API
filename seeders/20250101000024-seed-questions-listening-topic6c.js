@@ -46,7 +46,7 @@ module.exports = {
         // PART 1 — Information Recognition (Q1–Q13)
         // ===================================================
         {
-          PartContent: 'LS_P1_InfoRecognition',
+          PartContent: 'PART 1: Information recognition (13 questions)',
           Type: 'multiple-choice',
           Sequence: 1,
           AudioKeys:
@@ -57,7 +57,7 @@ module.exports = {
           CorrectAnswer: 'Goes for a walk',
         },
         {
-          PartContent: 'LS_P1_InfoRecognition',
+          PartContent: 'PART 1: Information recognition (13 questions)',
           Type: 'multiple-choice',
           Sequence: 2,
           AudioKeys:
@@ -68,7 +68,7 @@ module.exports = {
           CorrectAnswer: 'Clothes',
         },
         {
-          PartContent: 'LS_P1_InfoRecognition',
+          PartContent: 'PART 1: Information recognition (13 questions)',
           Type: 'multiple-choice',
           Sequence: 3,
           AudioKeys:
@@ -78,7 +78,7 @@ module.exports = {
           CorrectAnswer: 'Glasses',
         },
         {
-          PartContent: 'LS_P1_InfoRecognition',
+          PartContent: 'PART 1: Information recognition (13 questions)',
           Type: 'multiple-choice',
           Sequence: 4,
           AudioKeys:
@@ -89,7 +89,7 @@ module.exports = {
           CorrectAnswer: 'Chocolate',
         },
         {
-          PartContent: 'LS_P1_InfoRecognition',
+          PartContent: 'PART 1: Information recognition (13 questions)',
           Type: 'multiple-choice',
           Sequence: 5,
           AudioKeys:
@@ -100,7 +100,7 @@ module.exports = {
           CorrectAnswer: 'Water',
         },
         {
-          PartContent: 'LS_P1_InfoRecognition',
+          PartContent: 'PART 1: Information recognition (13 questions)',
           Type: 'multiple-choice',
           Sequence: 6,
           AudioKeys:
@@ -110,7 +110,7 @@ module.exports = {
           CorrectAnswer: 'At the market place',
         },
         {
-          PartContent: 'LS_P1_InfoRecognition',
+          PartContent: 'PART 1: Information recognition (13 questions)',
           Type: 'multiple-choice',
           Sequence: 7,
           AudioKeys:
@@ -121,7 +121,7 @@ module.exports = {
           CorrectAnswer: 'The drawers',
         },
         {
-          PartContent: 'LS_P1_InfoRecognition',
+          PartContent: 'PART 1: Information recognition (13 questions)',
           Type: 'multiple-choice',
           Sequence: 8,
           AudioKeys:
@@ -131,7 +131,7 @@ module.exports = {
           CorrectAnswer: 'Sick',
         },
         {
-          PartContent: 'LS_P1_InfoRecognition',
+          PartContent: 'PART 1: Information recognition (13 questions)',
           Type: 'multiple-choice',
           Sequence: 9,
           AudioKeys:
@@ -142,7 +142,7 @@ module.exports = {
           CorrectAnswer: 'Cold and wet',
         },
         {
-          PartContent: 'LS_P1_InfoRecognition',
+          PartContent: 'PART 1: Information recognition (13 questions)',
           Type: 'multiple-choice',
           Sequence: 10,
           AudioKeys:
@@ -153,7 +153,7 @@ module.exports = {
           CorrectAnswer: 'By train',
         },
         {
-          PartContent: 'LS_P1_InfoRecognition',
+          PartContent: 'PART 1: Information recognition (13 questions)',
           Type: 'multiple-choice',
           Sequence: 11,
           AudioKeys:
@@ -164,7 +164,7 @@ module.exports = {
           CorrectAnswer: 'In the morning',
         },
         {
-          PartContent: 'LS_P1_InfoRecognition',
+          PartContent: 'PART 1: Information recognition (13 questions)',
           Type: 'multiple-choice',
           Sequence: 12,
           AudioKeys:
@@ -175,7 +175,7 @@ module.exports = {
           CorrectAnswer: 'By bus',
         },
         {
-          PartContent: 'LS_P1_InfoRecognition',
+          PartContent: 'PART 1: Information recognition (13 questions)',
           Type: 'multiple-choice',
           Sequence: 13,
           AudioKeys:
@@ -194,7 +194,7 @@ module.exports = {
         // GIỮ NGUYÊN JSON GỐC
         // ===================================================
         {
-          PartContent: 'LS_P2_InfoMatching',
+          PartContent: 'PART 2: Information Matching (4 questions)',
           Type: 'dropdown-list',
           Sequence: 14,
           AudioKeys:
@@ -208,7 +208,7 @@ module.exports = {
         // PART 3 — Opinion matching (Q15)
         // ===================================================
         {
-          PartContent: 'LS_P3_OpinionMatching',
+          PartContent: 'PART 3: Opinion Matching (4 questions)',
           Type: 'dropdown-list',
           Sequence: 15,
           AudioKeys:
@@ -252,7 +252,7 @@ module.exports = {
 
         // Q16 — GIỮ NGUYÊN JSON
         {
-          PartContent: 'LS_P4_Inference',
+          PartContent: 'PART 4: Inference (2 talks - 4 questions)',
           Type: 'listening-questions-group',
           Sequence: 16,
           AudioKeys:
@@ -264,7 +264,7 @@ module.exports = {
 
         // Q17 — GIỮ NGUYÊN JSON
         {
-          PartContent: 'LS_P4_Inference',
+          PartContent: 'PART 4: Inference (2 talks - 4 questions)',
           Type: 'listening-questions-group',
           Sequence: 17,
           AudioKeys:

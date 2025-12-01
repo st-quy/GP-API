@@ -25,13 +25,13 @@ module.exports = {
       const PARTS = [
         // GRAMMAR & VOCABULARY
         {
-          Content: 'GV_P1_InfoRecognition',
+          Content: 'Part 1',
           SubContent: 'Information recognition (13 questions)',
           Skill: 'GRAMMAR AND VOCABULARY',
           Sequence: 1,
         },
         {
-          Content: 'GV_P2_Vocab',
+          Content: 'Part 2',
           SubContent: 'VOCABULARY (Question 26–30: 25 questions)',
           Skill: 'GRAMMAR AND VOCABULARY',
           Sequence: 2,
@@ -39,31 +39,36 @@ module.exports = {
 
         // READING
         {
-          Content: 'RD_P1_EmailGaps',
+          Content:
+            'Part 1 - Read the email from Ron to his assistant. Choose one word from the list for each gap. The first one is done for you.',
           SubContent: '',
           Skill: 'READING',
           Sequence: 1,
         },
         {
-          Content: 'RD_P2A_Einstein',
+          Content:
+            'Part 2A: The sentences below are a story about a scientist. Put the sentences in the right order. The first sentence is done for you.',
           SubContent: 'The sentences below are a story about a scientist.',
           Skill: 'READING',
           Sequence: 2,
         },
         {
-          Content: 'RD_P2B_FireInstruction',
+          Content:
+            'Part 2B: The sentences below are from a fire instruction. Put the sentences in the right order. The first sentence is done for you.',
           SubContent: 'The sentences below are from a fire instruction.',
           Skill: 'READING',
           Sequence: 3,
         },
         {
-          Content: 'RD_P3_Movies',
+          Content:
+            'Part 3: Four people respond in the comments section of an online magazine article about watching a movie. Read the texts and then answer the questions below.',
           SubContent: 'Four people respond in the comments section.',
           Skill: 'READING',
           Sequence: 4,
         },
         {
-          Content: 'RD_P4_Coffee',
+          Content:
+            'Part 4 - Read the following passage quickly. Choose a heading for each numbered paragraph (1-7). There is one more heading than you need.',
           SubContent: 'Choose a heading for each numbered paragraph (1–7).',
           Skill: 'READING',
           Sequence: 5,
@@ -71,25 +76,25 @@ module.exports = {
 
         // LISTENING
         {
-          Content: 'LS_P1_InfoRecognition',
+          Content: 'PART 1: Information recognition (13 questions)',
           SubContent: '(13 questions)',
           Skill: 'LISTENING',
           Sequence: 1,
         },
         {
-          Content: 'LS_P2_InfoMatching',
+          Content: 'PART 2: Information Matching (4 questions)',
           SubContent: '(4 questions)',
           Skill: 'LISTENING',
           Sequence: 2,
         },
         {
-          Content: 'LS_P3_OpinionMatching',
+          Content: 'PART 3: Opinion Matching (4 questions)',
           SubContent: '(4 questions)',
           Skill: 'LISTENING',
           Sequence: 3,
         },
         {
-          Content: 'LS_P4_Inference',
+          Content: 'PART 4: Inference (2 talks - 4 questions)',
           SubContent: '(2 talks – 4 questions)',
           Skill: 'LISTENING',
           Sequence: 4,
@@ -97,51 +102,57 @@ module.exports = {
 
         // WRITING
         {
-          Content: 'WR_P1_ShortAnswers',
-          SubContent: '(5 short answers)',
+          Content:
+            'Part 1: You want to join the Fitness Club. You have 5 messages from a member of the club. Write short answers (1-5 words) to each message. Recommended time: 3 minutes.',
+          SubContent: null,
           Skill: 'WRITING',
           Sequence: 1,
         },
         {
-          Content: 'WR_P2_Form',
-          SubContent: '(Fill in the form, 20–30 words)',
+          Content:
+            'Part 2: You are a new member of the Fitness Club. Fill in the form. Write in sentences. Use 20-30 words. Recommended time: 7 minutes.',
+          SubContent: null,
           Skill: 'WRITING',
           Sequence: 2,
         },
         {
-          Content: 'WR_P3_Chatroom',
-          SubContent: '(Reply 30–40 words per answer)',
+          Content:
+            'Part 3: You are a member of the Fitness Club. You are talking to other members in a chat room. Reply to their questions. Write in sentences. Use 30-40 words per answer. Recommended time: 10 minutes.',
+          SubContent: null,
           Skill: 'WRITING',
           Sequence: 3,
         },
         {
-          Content: 'WR_P4_Emails',
-          SubContent: '(Short + long email)',
+          Content:
+            'Part 4: You are a member of the Fitness Club. You have received this email from the club manager. ',
+          SubContent: `Dear Member,
+Because of personal reasons, the instructor will be away for the next two weeks. We will use our facilities by ourselves without the assistance of an instructor. I am so sorry about this situation and hope you doing well in next two weeks.
+The Manager`,
           Skill: 'WRITING',
           Sequence: 4,
         },
 
         // SPEAKING
         {
-          Content: 'SP_P1_QA',
+          Content: 'Part 1',
           SubContent: 'Short Q&A',
           Skill: 'SPEAKING',
           Sequence: 1,
         },
         {
-          Content: 'SP_P2_DescribePicture',
+          Content: 'Part 2',
           SubContent: 'Describe the picture',
           Skill: 'SPEAKING',
           Sequence: 2,
         },
         {
-          Content: 'SP_P3_Compare',
+          Content: 'Part 3',
           SubContent: 'Describe & compare pictures',
           Skill: 'SPEAKING',
           Sequence: 3,
         },
         {
-          Content: 'SP_P4_Opinion',
+          Content: 'Part 4',
           SubContent: 'Opinion questions',
           Skill: 'SPEAKING',
           Sequence: 4,
@@ -204,31 +215,48 @@ module.exports = {
   },
 
   async down(queryInterface, Sequelize) {
-    // Xoá theo Content để tránh xoá nhầm Part khác
+    // Xoá theo Content giống đúng những gì đã khai báo trong PARTS ở up()
     const CONTENTS = [
-      'GV_P1_InfoRecognition',
-      'GV_P2_Vocab',
-      'RD_P1_EmailGaps',
-      'RD_P2A_Einstein',
-      'RD_P2B_FireInstruction',
-      'RD_P3_Movies',
-      'RD_P4_Coffee',
-      'LS_P1_InfoRecognition',
-      'LS_P2_InfoMatching',
-      'LS_P3_OpinionMatching',
-      'LS_P4_Inference',
-      'WR_P1_ShortAnswers',
-      'WR_P2_Form',
-      'WR_P3_Chatroom',
-      'WR_P4_Emails',
-      'SP_P1_QA',
-      'SP_P2_DescribePicture',
-      'SP_P3_Compare',
-      'SP_P4_Opinion',
+      // GRAMMAR & VOCABULARY
+      'Part 1',
+      'Part 2',
+
+      // READING
+      'Part 1 - Read the email from Ron to his assistant. Choose one word from the list for each gap. The first one is done for you.',
+      'Part 2A: The sentences below are a story about a scientist. Put the sentences in the right order. The first sentence is done for you.',
+      'Part 2B: The sentences below are from a fire instruction. Put the sentences in the right order. The first sentence is done for you.',
+      'Part 3: Four people respond in the comments section of an online magazine article about watching a movie. Read the texts and then answer the questions below.',
+      'Part 4 - Read the following passage quickly. Choose a heading for each numbered paragraph (1-7). There is one more heading than you need.',
+
+      // LISTENING
+      'PART 1: Information recognition (13 questions)',
+      'PART 2: Information Matching (4 questions)',
+      'PART 3: Opinion Matching (4 questions)',
+      'PART 4: Inference (2 talks - 4 questions)',
+
+      // WRITING
+      'Part 1: You want to join the Fitness Club. You have 5 messages from a member of the club. Write short answers (1-5 words) to each message. Recommended time: 3 minutes.',
+      'Part 2: You are a new member of the Fitness Club. Fill in the form. Write in sentences. Use 20-30 words. Recommended time: 7 minutes.',
+      'Part 3: You are a member of the Fitness Club. You are talking to other members in a chat room. Reply to their questions. Write in sentences. Use 30-40 words per answer. Recommended time: 10 minutes.',
+      'Part 4: You are a member of the Fitness Club. You have received this email from the club manager. ',
+
+      // SPEAKING
+      'Part 1',
+      'Short Q&A',
+      'Part 2',
+      'Describe the picture',
+      'Part 3',
+      'Describe & compare pictures',
+      'Part 4',
+      'Opinion questions',
     ];
 
-    await queryInterface.bulkDelete('Parts', {
-      Content: CONTENTS,
-    });
+    await queryInterface.bulkDelete(
+      'Parts',
+      {
+        Content: CONTENTS,
+      },
+      {}
+    );
   },
 };

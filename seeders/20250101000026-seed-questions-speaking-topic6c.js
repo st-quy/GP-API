@@ -42,19 +42,19 @@ module.exports = {
       const DATA = [
         // SPEAKING — PART 1 (Short Q&A)
         {
-          PartContent: 'SP_P1_QA', // đổi từ SP_P1_Personal
+          PartContent: 'Part 1', // đổi từ SP_P1_Personal
           Sequence: 1,
           Content: 'Please tell me about your favorite place.',
           ImageKeys: null,
         },
         {
-          PartContent: 'SP_P1_QA',
+          PartContent: 'Part 1',
           Sequence: 2,
           Content: 'Please tell me about your favorite film star.',
           ImageKeys: null,
         },
         {
-          PartContent: 'SP_P1_QA',
+          PartContent: 'Part 1',
           Sequence: 3,
           Content:
             'Please tell me about the last time you saw an advertisement.',
@@ -63,7 +63,7 @@ module.exports = {
 
         // SPEAKING — PART 2 (Describe picture)
         {
-          PartContent: 'SP_P2_DescribePicture', // đổi từ SP_P2_Picture
+          PartContent: 'Part 2', // đổi từ SP_P2_Picture
           Sequence: 1,
           Content: 'Describe the picture.',
           ImageKeys: [
@@ -71,7 +71,7 @@ module.exports = {
           ],
         },
         {
-          PartContent: 'SP_P2_DescribePicture',
+          PartContent: 'Part 2',
           Sequence: 2,
           Content: 'What do you usually eat for breakfast?',
           ImageKeys: [
@@ -79,7 +79,7 @@ module.exports = {
           ],
         },
         {
-          PartContent: 'SP_P2_DescribePicture',
+          PartContent: 'Part 2',
           Sequence: 3,
           Content: 'Do you think people should eat breakfast?',
           ImageKeys: [
@@ -89,7 +89,7 @@ module.exports = {
 
         // SPEAKING — PART 3 (Compare pictures)
         {
-          PartContent: 'SP_P3_Compare',
+          PartContent: 'Part 3',
           Sequence: 1,
           Content: 'Describe two pictures.',
           ImageKeys: [
@@ -97,7 +97,7 @@ module.exports = {
           ],
         },
         {
-          PartContent: 'SP_P3_Compare',
+          PartContent: 'Part 3',
           Sequence: 2,
           Content: 'What are the attractions of the two pictures?',
           ImageKeys: [
@@ -105,7 +105,7 @@ module.exports = {
           ],
         },
         {
-          PartContent: 'SP_P3_Compare',
+          PartContent: 'Part 3',
           Sequence: 3,
           Content: 'What is the appeal of growing plants and doing gardening?',
           ImageKeys: [
@@ -115,7 +115,7 @@ module.exports = {
 
         // SPEAKING — PART 4 (Opinion + photo)
         {
-          PartContent: 'SP_P4_Opinion', // đổi từ SP_P4_PhotoDiscussion
+          PartContent: 'Part 4', // đổi từ SP_P4_PhotoDiscussion
           Sequence: 1,
           Content: 'Describe a time when you visited someone.',
           ImageKeys: [
@@ -123,7 +123,7 @@ module.exports = {
           ],
         },
         {
-          PartContent: 'SP_P4_Opinion',
+          PartContent: 'Part 4',
           Sequence: 2,
           Content: 'What do you think about having unexpected visitors?',
           ImageKeys: [
@@ -131,7 +131,7 @@ module.exports = {
           ],
         },
         {
-          PartContent: 'SP_P4_Opinion',
+          PartContent: 'Part 4',
           Sequence: 3,
           Content:
             'Some people like to live in small communities, while others like to live in big cities. What is your opinion?',
