@@ -49,22 +49,23 @@ async function getParticipantExamBySession(req) {
       include: [
         {
           model: Part,
+          as: "Parts",
           required: true,
           order: [["Sequence", "ASC"]],
           include: [
             {
               model: Question,
+              as: "Questions",
               required: true,
               order: [["Sequence", "ASC"]],
-              include: [
-                {
-                  model: Skill,
-                  where: {
-                    Name: skillName.toUpperCase(),
-                  },
-                  required: true,
-                },
-              ],
+            },
+            {
+              model: Skill,
+              as: "Skill",
+              where: {
+                Name: skillName.toUpperCase(),
+              },
+              required: true,
             },
           ],
         },
@@ -92,15 +93,6 @@ async function getParticipantExamBySession(req) {
       include: [
         {
           model: Question,
-          include: [
-            {
-              model: Skill,
-              where: {
-                Name: skillName.toUpperCase(),
-              },
-              required: true,
-            },
-          ],
         },
       ],
     });
@@ -273,7 +265,24 @@ async function calculatePoints(req) {
         TopicID: sessionParticipant.Session.examSet,
         SessionID: sessionParticipant.SessionID,
       },
-      include: [{ model: Question, include: [Skill] }],
+      include: [
+        {
+          model: Question,
+          as: "Question",
+          include: [
+            {
+              model: Part,
+              as: "Part",
+              include: [
+                {
+                  model: Skill,
+                  as: "Skill",
+                },
+              ],
+            },
+          ],
+        },
+      ],
     });
 
     if (answers.length === 0) {
@@ -292,8 +301,7 @@ async function calculatePoints(req) {
 
       const typeOfQuestion = answer.Question.Type;
 
-      const skillType = answer.Question.Skill.Name;
-
+      const skillType = answer.Question.Part.Skill.Name;
       if (skillType !== skillName) {
         return;
       }
