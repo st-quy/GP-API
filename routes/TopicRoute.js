@@ -6,14 +6,13 @@ const {
   getAllTopics,
   createTopic,
   addPartToTopic,
-  getQuestionsByQuestionSetId,
   removePartFromTopic,
 } = require('../controller/TopicController');
 /**
  * @swagger
  * components:
  *   schemas:
- *     Topic:
+ *     Topics:
  *       type: object
  *       properties:
  *         ID:
@@ -136,29 +135,6 @@ router.post('/add-part', addPartToTopic);
  *         description: Topic or Part not found
  */
 router.post('/remove-part', removePartFromTopic);
-
-/**
- * @swagger
- * /topics/questionset/{questionSetId}:
- *   get:
- *     summary: Get all questions in a questionSet (no shuffle)
- *     tags: [Topic]
- *     parameters:
- *       - in: path
- *         name: questionSetId
- *         schema:
- *           type: string
- *         required: true
- *         description: ID of the QuestionSet
- *     responses:
- *       200:
- *         description: Questions retrieved successfully
- *       404:
- *         description: QuestionSet not found
- *       500:
- *         description: Internal server error
- */
-// router.get('/', getQuestionsByQuestionSetId);
 
 router.get('/detail', getTopicByName);
 router.get('/:id', getTopicWithRelations);

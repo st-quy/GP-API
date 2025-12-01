@@ -1,4 +1,5 @@
 const { Part, Skill } = require('../models');
+const { Op } = require('sequelize');
 
 /**
  * Helper: resolve Skill từ skillId hoặc skillName
@@ -43,6 +44,22 @@ async function createPart(req) {
       return { status: 400, message: err.message };
     }
 
+    const existingPart = await Part.findOne({
+      where: {
+        SkillID,
+        Content: content,
+        SubContent: subContent || null,
+      },
+    });
+
+    if (existingPart) {
+      return {
+        status: 400,
+        message:
+          'A part with the same content and subContent already exists for this skill',
+      };
+    }
+
     const newPart = await Part.create({
       Content: content,
       SubContent: subContent || null,
@@ -83,6 +100,26 @@ async function updatePart(req) {
       } catch (err) {
         return { status: 400, message: err.message };
       }
+    }
+
+    const newContent = content ?? part.Content;
+    const newSubContent = subContent ?? part.SubContent;
+
+    const existingPart = await Part.findOne({
+      where: {
+        SkillID,
+        Content: newContent,
+        SubContent: newSubContent,
+        ID: { [Op.ne]: partId },
+      },
+    });
+
+    if (existingPart) {
+      return {
+        status: 400,
+        message:
+          'Another part with the same content and subContent already exists for this skill',
+      };
     }
 
     await part.update({

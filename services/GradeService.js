@@ -49,22 +49,23 @@ async function getParticipantExamBySession(req) {
       include: [
         {
           model: Part,
+          as: "Parts",
           required: true,
           order: [['Sequence', 'ASC']],
           include: [
             {
               model: Question,
+              as: "Questions",
               required: true,
-              order: [['Sequence', 'ASC']],
-              include: [
-                {
-                  model: Skill,
-                  where: {
-                    Name: skillName.toUpperCase(),
-                  },
-                  required: true,
-                },
-              ],
+              order: [["Sequence", "ASC"]],
+            },
+            {
+              model: Skill,
+              as: "Skill",
+              where: {
+                Name: skillName.toUpperCase(),
+              },
+              required: true,
             },
           ],
         },
@@ -92,15 +93,6 @@ async function getParticipantExamBySession(req) {
       include: [
         {
           model: Question,
-          include: [
-            {
-              model: Skill,
-              where: {
-                Name: skillName.toUpperCase(),
-              },
-              required: true,
-            },
-          ],
         },
       ],
     });
@@ -276,15 +268,15 @@ async function calculatePoints(req) {
       include: [
         {
           model: Question,
-          as: 'Question',
+          as: "Question",
           include: [
             {
               model: Part,
-              as: 'Part',
+              as: "Part",
               include: [
                 {
                   model: Skill,
-                  as: 'Skill',
+                  as: "Skill",
                 },
               ],
             },

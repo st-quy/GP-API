@@ -8,6 +8,100 @@ const {
 } = require('../models');
 const { Op } = require('sequelize');
 
+// // This section is for handling shuffle from backend, uncomment if you want to use this instead of doing this in frontend.
+
+// const shuffleArray = (array) => {
+//   const shuffled = [...array];
+//   for (let i = shuffled.length - 1; i > 0; i--) {
+//     const j = Math.floor(Math.random() * (i + 1));
+//     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+//   }
+//   return shuffled;
+// };
+
+// const shuffleQuestionAnswers = (question, skillNameFromPart) => {
+//   if (!question) return question;
+
+//   // Clone to avoid accidental mutation side effects
+//   const q = { ...question };
+
+//   const type = (q.Type || q.type || '').toLowerCase();
+//   const skill =
+//     (skillNameFromPart ||
+//       q.Skill?.Name ||
+//       q.skill?.name ||
+//       '').toLowerCase();
+
+//   // --- CASE 1 & 2: dropdown list / matching + listening or grammar ---
+//   // leftItems: ["1. Speaker A …", "2. Speaker B ...", ...]
+//   // rightItems: ["travels by bike.", "travels by car.", ...]
+
+//   if (
+//     (type === 'dropdown_list' || type === 'matching') &&
+//     (skill === 'listening' || skill === 'grammar and vocabulary')
+//   ) {
+//     if (Array.isArray(q.leftItems) && Array.isArray(q.rightItems)) {
+//       if (q.leftItems.length === q.rightItems.length) {
+//         const indices = q.leftItems.map((_, idx) => idx);
+//         const shuffledIdx = shuffleArray(indices);
+
+//         const newLeft = [];
+//         const newRight = [];
+//         shuffledIdx.forEach((i) => {
+//           newLeft.push(q.leftItems[i]);
+//           newRight.push(q.rightItems[i]);
+//         });
+
+//         q.leftItems = newLeft;
+//         q.rightItems = newRight;
+//       }
+//     }
+//   }
+
+//   // --- CASE 3: multiple choice + grammar ---
+//   // options: [{ key: "A", value: "should" }, ...]
+//   if (
+//     type === 'multiple_choice' &&
+//     skill === 'grammar and vocabulary' &&
+//     Array.isArray(q.options)
+//   ) {
+//     const correctKey = q.correctAnswer;
+//     const originalCorrectOption = q.options.find(
+//       (opt) => opt.key === correctKey
+//     );
+
+//     const shuffledOptions = shuffleArray([...q.options]);
+
+//     const KEY_LABELS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+//     shuffledOptions.forEach((opt, idx) => {
+//       opt.key = KEY_LABELS[idx];
+//     });
+
+//     q.options = shuffledOptions;
+
+//     if (originalCorrectOption) {
+//       const newIndex = q.options.findIndex(
+//         (opt) => opt.value === originalCorrectOption.value
+//       );
+//       if (newIndex !== -1) {
+//         q.correctAnswer = q.options[newIndex].key;
+//       }
+//     }
+//   }
+
+//   // --- CASE 4: multiple choice + listening ---
+//   // options: ["Cold and wet", "Hot and sunny", ...]
+//   if (
+//     type === 'multiple_choice' &&
+//     skill === 'listening' &&
+//     Array.isArray(q.options)
+//   ) {
+//     q.options = shuffleArray(q.options);
+//   }
+
+//   return q;
+// };
+
 const getQuestionsByQuestionSetId = async (req) => {
   try {
     const { questionSetId } = req.params;
@@ -39,22 +133,6 @@ const getQuestionsByQuestionSetId = async (req) => {
       ...item.Question.dataValues,
       Sequence: item.Sequence,
     }));
-
-    // if (questionSet.ShuffleQuestions) {
-    //   questions = shuffleByGroup(questions);
-    // } else {
-    //   questions = _.sortBy(questions, ["Sequence"]);
-    // }
-
-    // if (questionSet.ShuffleAnswers) {
-    //   questions = questions.map((q) => ({
-    //     ...q,
-    //     AnswerContent: {
-    //       ...q.AnswerContent,
-    //       options: _.shuffle(q.AnswerContent?.options || []),
-    //     },
-    //   }));
-    // }
 
     return {
       questionSetId,
