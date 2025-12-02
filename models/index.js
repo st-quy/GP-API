@@ -38,26 +38,43 @@ db.StudentAnswer = require('./StudentAnswer')(sequelize, DataTypes);
 db.StudentAnswerDraft = require('./StudentAnswerDraft')(sequelize, DataTypes);
 db.Skill = require('./Skill')(sequelize, DataTypes);
 db.Class = require('./Class')(sequelize, DataTypes);
-db.TopicPart = require('./TopicPart')(sequelize, DataTypes);
+db.Section = require('./Section')(sequelize, DataTypes);
+db.TopicSection = require('./TopicSection')(sequelize, DataTypes);
+db.SectionPart = require('./SectionPart')(sequelize, DataTypes);
 
 // Relationships
 // User <-> Role
 db.User.belongsToMany(db.Role, { through: db.UserRole, foreignKey: 'UserID' });
 db.Role.belongsToMany(db.User, { through: db.UserRole, foreignKey: 'RoleID' });
 
-// Topic <-> Part (M:N) qua TopicPart
-db.Topic.belongsToMany(db.Part, {
-  through: db.TopicPart,
+// Topic <-> Section (M:N) qua TopicSection
+db.Topic.belongsToMany(db.Section, {
+  through: db.TopicSection,
   foreignKey: 'TopicID',
+  otherKey: 'SectionID',
+  as: 'Sections',
+});
+
+db.Section.belongsToMany(db.Topic, {
+  through: db.TopicSection,
+  foreignKey: 'SectionID',
+  otherKey: 'TopicID',
+  as: 'Topics',
+});
+
+// Section <-> Part (M:N) qua SectionPart
+db.Section.belongsToMany(db.Part, {
+  through: db.SectionPart,
+  foreignKey: 'SectionID',
   otherKey: 'PartID',
   as: 'Parts',
 });
 
-db.Part.belongsToMany(db.Topic, {
-  through: db.TopicPart,
+db.Part.belongsToMany(db.Section, {
+  through: db.SectionPart,
   foreignKey: 'PartID',
-  otherKey: 'TopicID',
-  as: 'Topics',
+  otherKey: 'SectionID',
+  as: 'Sections',
 });
 
 // Part <-> Question (1:N)
@@ -67,6 +84,10 @@ db.Question.belongsTo(db.Part, { foreignKey: 'PartID' });
 // Skill <-> Part (1:N)  👈 NEW
 db.Part.belongsTo(db.Skill, { foreignKey: 'SkillID', as: 'Skill' });
 db.Skill.hasMany(db.Part, { foreignKey: 'SkillID', as: 'Parts' });
+
+// Skill <-> Section (1:N)  👈 NEW
+db.Section.belongsTo(db.Skill, { foreignKey: 'SkillID', as: 'Skill' });
+db.Skill.hasMany(db.Section, { foreignKey: 'SkillID', as: 'Sections' });
 
 db.Question.belongsTo(db.User, { as: 'creator', foreignKey: 'CreatedBy' });
 db.Question.belongsTo(db.User, { as: 'updater', foreignKey: 'UpdatedBy' });

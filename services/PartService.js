@@ -1,4 +1,5 @@
-const { Part, Skill } = require('../models');
+const { Part, Skill, Question } = require('../models');
+const { Op } = require('sequelize');
 
 /**
  * Helper: resolve Skill từ skillId hoặc skillName
@@ -140,10 +141,17 @@ async function getPartByID(req) {
  */
 async function getAllPart(req) {
   try {
-    const { skillId, skillName } = req.query || {};
+    const { skillId, skillName, searchName } = req.query || {};
+
+    // Pagination params
+    const page = Number(req.query.page) || 1;
+    const pageSize = Number(req.query.pageSize) || 10;
+    const offset = (page - 1) * pageSize;
+    const limit = pageSize;
 
     let where = {};
 
+    // Filter theo skill
     if (skillId || skillName) {
       try {
         const skill = await resolveSkill({ skillId, skillName });
@@ -153,21 +161,37 @@ async function getAllPart(req) {
             message: 'Skill not found',
           };
         }
-        // Filter theo SkillID
         where.SkillID = skill.ID;
       } catch (err) {
         return { status: 400, message: err.message };
       }
     }
 
+    // SEARCH theo Content
+    if (searchName) {
+      where.Content = { [Op.iLike]: `%${searchName}%` };
+    }
+
+    // COUNT tổng số Part phù hợp
+    const total = await Part.count({ where });
+
+    // FETCH có phân trang
     const parts = await Part.findAll({
       where,
-      order: [['createdAt', 'DESC']],
+      limit,
+      offset,
+      order: [['Sequence', 'ASC']],
       include: [
         {
           model: Skill,
           as: 'Skill',
           attributes: ['ID', 'Name'],
+        },
+        {
+          model: Question,
+          as: 'Questions',
+          required: false,
+          order: [['createdAt', 'DESC']],
         },
       ],
     });
@@ -175,6 +199,10 @@ async function getAllPart(req) {
     return {
       status: 200,
       message: 'Parts fetched successfully',
+      page,
+      pageSize,
+      total,
+      totalPages: Math.ceil(total / pageSize),
       data: parts,
     };
   } catch (error) {

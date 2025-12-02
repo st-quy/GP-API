@@ -6,6 +6,9 @@ const {
   Skill,
   Part,
   User,
+  sequelize,
+  Section,
+  SectionPart,
 } = require('../models');
 const {
   buildSpeakingAnswerContent,
@@ -68,10 +71,6 @@ async function getAllQuestions(req) {
           ...(skillName && {
             where: {
               Name: { [Op.iLike]: skillName },
-              // hoặc:
-              // [Op.and]: [
-              //   where(fn('LOWER', col('"Part->Skill"."Name"')), skillName.toLowerCase()),
-              // ],
             },
             required: true,
           }),
@@ -166,85 +165,465 @@ async function createQuestion(req) {
 }
 
 async function createQuestionGroup(req) {
-  try {
-    const { PartID, SkillName, questions } = req.body;
-    const userId = req.user.userId;
+  const t = await sequelize.transaction();
 
-    if (
-      !PartID ||
-      !SkillName ||
-      !questions ||
-      !Array.isArray(questions) ||
-      questions.length === 0
-    ) {
+  try {
+    const { SkillName, parts } = req.body;
+    const userId = req?.user?.userId;
+
+    if (!SkillName || !Array.isArray(parts) || parts.length === 0) {
+      await t.rollback();
+      return { status: 400, message: 'SkillName and parts[] are required' };
+    }
+
+    // 1) Check Skill
+    const skill = await Skill.findOne({ where: { Name: SkillName } });
+    if (!skill) {
+      await t.rollback();
+      return { status: 400, message: `Skill "${SkillName}" does not exist` };
+    }
+
+    const skillLower = SkillName.toLowerCase();
+
+    const createdParts = [];
+    const createdQuestions = [];
+
+    // 2) Lặp từng part FE gửi
+    for (const p of parts) {
+      if (!p.name) {
+        await t.rollback();
+        return { status: 400, message: 'Each part must have a name' };
+      }
+
+      // Kiểm tra Part đã tồn tại
+      const existed = await Part.findOne({
+        where: { SkillID: skill.ID, Content: p.name.trim() },
+        transaction: t,
+      });
+
+      if (existed) {
+        await t.rollback();
+        return {
+          status: 400,
+          message: `Part "${p.name}" already exists`,
+        };
+      }
+
+      // 3) Tạo Part
+      const newPart = await Part.create(
+        {
+          ID: uuidv4(),
+          SkillID: skill.ID,
+          Content: p.name,
+          SubContent: null,
+          Sequence: createdParts.length + 1,
+          CreatedBy: userId || null,
+          UpdatedBy: userId || null,
+        },
+        { transaction: t }
+      );
+
+      createdParts.push(newPart);
+
+      // Validate question list
+      if (!Array.isArray(p.questions) || p.questions.length === 0) {
+        await t.rollback();
+        return { status: 400, message: `Part "${p.name}" must have questions` };
+      }
+
+      // 4) Tạo question cho từng part
+      for (let i = 0; i < p.questions.length; i++) {
+        const q = p.questions[i];
+
+        if (!q.Type || !q.Content) {
+          await t.rollback();
+          return {
+            status: 400,
+            message: `Question in part "${p.name}" missing Type or Content`,
+          };
+        }
+
+        const imageKeys = p.image ? [p.image] : [];
+
+        let answerContent = q.AnswerContent || null;
+
+        if (!answerContent) {
+          if (skillLower === 'speaking') {
+            answerContent = buildSpeakingAnswerContent(
+              { ...q, ImageKeys: imageKeys },
+              newPart.ID
+            );
+          }
+          if (skillLower === 'reading') {
+            answerContent = buildReadingAnswerContent(q, newPart.ID);
+          }
+        }
+
+        const newQuestion = await Question.create(
+          {
+            ID: uuidv4(),
+            Type: q.Type,
+            AudioKeys: q.AudioKeys || null,
+            ImageKeys: imageKeys,
+            SkillID: skill.ID,
+            PartID: newPart.ID,
+            PartContent: p.name,
+            Sequence: i + 1,
+            Content: q.Content,
+            SubContent: q.SubContent || null,
+            GroupContent: q.GroupContent || null,
+            AnswerContent: answerContent,
+            CreatedBy: userId || null,
+            UpdatedBy: userId || null,
+          },
+          { transaction: t }
+        );
+
+        createdQuestions.push(newQuestion);
+      }
+    }
+
+    await t.commit();
+
+    return {
+      status: 201,
+      message: 'Parts + Questions created successfully',
+      data: { parts: createdParts, questions: createdQuestions },
+    };
+  } catch (err) {
+    await t.rollback();
+    throw new Error(`Error creating question group: ${err.message}`);
+  }
+}
+
+async function createSpeakingGroup(req, res) {
+  try {
+    const { SkillName, SectionName, parts } = req.body;
+    const userId = req.user?.userId;
+
+    if (!SkillName || !parts || !SectionName) {
       return {
         status: 400,
-        message: 'PartID, SkillId and questions[] are required',
+        message: 'SkillName, SectionName and parts[] are required',
       };
     }
 
     const skill = await Skill.findOne({ where: { Name: SkillName } });
     if (!skill) {
-      return { status: 400, message: `Skill "${SkillName}" không tồn tại` };
-    }
-
-    const GroupID = uuidv4();
-    const skillNameLower = String(SkillName).toLowerCase();
-
-    for (const q of questions) {
-      if (!q.Type || !q.Content) {
-        return {
-          status: 400,
-          message: 'Mỗi question phải có Type và Content',
-        };
-      }
-    }
-
-    const payload = questions.map((q, index) => {
-      const imageKeys = q.ImageKeys || [];
-
-      let answerContent = q.AnswerContent || null;
-
-      // Nếu FE không gửi AnswerContent thì BE tự build theo skill + type
-      if (!answerContent) {
-        if (skillNameLower === 'speaking') {
-          // speaking
-          answerContent = buildSpeakingAnswerContent(
-            { ...q, ImageKeys: imageKeys },
-            PartID
-          );
-        } else if (skillNameLower === 'reading') {
-          // reading: dropdown-list / matching / ordering
-          answerContent = buildReadingAnswerContent(q, PartID);
-        }
-      }
-
       return {
-        Type: q.Type, // 'dropdown-list' / 'matching' / 'ordering' / 'speaking'...
-        AudioKeys: q.AudioKeys || null,
-        ImageKeys: imageKeys,
-        SkillID: skill.ID,
-        PartID,
-        Sequence: q.Sequence ?? index + 1,
-        Content: q.Content,
-        SubContent: q.SubContent || null,
-        GroupContent: q.GroupContent || null,
-        AnswerContent: answerContent,
-        GroupID,
-        CreatedBy: userId,
-        UpdatedBy: userId,
+        status: 400,
+        message: `Skill "${SkillName}" does not exist`,
       };
-    });
+    }
 
-    const created = await Question.bulkCreate(payload, { returning: true });
+    let section = await Section.findOne({ where: { Name: SectionName } });
+    if (!section) {
+      section = await Section.create(
+        {
+          ID: uuidv4(),
+          SkillID: skill.ID,
+          Name: SectionName,
+          Description: null,
+        },
+        { transaction: t }
+      );
+    }
+
+    const partKeys = Object.keys(parts);
+
+    const result = await sequelize.transaction(async (t) => {
+      let createdParts = {};
+
+      // =========== 1) CREATE / UPDATE 4 PART ===============
+      for (const key of partKeys) {
+        const p = parts[key];
+
+        if (!p || !p.name) {
+          throw new Error(`Part "${key}" missing name`);
+        }
+
+        let partRow = null;
+
+        // ❗ Nếu FE gửi PartID → Update
+        if (p.id) {
+          partRow = await Part.findByPk(p.id, { transaction: t });
+
+          if (!partRow) {
+            throw new Error(`PartID ${p.id} not found`);
+          }
+
+          await partRow.update(
+            {
+              Content: p.name,
+              UpdatedBy: userId,
+            },
+            { transaction: t }
+          );
+        } else {
+          // ❗ Nếu FE không gửi PartID → create 1 lần duy nhất
+          partRow = await Part.create(
+            {
+              ID: uuidv4(),
+              SkillID: skill.ID,
+              Content: p.name,
+              SubContent: null,
+              Sequence: p.sequence,
+              CreatedBy: userId,
+              UpdatedBy: userId,
+            },
+            { transaction: t }
+          );
+        }
+
+        createdParts[key] = partRow;
+      }
+
+      // ============ 2) CREATE QUESTIONS =============
+      // Trước khi tạo mới → xoá hết question cũ
+      const partIds = Object.values(createdParts).map((p) => p.ID);
+
+      await Question.destroy(
+        {
+          where: {
+            PartID: partIds,
+            Type: 'speaking',
+          },
+        },
+        { transaction: t }
+      );
+
+      let questionPayload = [];
+
+      // Tạo question cho từng part
+      for (const key of partKeys) {
+        const p = parts[key];
+        const partRow = createdParts[key];
+
+        const imageKeys = p.image ? [p.image] : [];
+        const qs = Array.isArray(p.questions) ? p.questions : [];
+
+        qs.forEach((q, idx) => {
+          const content = q.value.trim();
+
+          questionPayload.push({
+            ID: uuidv4(),
+            Type: 'speaking',
+            SkillID: skill.ID,
+            PartID: partRow.ID,
+            Sequence: idx + 1,
+            Content: content,
+            SubContent: null,
+            GroupContent: null,
+            ImageKeys: imageKeys,
+            AudioKeys: null,
+            AnswerContent: buildSpeakingAnswerContent({
+              content,
+              imageKeys,
+              partID: partRow.ID,
+            }),
+            CreatedBy: userId,
+            UpdatedBy: userId,
+          });
+        });
+      }
+
+      await Question.bulkCreate(questionPayload, {
+        returning: true,
+        transaction: t,
+      });
+
+      // ============ 3) LINK SECTION <-> PART =============
+      // Xoá mapping cũ
+      await SectionPart.destroy(
+        {
+          where: { SectionID: section.ID },
+        },
+        { transaction: t }
+      );
+
+      // Tạo mapping mới
+      await SectionPart.bulkCreate(
+        partIds.map((partID, idx) => ({
+          ID: uuidv4(),
+          SectionID: section.ID,
+          PartID: partID,
+          Sequence: idx + 1,
+        })),
+        { transaction: t }
+      );
+
+      return createdParts;
+    });
 
     return {
       status: 201,
-      message: 'Question group created successfully',
-      data: created,
+      message: 'Speaking created successfully',
+      parts: result,
     };
   } catch (error) {
-    throw new Error(`Error creating question group: ${error.message}`);
+    return {
+      status: 500,
+      message: error.message,
+    };
+  }
+}
+async function createReadingGroup(req, res) {
+  try {
+    const { SkillName, SectionName, parts } = req.body;
+    const userId = req.user?.userId;
+
+    if (!SkillName || !parts || !SectionName) {
+      return {
+        status: 400,
+        message: 'SkillName, SectionName and parts[] are required',
+      };
+    }
+
+    // 0) VALIDATE SKILL
+    const skill = await Skill.findOne({ where: { Name: SkillName } });
+    if (!skill) {
+      return {
+        message: `Skill "${SkillName}" does not exist`,
+      };
+    }
+
+    // 1) VALIDATE 5 PARTS (AUTO VALIDATION)
+    // parts.forEach((p) => validatePartStructure(p));
+
+    // -----------------------------------------
+    // 1) FIND OR CREATE SECTION
+    // -----------------------------------------
+    let section = await Section.findOne({
+      where: { Name: SectionName },
+    });
+
+    if (!section) {
+      section = await Section.create({
+        ID: uuidv4(),
+        SkillID: skill.ID,
+        Name: SectionName,
+        Description: null,
+      });
+    }
+
+    // 2) TRANSACTION
+    const result = await sequelize.transaction(async (t) => {
+      const finalParts = [];
+
+      for (const p of parts) {
+        let partRow;
+
+        // =====================
+        // 2A) UPDATE EXISTING PART
+        // =====================
+        if (p.PartID) {
+          partRow = await Part.findByPk(p.PartID, { transaction: t });
+
+          if (!partRow) {
+            throw new Error(`PartID ${p.PartID} not found`);
+          }
+
+          await partRow.update(
+            {
+              PartName: p.PartName,
+              Content: p.Content,
+              Type: p.Type,
+              Sequence: p.Sequence,
+              UpdatedBy: userId,
+            },
+            { transaction: t }
+          );
+        }
+
+        // =====================
+        // 2B) CREATE NEW PART (first time)
+        // =====================
+        else {
+          partRow = await Part.create(
+            {
+              ID: uuidv4(),
+              SkillID: skill.ID,
+              Type: p.Type,
+              Content: p.PartName,
+              Sequence: p.Sequence,
+              SubContent: null,
+              CreatedBy: userId,
+              UpdatedBy: userId,
+            },
+            { transaction: t }
+          );
+        }
+
+        // =====================
+        // ALWAYS REMOVE OLD QUESTIONS
+        // =====================
+        await Question.destroy(
+          {
+            where: { PartID: partRow.ID },
+          },
+          { transaction: t }
+        );
+
+        // =====================
+        // 3) CREATE QUESTION FOR THIS PART
+        // =====================
+        await Question.create(
+          {
+            ID: uuidv4(),
+            PartID: partRow.ID,
+            Type: p.Type,
+            Sequence: 1, // ALWAYS 1 for READING
+            Content: p.Content,
+            AnswerContent: p.AnswerContent,
+            ImageKeys: null,
+            AudioKeys: null,
+            GroupContent: null,
+            CreatedBy: userId,
+            UpdatedBy: userId,
+          },
+          { transaction: t }
+        );
+
+        finalParts.push(partRow);
+      }
+
+      // -----------------------------------------
+      // 3) LINK PARTS ↔ SECTION (SectionPart TABLE)
+      // -----------------------------------------
+      const partIds = finalParts.map((p) => p.ID);
+
+      // Delete old mapping
+      await SectionPart.destroy(
+        {
+          where: { SectionID: section.ID },
+        },
+        { transaction: t }
+      );
+
+      // Re-create mapping by Sequence
+      await SectionPart.bulkCreate(
+        finalParts
+          .sort((a, b) => a.Sequence - b.Sequence)
+          .map((p) => ({
+            ID: uuidv4(),
+            SectionID: section.ID,
+            PartID: p.ID,
+            Sequence: p.Sequence,
+          })),
+        { transaction: t }
+      );
+
+      return finalParts;
+    });
+
+    return {
+      status: 201,
+      message: 'Reading parts created/updated successfully',
+      parts: result,
+    };
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: error.message });
   }
 }
 
@@ -488,4 +867,6 @@ module.exports = {
   getQuestionsByPartID,
   getQuestionsByTopicID,
   getQuestionsByQuestionSetID,
+  createSpeakingGroup,
+  createReadingGroup,
 };

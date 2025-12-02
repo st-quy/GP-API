@@ -1,15 +1,20 @@
 /**
  * Build AnswerContent JSON for Speaking question
  */
-function buildSpeakingAnswerContent(q, partID) {
+function buildSpeakingAnswerContent({
+  content,
+  groupContent,
+  imageKeys,
+  partID,
+}) {
   return {
-    content: q.Content,
-    groupContent: q.GroupContent ?? null,
+    type: 'speaking',
+    partID,
+    content,
+    groupContent: groupContent ?? null,
     options: null,
     correctAnswer: null,
-    partID,
-    type: 'speaking',
-    ImageKeys: q.ImageKeys ?? [],
+    ImageKeys: imageKeys ?? [],
   };
 }
 function buildReadingAnswerContent(q, partID) {

@@ -9,6 +9,7 @@ const {
   updateQuestion,
   deleteQuestion,
   getAllQuestions,
+  createQuestionReading,
 } = require('../controller/QuestionController');
 
 router.get('/', getAllQuestions);
@@ -205,6 +206,7 @@ router.get('/:questionId', getQuestionByID);
  *         description: Internal server error
  */
 router.post('/', createQuestionGroup);
+router.post('/reading/create', createQuestionReading);
 
 /**
  * @swagger

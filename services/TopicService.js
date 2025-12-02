@@ -5,6 +5,7 @@ const {
   Skill,
   Part,
   Topic,
+  Section,
 } = require('../models');
 const { Op } = require('sequelize');
 
@@ -106,59 +107,81 @@ const getTopicWithRelations = async (req, res) => {
     const topicId = req.params.id;
     const { questionType, skillName } = req.query;
 
-    const questionWhere = {};
-    if (questionType) {
-      questionWhere.Type = questionType;
-    }
-
-    const skillWhere = {};
-    if (skillName) {
-      skillWhere.Name = skillName;
-    }
+    const questionWhere = questionType ? { Type: questionType } : undefined;
+    const skillWhere = skillName ? { Name: skillName } : undefined;
 
     const topic = await Topic.findOne({
       where: { ID: topicId },
+
       include: [
         {
-          model: Part,
-          as: 'Parts',
+          model: Section,
+          as: 'Sections',
+          through: { attributes: [] },
+
           include: [
             {
               model: Skill,
               as: 'Skill',
-              ...(skillName && {
-                where: skillWhere,
-                required: true,
-              }),
+              ...(skillWhere && { where: skillWhere, required: true }),
             },
+
             {
-              model: Question,
-              ...(questionType && {
-                where: questionWhere,
-                required: true,
-              }),
+              model: Part,
+              as: 'Parts',
+              through: { attributes: [] },
+
+              include: [
+                {
+                  model: Skill,
+                  as: 'Skill',
+                },
+                {
+                  model: Question,
+                  ...(questionWhere && {
+                    where: questionWhere,
+                    required: true,
+                  }),
+                },
+              ],
             },
           ],
         },
       ],
+
       order: [
-        // sort Part theo Sequence
-        [{ model: Part, as: 'Parts' }, 'Sequence', 'ASC'],
-        // sort Question trong mỗi Part theo Sequence
-        [{ model: Part, as: 'Parts' }, { model: Question }, 'Sequence', 'ASC'],
+        [{ model: Section, as: 'Sections' }, 'SkillID', 'ASC'],
+        [
+          { model: Section, as: 'Sections' },
+          { model: Part, as: 'Parts' },
+          'Sequence',
+          'ASC',
+        ],
+        [
+          { model: Section, as: 'Sections' },
+          { model: Part, as: 'Parts' },
+          { model: Question },
+          'Sequence',
+          'ASC',
+        ],
       ],
-      distinct: true, // tránh duplicate khi join M:N
+
+      distinct: true,
     });
 
     if (!topic) {
       return res.status(404).json({ message: 'Topic not found' });
     }
 
-    // Convert Sequelize instance -> plain object (loại bỏ circular)
-    const plainTopic = topic.get({ plain: true });
-    return plainTopic;
+    return topic.get({ plain: true });
   } catch (error) {
     console.error('Error fetching topic with relations:', error);
+
+    // Nếu error xảy ra sau khi response đã gửi → headers sent
+    if (res.headersSent) {
+      return;
+    }
+
     return res.status(500).json({ message: 'Internal server error' });
   }
 };

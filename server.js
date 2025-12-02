@@ -19,26 +19,23 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api', require('./routes'));
 
-// (async () => {
-//   await initializeBucket(); //Just for the first time
-// })();
+(async () => {
+  await initializeBucket(); //Just for the first time
+})();
 
-// const sslOptions = {
-//   key: fs.readFileSync('./ssl/key.pem'),
-//   cert: fs.readFileSync('./ssl/cert.pem'),
-// };
+const sslOptions = {
+  key: fs.readFileSync('./ssl/key.pem'),
+  cert: fs.readFileSync('./ssl/cert.pem'),
+};
 
 db.sequelize
   .sync({ alter: true })
   // .authenticate()
   .then(async () => {
-    app.listen(PORT, () => {
-      console.log(`HTTP server is running on port ${PORT}`);
+    console.log('Database synchronized and models updated successfully.');
+    https.createServer(sslOptions, app).listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
     });
-    // console.log('Database synchronized and models updated successfully.');
-    // https.createServer(sslOptions, app).listen(PORT, () => {
-    //   console.log(`Server is running on port ${PORT}`);
-    // });
   })
   .catch((error) => {
     console.error('Error synchronizing the database:', error);

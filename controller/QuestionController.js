@@ -18,6 +18,15 @@ async function createQuestion(req, res) {
   }
 }
 
+async function createSpeakingGroup(req, res) {
+  try {
+    const result = await QuestionService.createSpeakingGroup(req);
+    res.status(result.status).json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
 async function getQuestionsByPartID(req, res) {
   try {
     const result = await QuestionService.getQuestionsByPartID(req);
@@ -47,7 +56,16 @@ async function getQuestionsByQuestionSetID(req, res) {
 
 async function createQuestionGroup(req, res) {
   try {
-    const result = await QuestionService.createQuestionGroup(req);
+    const result = await QuestionService.createSpeakingGroup(req);
+    res.status(result.status).json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+async function createQuestionReading(req, res) {
+  try {
+    const result = await QuestionService.createReadingGroup(req);
     res.status(result.status).json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -94,4 +112,6 @@ module.exports = {
   updateQuestion,
   deleteQuestion,
   getAllQuestions,
+  createSpeakingGroup,
+  createQuestionReading,
 };

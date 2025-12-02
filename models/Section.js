@@ -1,28 +1,28 @@
-// models/TopicPart.js
+// models/Section.js
 module.exports = (sequelize, DataTypes) => {
-  const TopicPart = sequelize.define('TopicPart', {
+  const Section = sequelize.define('Section', {
     ID: {
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
-    TopicID: {
-      type: DataTypes.UUID,
+    Name: {
+      type: DataTypes.TEXT,
       allowNull: false,
-      references: {
-        model: 'Topics',
-        key: 'ID',
-      },
     },
-    PartID: {
+    Description: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    SkillID: {
       type: DataTypes.UUID,
-      allowNull: false,
+      allowNull: true,
       references: {
-        model: 'Parts',
+        model: 'Skills',
         key: 'ID',
       },
     },
   });
 
-  return TopicPart;
+  return Section;
 };

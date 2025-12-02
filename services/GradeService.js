@@ -49,22 +49,23 @@ async function getParticipantExamBySession(req) {
       include: [
         {
           model: Part,
+          as: 'Parts',
           required: true,
           order: [['Sequence', 'ASC']],
           include: [
             {
               model: Question,
+              as: 'Questions',
               required: true,
               order: [['Sequence', 'ASC']],
-              include: [
-                {
-                  model: Skill,
-                  where: {
-                    Name: skillName.toUpperCase(),
-                  },
-                  required: true,
-                },
-              ],
+            },
+            {
+              model: Skill,
+              as: 'Skill',
+              where: {
+                Name: skillName.toUpperCase(),
+              },
+              required: true,
             },
           ],
         },
@@ -92,13 +93,12 @@ async function getParticipantExamBySession(req) {
       include: [
         {
           model: Question,
+          as: 'Question',
           include: [
             {
-              model: Skill,
-              where: {
-                Name: skillName.toUpperCase(),
-              },
-              required: true,
+              model: Part,
+              as: 'Part',
+              include: [{ model: Skill, as: 'Skill' }],
             },
           ],
         },
@@ -257,6 +257,7 @@ async function calculatePoints(req) {
         message: `Invalid skill name: ${skillName}`,
       };
     }
+
     const pointPerQuestion =
       pointsPerQuestion[formattedSkillName.toLowerCase()] || 1;
 
@@ -281,12 +282,7 @@ async function calculatePoints(req) {
             {
               model: Part,
               as: 'Part',
-              include: [
-                {
-                  model: Skill,
-                  as: 'Skill',
-                },
-              ],
+              include: [{ model: Skill, as: 'Skill' }],
             },
           ],
         },
@@ -294,51 +290,84 @@ async function calculatePoints(req) {
     });
 
     if (answers.length === 0) {
-      return {
-        status: 404,
-        message: 'No answers found for the student',
-      };
+      return { status: 404, message: 'No answers found for the student' };
     }
 
     let totalPoints = 0;
+    const logs = [];
 
     answers.forEach((answer) => {
-      if (!answer.AnswerText) {
-        return;
-      }
+      if (!answer.AnswerText) return;
 
-      const typeOfQuestion = answer.Question.Type;
-
+      const questionId = answer.QuestionID;
+      const type = answer.Question.Type;
       const skillType = answer.Question.Part.Skill.Name;
-      if (skillType !== skillName) {
-        return;
-      }
+
+      if (skillType !== skillName) return;
 
       const correctContent = answer.Question.AnswerContent;
+      const rawStudentAnswer = answer.AnswerText;
+      let isCorrect = false;
 
-      if (typeOfQuestion === 'multiple-choice') {
-        if (correctContent.correctAnswer === answer.AnswerText) {
+      const logItem = {
+        questionId,
+        type,
+        studentAnswer: null,
+        correctAnswer: null,
+        result: 'incorrect',
+        pointAdded: 0,
+      };
+
+      // ================================
+      // MULTIPLE CHOICE
+      // ================================
+      if (type === 'multiple-choice') {
+        const stu = rawStudentAnswer.trim();
+        const cor = correctContent.correctAnswer.trim();
+
+        logItem.studentAnswer = stu;
+        logItem.correctAnswer = cor;
+
+        if (stu === cor) {
+          isCorrect = true;
           totalPoints += pointPerQuestion;
         }
-      } else if (typeOfQuestion === 'matching') {
-        const studentAnswers = JSON.parse(answer.AnswerText);
+      }
+
+      // ================================
+      // MATCHING
+      // ================================
+      else if (type === 'matching') {
+        const studentAnswers = JSON.parse(rawStudentAnswer);
         const correctAnswers = correctContent.correctAnswer;
+
+        logItem.studentAnswer = studentAnswers;
+        logItem.correctAnswer = correctAnswers;
 
         correctAnswers.forEach((correct) => {
           const matched = studentAnswers.find(
-            (student) =>
-              student.left === correct.left && student.right === correct.right
+            (s) =>
+              s.left.trim() === correct.left.trim() &&
+              s.right.trim() === correct.right.trim()
           );
           if (matched) {
+            isCorrect = true;
             totalPoints += pointPerQuestion;
           }
         });
-      } else if (typeOfQuestion === 'ordering') {
-        const studentAnswers = JSON.parse(answer.AnswerText).sort(
+      }
+
+      // ================================
+      // ORDERING
+      // ================================
+      else if (type === 'ordering') {
+        const studentAnswers = JSON.parse(rawStudentAnswer).sort(
           (a, b) => a.value - b.value
         );
-
         const correctAnswers = correctContent.correctAnswer;
+
+        logItem.studentAnswer = studentAnswers;
+        logItem.correctAnswer = correctAnswers;
 
         const minLength = Math.min(
           studentAnswers.length,
@@ -346,45 +375,76 @@ async function calculatePoints(req) {
         );
 
         for (let i = 0; i < minLength; i++) {
-          if (studentAnswers[i].key === correctAnswers[i].key) {
+          if (studentAnswers[i].key.trim() === correctAnswers[i].key.trim()) {
+            isCorrect = true;
             totalPoints += pointPerQuestion;
           }
         }
-      } else if (typeOfQuestion === 'dropdown-list') {
-        const studentAnswers = JSON.parse(answer.AnswerText).map((item) => ({
+      }
+
+      // ================================
+      // DROPDOWN LIST
+      // ================================
+      else if (type === 'dropdown-list') {
+        const studentAnswers = JSON.parse(rawStudentAnswer).map((item) => ({
           key: item.key.split('.')[0].trim(),
-          value: item.value,
+          value: item.value.trim(),
         }));
-        const correctAnswers = correctContent.correctAnswer.filter(
+
+        const correctAnswersInclude0 = correctContent.correctAnswer.map(
+          (item) => ({
+            key: item.key.trim(),
+            value: item.value.trim(),
+          })
+        );
+
+        const correctAnswers = correctAnswersInclude0.filter(
           (item) => item.key !== '0'
         );
+
+        logItem.studentAnswer = studentAnswers;
+        logItem.correctAnswer = correctAnswers;
 
         correctAnswers.forEach((correct, index) => {
           const student = studentAnswers[index];
           if (
             student &&
-            student.value === correct.value &&
-            student.key === correct.key
+            student.key === correct.key &&
+            student.value === correct.value
           ) {
-            totalPoints += pointPerQuestion;
-          }
-        });
-      } else if (typeOfQuestion === 'listening-questions-group') {
-        const studentAnswers = JSON.parse(answer.AnswerText);
-        const correctList = correctContent.groupContent.listContent;
-
-        correctList.forEach((question) => {
-          const studentAnswer = studentAnswers.find(
-            (ans) => ans.ID === question.ID
-          );
-          if (
-            studentAnswer &&
-            studentAnswer.answer === question.correctAnswer
-          ) {
+            isCorrect = true;
             totalPoints += pointPerQuestion;
           }
         });
       }
+
+      // ================================
+      // LISTENING GROUP
+      // ================================
+      else if (type === 'listening-questions-group') {
+        const studentAnswers = JSON.parse(rawStudentAnswer);
+        const correctList = correctContent.groupContent.listContent;
+
+        logItem.studentAnswer = studentAnswers;
+        logItem.correctAnswer = correctList;
+
+        correctList.forEach((q) => {
+          const stu = studentAnswers.find((x) => x.ID === q.ID);
+
+          if (stu && stu.answer.trim() === q.correctAnswer.trim()) {
+            isCorrect = true;
+            totalPoints += pointPerQuestion;
+          }
+        });
+      }
+
+      // ================================
+      // Finalize tracking
+      // ================================
+      logItem.result = isCorrect ? 'correct' : 'incorrect';
+      logItem.pointAdded = isCorrect ? pointPerQuestion : 0;
+
+      logs.push(logItem);
     });
 
     totalPoints = parseFloat(totalPoints.toFixed(1));
@@ -402,6 +462,7 @@ async function calculatePoints(req) {
     return {
       message: 'Points calculated successfully',
       points: totalPoints,
+      tracking: logs,
       sessionParticipant: updatedSessionParticipant,
     };
   } catch (error) {

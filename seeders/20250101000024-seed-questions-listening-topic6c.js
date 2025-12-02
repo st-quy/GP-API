@@ -260,6 +260,7 @@ module.exports = {
           Content:
             'Listen to an expert talking about a newly broadcasted TV series...',
           AnswerContent: `{"content":"Listen to an expert talking about a newly broadcasted TV series and answer the questions below.","groupContent":{"title":"Listen to an expert talking about a newly broadcasted TV series and answer the questions below.","audioKey":"","listContent":[{"ID":1,"content":"What does the expert say about the series?","options":["It didn’t receive enough investment at the early stage.","It was overlooked by critics.","It caught the audience’s attention from the start."],"type":"listening-questions-group","correctAnswer":"It caught the audience’s attention from the start.","partID":"a1dde54c-be6c-48f8-8a46-da1223b5a452"},{"ID":2,"content":"According to the expert, what is the series’ potential?","options":["It helps to reach new customers.","New seasons will be produced due to great demand.","It inspires young filmmakers to follow a new movie-making style."],"type":"listening-questions-group","correctAnswer":"It helps to reach new customers.","partID":"a1dde54c-be6c-48f8-8a46-da1223b5a452"}]},"type":"listening-questions-group","audioKeys":"https://10.25.83.220:9000/gp-bucket/Topic6/Audio/Q16.mp3"}`,
+          GroupContent: `{"listContent":[{"ID":1,"content":"What does the expert say about the series?","options":["It didn’t receive enough investment at the early stage.","It was overlooked by critics.","It caught the audience’s attention from the start."],"type":"listening-questions-group","correctAnswer":"It caught the audience’s attention from the start.","partID":"a1dde54c-be6c-48f8-8a46-da1223b5a452"},{"ID":2,"content":"According to the expert, what is the series’ potential?","options":["It helps to reach new customers.","New seasons will be produced due to great demand.","It inspires young filmmakers to follow a new movie-making style."],"type":"listening-questions-group","correctAnswer":"It helps to reach new customers.","partID":"a1dde54c-be6c-48f8-8a46-da1223b5a452"}]}`,
         },
 
         // Q17 — GIỮ NGUYÊN JSON
@@ -306,6 +307,33 @@ module.exports = {
   "type": "listening-questions-group",
   "audioKeys": "https://minio.devplus.edu.vn/gp-bucket-dev/Topic6/Audio/Q17.mp3"
 }`,
+          GroupContent: `{"listContent": [
+      {
+        "ID": 1,
+        "content": "What does the expert say about the negative side of advertising?",
+        "options": [
+          "Series are damaged by overexposure.",
+          "Advertisements might sometimes be repetitive which is annoying.",
+          "Advertising costs the same amount of money to produce a movie."
+        ],
+        "type": "listening-questions-group",
+        "correctAnswer": "Series are damaged by overexposure.",
+        "partID": "b2dde54c-be6c-48f8-8a46-da1223b5a452"
+      },
+      {
+        "ID": 2,
+        "content": "In what way can advertising affect sports?",
+        "options": [
+          "They help to attract more fans.",
+          "They can boost ticket sales and sales of sports related items.",
+          "They can generate negative publicity for the sport."
+        ],
+        "type": "listening-questions-group",
+        "correctAnswer": "They can generate negative publicity for the sport.",
+        "partID": "b2dde54c-be6c-48f8-8a46-da1223b5a452"
+      }
+    ]
+  }`,
         },
       ];
 
@@ -361,7 +389,7 @@ module.exports = {
           Sequence: q.Sequence,
           Content: q.Content,
           SubContent: null,
-          GroupContent: null,
+          GroupContent: q.GroupContent,
           AnswerContent: answerJson,
           createdAt: now,
           updatedAt: now,
