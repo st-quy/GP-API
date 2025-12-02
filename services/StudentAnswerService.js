@@ -1,13 +1,13 @@
-const { StudentAnswer, Session } = require("../models");
-const { calculatePoints } = require("../services/GradeService");
-const { deleteFilesFromMinIO } = require("../services/MinIOService");
+const { StudentAnswer, Session, Question } = require('../models');
+const { calculatePoints } = require('../services/GradeService');
+const { deleteFilesFromMinIO } = require('../services/MinIOService');
 
 /**
  * Validate incoming questions array
  */
 function validateQuestions(questions) {
   if (!questions || !Array.isArray(questions) || questions.length === 0) {
-    throw new Error("Questions are required and must be a non-empty array");
+    throw new Error('Questions are required and must be a non-empty array');
   }
 
   questions.forEach(({ questionId }, index) => {
@@ -17,15 +17,27 @@ function validateQuestions(questions) {
   });
 }
 
+async function getMissingQuestionIDs(questionIDs) {
+  const existingQuestions = await Question.findAll({
+    where: { ID: questionIDs },
+    attributes: ['ID'],
+  });
+
+  const existingIds = existingQuestions.map((q) => q.ID);
+
+  const missing = questionIDs.filter((id) => !existingIds.includes(id));
+
+  return missing;
+}
 /**
  * Main handler to store student answers and calculate points
  */
 async function storeStudentAnswers(req) {
   const { studentId, topicId, sessionId, questions, skillName } = req.body;
 
-  if (!studentId) throw new Error("Student ID is required");
-  if (!topicId) throw new Error("Topic ID is required");
-  if (!sessionId) throw new Error("Session ID is required");
+  if (!studentId) throw new Error('Student ID is required');
+  if (!topicId) throw new Error('Topic ID is required');
+  if (!sessionId) throw new Error('Session ID is required');
 
   validateQuestions(questions);
 
@@ -41,9 +53,16 @@ async function storeStudentAnswers(req) {
       AnswerAudio: answerAudio,
     })
   );
-
   const questionIDs = studentAnswers.map((a) => a.QuestionID);
 
+  const missingIds = await getMissingQuestionIDs(questionIDs);
+
+  if (missingIds.length > 0) {
+    throw new Error(
+      'These question IDs do NOT exist in Questions table: ' +
+        missingIds.join(', ')
+    );
+  }
   const existing = await StudentAnswer.findOne({
     where: {
       StudentID: studentId,
@@ -77,10 +96,10 @@ async function storeStudentAnswers(req) {
     }
 
     // Then calculate points based on the answers
-    if (skillName === "WRITING" || skillName === "SPEAKING") {
+    if (skillName === 'WRITING' || skillName === 'SPEAKING') {
       return {
         status: 200,
-        message: "Student answers saved and points calculated successfully",
+        message: 'Student answers saved and points calculated successfully',
         data: {
           savedAnswersCount: savedAnswers.length,
         },
@@ -91,7 +110,7 @@ async function storeStudentAnswers(req) {
 
     return {
       status: 200,
-      message: "Student answers saved and points calculated successfully",
+      message: 'Student answers saved and points calculated successfully',
       data: {
         savedAnswersCount: savedAnswers.length,
         pointData,
@@ -99,7 +118,7 @@ async function storeStudentAnswers(req) {
     };
   } catch (error) {
     throw new Error(
-      "Error saving answers or calculating points: " + error.message
+      'Error saving answers or calculating points: ' + error.message
     );
   }
 }
@@ -108,9 +127,9 @@ const getFilenameFromUrl = (url) => {
   try {
     const parsedUrl = new URL(url);
     const pathname = parsedUrl.pathname;
-    return pathname.split("/").pop();
+    return pathname.split('/').pop();
   } catch (err) {
-    console.error("Invalid URL:", url);
+    console.error('Invalid URL:', url);
     return null;
   }
 };
@@ -119,7 +138,7 @@ async function removeMinIOAudio(sessionId) {
   try {
     const studentAnswers = await StudentAnswer.findAll({
       where: { SessionID: sessionId },
-      attributes: ["AnswerAudio"],
+      attributes: ['AnswerAudio'],
     });
     const audioFiles = await studentAnswers.map((answer) => {
       const audioUrl = answer.AnswerAudio;
@@ -136,7 +155,7 @@ async function removeMinIOAudio(sessionId) {
       }
     );
   } catch (error) {
-    console.error("Failed to update MinioAudioRemoved:", error);
+    console.error('Failed to update MinioAudioRemoved:', error);
   }
 }
 

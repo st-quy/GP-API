@@ -1,4 +1,4 @@
-const { Op, where } = require("sequelize");
+const { Op, where } = require('sequelize');
 const {
   Session,
   SessionParticipant,
@@ -8,13 +8,13 @@ const {
   Question,
   Part,
   Skill,
-} = require("../models"); // Ensure models are imported
+} = require('../models'); // Ensure models are imported
 const {
   skillMapping,
   pointsPerQuestion,
   level,
   skillMappingLevel,
-} = require("../helpers/constants");
+} = require('../helpers/constants');
 
 async function getParticipantExamBySession(req) {
   try {
@@ -24,7 +24,7 @@ async function getParticipantExamBySession(req) {
     if (!sessionParticipantId || !skillName) {
       return {
         status: 400,
-        message: "Missing required fields: sessionParticipantId or skillName",
+        message: 'Missing required fields: sessionParticipantId or skillName',
       };
     }
 
@@ -41,7 +41,7 @@ async function getParticipantExamBySession(req) {
     if (!sessionParticipant) {
       return {
         status: 404,
-        message: "Session participant not found",
+        message: 'Session participant not found',
       };
     }
 
@@ -49,22 +49,23 @@ async function getParticipantExamBySession(req) {
       include: [
         {
           model: Part,
+          as: 'Parts',
           required: true,
-          order: [["Sequence", "ASC"]],
+          order: [['Sequence', 'ASC']],
           include: [
             {
               model: Question,
+              as: 'Questions',
               required: true,
-              order: [["Sequence", "ASC"]],
-              include: [
-                {
-                  model: Skill,
-                  where: {
-                    Name: skillName.toUpperCase(),
-                  },
-                  required: true,
-                },
-              ],
+              order: [['Sequence', 'ASC']],
+            },
+            {
+              model: Skill,
+              as: 'Skill',
+              where: {
+                Name: skillName.toUpperCase(),
+              },
+              required: true,
             },
           ],
         },
@@ -74,7 +75,7 @@ async function getParticipantExamBySession(req) {
     if (!topic) {
       return {
         status: 404,
-        message: "Topic not found",
+        message: 'Topic not found',
       };
     }
 
@@ -92,13 +93,12 @@ async function getParticipantExamBySession(req) {
       include: [
         {
           model: Question,
+          as: 'Question',
           include: [
             {
-              model: Skill,
-              where: {
-                Name: skillName.toUpperCase(),
-              },
-              required: true,
+              model: Part,
+              as: 'Part',
+              include: [{ model: Skill, as: 'Skill' }],
             },
           ],
         },
@@ -135,7 +135,7 @@ async function getParticipantExamBySession(req) {
 
 async function suggestLevels(score, skillName) {
   try {
-    if (skillName === "LISTENING") {
+    if (skillName === 'LISTENING') {
       if (score < 8) return level.X;
       else if (score < 16) return level.A1;
       else if (score < 24) return level.A2;
@@ -144,7 +144,7 @@ async function suggestLevels(score, skillName) {
       else return level.C;
     }
 
-    if (skillName === "READING") {
+    if (skillName === 'READING') {
       if (score < 8) return level.X;
       else if (score < 16) return level.A1;
       else if (score < 26) return level.A2;
@@ -153,7 +153,7 @@ async function suggestLevels(score, skillName) {
       else return level.C;
     }
 
-    if (skillName === "WRITING") {
+    if (skillName === 'WRITING') {
       if (score < 6) return level.X;
       else if (score < 18) return level.A1;
       else if (score < 26) return level.A2;
@@ -162,7 +162,7 @@ async function suggestLevels(score, skillName) {
       else return level.C;
     }
 
-    if (skillName === "SPEAKING") {
+    if (skillName === 'SPEAKING') {
       if (score < 4) return level.X;
       else if (score < 16) return level.A1;
       else if (score < 26) return level.A2;
@@ -188,7 +188,7 @@ async function calculateTotalPoints(
     if (!participant) {
       return {
         status: 404,
-        message: "Session participant not found",
+        message: 'Session participant not found',
       };
     }
 
@@ -213,7 +213,7 @@ async function calculateTotalPoints(
 
     const levelSkill = await suggestLevels(skillScore, skillName.toUpperCase());
 
-    if (skillName === skillMapping["GRAMMAR AND VOCABULARY"]) {
+    if (skillName === skillMapping['GRAMMAR AND VOCABULARY']) {
       await SessionParticipant.update(
         { [skillName]: skillScore },
         { where: { ID: sessionParticipantId } }
@@ -245,7 +245,7 @@ async function calculatePoints(req) {
     if (!sessionParticipantId || !skillName) {
       return {
         status: 400,
-        message: "Missing required fields: sessionParticipantId or skillName",
+        message: 'Missing required fields: sessionParticipantId or skillName',
       };
     }
 
@@ -257,6 +257,7 @@ async function calculatePoints(req) {
         message: `Invalid skill name: ${skillName}`,
       };
     }
+
     const pointPerQuestion =
       pointsPerQuestion[formattedSkillName.toLowerCase()] || 1;
 
@@ -273,56 +274,100 @@ async function calculatePoints(req) {
         TopicID: sessionParticipant.Session.examSet,
         SessionID: sessionParticipant.SessionID,
       },
-      include: [{ model: Question, include: [Skill] }],
+      include: [
+        {
+          model: Question,
+          as: 'Question',
+          include: [
+            {
+              model: Part,
+              as: 'Part',
+              include: [{ model: Skill, as: 'Skill' }],
+            },
+          ],
+        },
+      ],
     });
 
     if (answers.length === 0) {
-      return {
-        status: 404,
-        message: "No answers found for the student",
-      };
+      return { status: 404, message: 'No answers found for the student' };
     }
 
     let totalPoints = 0;
+    const logs = [];
 
     answers.forEach((answer) => {
-      if (!answer.AnswerText) {
-        return;
-      }
+      if (!answer.AnswerText) return;
 
-      const typeOfQuestion = answer.Question.Type;
+      const questionId = answer.QuestionID;
+      const type = answer.Question.Type;
+      const skillType = answer.Question.Part.Skill.Name;
 
-      const skillType = answer.Question.Skill.Name;
-
-      if (skillType !== skillName) {
-        return;
-      }
+      if (skillType !== skillName) return;
 
       const correctContent = answer.Question.AnswerContent;
+      const rawStudentAnswer = answer.AnswerText;
+      let isCorrect = false;
 
-      if (typeOfQuestion === "multiple-choice") {
-        if (correctContent.correctAnswer === answer.AnswerText) {
+      const logItem = {
+        questionId,
+        type,
+        studentAnswer: null,
+        correctAnswer: null,
+        result: 'incorrect',
+        pointAdded: 0,
+      };
+
+      // ================================
+      // MULTIPLE CHOICE
+      // ================================
+      if (type === 'multiple-choice') {
+        const stu = rawStudentAnswer.trim();
+        const cor = correctContent.correctAnswer.trim();
+
+        logItem.studentAnswer = stu;
+        logItem.correctAnswer = cor;
+
+        if (stu === cor) {
+          isCorrect = true;
           totalPoints += pointPerQuestion;
         }
-      } else if (typeOfQuestion === "matching") {
-        const studentAnswers = JSON.parse(answer.AnswerText);
+      }
+
+      // ================================
+      // MATCHING
+      // ================================
+      else if (type === 'matching') {
+        const studentAnswers = JSON.parse(rawStudentAnswer);
         const correctAnswers = correctContent.correctAnswer;
+
+        logItem.studentAnswer = studentAnswers;
+        logItem.correctAnswer = correctAnswers;
 
         correctAnswers.forEach((correct) => {
           const matched = studentAnswers.find(
-            (student) =>
-              student.left === correct.left && student.right === correct.right
+            (s) =>
+              s.left.trim() === correct.left.trim() &&
+              s.right.trim() === correct.right.trim()
           );
           if (matched) {
+            isCorrect = true;
             totalPoints += pointPerQuestion;
           }
         });
-      } else if (typeOfQuestion === "ordering") {
-        const studentAnswers = JSON.parse(answer.AnswerText).sort(
+      }
+
+      // ================================
+      // ORDERING
+      // ================================
+      else if (type === 'ordering') {
+        const studentAnswers = JSON.parse(rawStudentAnswer).sort(
           (a, b) => a.value - b.value
         );
-
         const correctAnswers = correctContent.correctAnswer;
+
+        logItem.studentAnswer = studentAnswers;
+        logItem.correctAnswer = correctAnswers;
 
         const minLength = Math.min(
           studentAnswers.length,
@@ -330,7 +375,8 @@ async function calculatePoints(req) {
         );
 
         for (let i = 0; i < minLength; i++) {
-          if (studentAnswers[i].key === correctAnswers[i].key) {
+          if (studentAnswers[i].key.trim() === correctAnswers[i].key.trim()) {
+            isCorrect = true;
             totalPoints += pointPerQuestion;
           }
         }
@@ -366,10 +412,39 @@ async function calculatePoints(req) {
             studentAnswer &&
             studentAnswer.answer === question.correctAnswer
           ) {
+            isCorrect = true;
             totalPoints += pointPerQuestion;
           }
         });
       }
+
+      // ================================
+      // LISTENING GROUP
+      // ================================
+      else if (type === 'listening-questions-group') {
+        const studentAnswers = JSON.parse(rawStudentAnswer);
+        const correctList = correctContent.groupContent.listContent;
+
+        logItem.studentAnswer = studentAnswers;
+        logItem.correctAnswer = correctList;
+
+        correctList.forEach((q) => {
+          const stu = studentAnswers.find((x) => x.ID === q.ID);
+
+          if (stu && stu.answer.trim() === q.correctAnswer.trim()) {
+            isCorrect = true;
+            totalPoints += pointPerQuestion;
+          }
+        });
+      }
+
+      // ================================
+      // Finalize tracking
+      // ================================
+      logItem.result = isCorrect ? 'correct' : 'incorrect';
+      logItem.pointAdded = isCorrect ? pointPerQuestion : 0;
+
+      logs.push(logItem);
     });
 
     totalPoints = parseFloat(totalPoints.toFixed(1));
@@ -385,8 +460,9 @@ async function calculatePoints(req) {
     );
 
     return {
-      message: "Points calculated successfully",
+      message: 'Points calculated successfully',
       points: totalPoints,
+      tracking: logs,
       sessionParticipant: updatedSessionParticipant,
     };
   } catch (error) {
@@ -404,18 +480,18 @@ async function calculatePointForWritingAndSpeaking(req) {
   try {
     if (
       !sessionParticipantID ||
-      typeof teacherGradedScore !== "number" ||
+      typeof teacherGradedScore !== 'number' ||
       teacherGradedScore < 0 ||
       !skillName
     ) {
       return {
         status: 400,
         message:
-          "Missing or invalid required fields: sessionParticipantID, teacherGradedScore or skillName",
+          'Missing or invalid required fields: sessionParticipantID, teacherGradedScore or skillName',
       };
     }
 
-    if (skillName !== "WRITING" && skillName !== "SPEAKING") {
+    if (skillName !== 'WRITING' && skillName !== 'SPEAKING') {
       return {
         status: 400,
         message: `Invalid skill name: ${skillName}`,
@@ -423,13 +499,13 @@ async function calculatePointForWritingAndSpeaking(req) {
     }
 
     if (
-      typeof teacherGradedScore !== "number" ||
+      typeof teacherGradedScore !== 'number' ||
       teacherGradedScore < 0 ||
       teacherGradedScore > 50
     ) {
       return {
         status: 400,
-        message: "Invalid teacher graded score",
+        message: 'Invalid teacher graded score',
       };
     }
 
@@ -443,7 +519,7 @@ async function calculatePointForWritingAndSpeaking(req) {
       await Promise.all(
         studentAnswers.map(({ studentAnswerId, messageContent }) =>
           StudentAnswer.update(
-            { Comment: messageContent ?? "" },
+            { Comment: messageContent ?? '' },
             { where: { ID: studentAnswerId } }
           )
         )
@@ -463,7 +539,7 @@ async function calculatePointForWritingAndSpeaking(req) {
     });
     return {
       status: 200,
-      message: "Writing points calculated successfully",
+      message: 'Writing points calculated successfully',
       data: {
         sessionParticipant: updatedSessionParticipant[formattedSkillName],
       },

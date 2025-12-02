@@ -1,8 +1,8 @@
-const jwt = require("jsonwebtoken");
+const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET;
 
 if (!JWT_SECRET) {
-  console.error("JWT_SECRET is not defined. Please set it in your .env file.");
+  console.error('JWT_SECRET is not defined. Please set it in your .env file.');
   process.exit(1); // Exit if JWT_SECRET is missing
 }
 
@@ -20,13 +20,13 @@ function authorize(allowedRoles = []) {
 
       const authHeader = req.headers.authorization;
 
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res
           .status(401)
-          .json({ message: "Unauthorized: Missing or malformed token" });
+          .json({ message: 'Unauthorized: Missing or malformed token' });
       }
 
-      const token = authHeader.split(" ")[1];
+      const token = authHeader.split(' ')[1];
 
       try {
         const decoded = jwt.verify(token, JWT_SECRET);
@@ -38,18 +38,18 @@ function authorize(allowedRoles = []) {
         if (allowedRoles.length > 0 && !allowedRoles.includes(decoded.role)) {
           return res
             .status(403)
-            .json({ message: "Forbidden: Insufficient permissions" });
+            .json({ message: 'Forbidden: Insufficient permissions' });
         }
 
         // Always proceed if we get here (user is authenticated)
         next();
       } catch (err) {
-        console.error("JWT verification error:", err.message);
-        return res.status(401).json({ message: "Invalid or expired token" });
+        console.error('JWT verification error:', err.message);
+        return res.status(401).json({ message: 'Invalid or expired token' });
       }
     } catch (err) {
-      console.error("Authorization middleware error:", err.message);
-      return res.status(500).json({ message: "Internal server error" });
+      console.error('Authorization middleware error:', err.message);
+      return res.status(500).json({ message: 'Internal server error' });
     }
   };
 }

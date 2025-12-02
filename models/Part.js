@@ -1,5 +1,6 @@
+// models/Part.js
 module.exports = (sequelize, DataTypes) => {
-  const Part = sequelize.define("Part", {
+  const Part = sequelize.define('Part', {
     ID: {
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
@@ -15,14 +16,14 @@ module.exports = (sequelize, DataTypes) => {
     },
     Sequence: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true,
     },
-    TopicID: {
+    SkillID: {
       type: DataTypes.UUID,
-      allowNull: false,
+      allowNull: true,
       references: {
-        model: "Topics",
-        key: "ID",
+        model: 'Skills',
+        key: 'ID',
       },
     },
   });

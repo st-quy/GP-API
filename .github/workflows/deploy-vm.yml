@@ -1,0 +1,113 @@
+name: Deploy GP-API to VM (main/develop/uat)
+
+on:
+  push:
+    branches: [ main, develop, uat ]
+  workflow_dispatch:
+
+concurrency:
+  group: vm-deploy-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  deploy_main:
+    name: Deploy main
+    runs-on: ubuntu-latest
+    if: ${{ github.ref_name == 'main' }}
+    steps:
+      - name: SSH & deploy (main)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            REPO_DIR="/home/quy_pham/GREENLIGHT/GP-API"
+            COMPOSE_DIR="/home/quy_pham/GREENLIGHT"
+            BRANCH="main"
+
+            echo "➡️ Git in $REPO_DIR (branch $BRANCH)"
+            test -d "$REPO_DIR" || (echo "❌ Missing $REPO_DIR"; exit 1)
+            cd "$REPO_DIR"
+            git remote -v
+            git fetch --all --prune
+            git checkout "$BRANCH"
+            git reset --hard "origin/$BRANCH"
+
+            echo "🧩 Compose dir: $COMPOSE_DIR"
+            test -f "$COMPOSE_DIR/docker-compose.yml" -o -f "$COMPOSE_DIR/docker-compose.yaml" || (echo "❌ No docker-compose in $COMPOSE_DIR"; exit 1)
+
+            cd "$COMPOSE_DIR"
+            docker compose pull || true
+            docker compose up -d --build
+            echo "✅ Deployed main"
+
+  deploy_develop:
+    name: Deploy develop
+    runs-on: ubuntu-latest
+    if: ${{ github.ref_name == 'develop' }}
+    steps:
+      - name: SSH & deploy (develop)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            REPO_DIR="/home/quy_pham/dev/GREENLIGHT/GP-API"
+            COMPOSE_DIR="/home/quy_pham/dev/GREENLIGHT"
+            BRANCH="develop"
+
+            echo "➡️ Git in $REPO_DIR (branch $BRANCH)"
+            test -d "$REPO_DIR" || (echo "❌ Missing $REPO_DIR"; exit 1)
+            cd "$REPO_DIR"
+            git remote -v
+            git fetch --all --prune
+            git checkout "$BRANCH"
+            git reset --hard "origin/$BRANCH"
+
+            echo "🧩 Compose dir: $COMPOSE_DIR"
+            test -f "$COMPOSE_DIR/docker-compose.yml" -o -f "$COMPOSE_DIR/docker-compose.yaml" || (echo "❌ No docker-compose in $COMPOSE_DIR"; exit 1)
+
+            cd "$COMPOSE_DIR"
+            docker compose pull || true
+            docker compose up -d --build
+            echo "✅ Deployed develop"
+
+  deploy_uat:
+    name: Deploy uat
+    runs-on: ubuntu-latest
+    if: ${{ github.ref_name == 'uat' }}
+    steps:
+      - name: SSH & deploy (uat)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            REPO_DIR="/home/quy_pham/uat/GREENLIGHT/GP-API"
+            COMPOSE_DIR="/home/quy_pham/uat/GREENLIGHT"
+            BRANCH="uat"
+
+            echo "➡️ Git in $REPO_DIR (branch $BRANCH)"
+            test -d "$REPO_DIR" || (echo "❌ Missing $REPO_DIR"; exit 1)
+            cd "$REPO_DIR"
+            git remote -v
+            git fetch --all --prune
+            git checkout "$BRANCH"
+            git reset --hard "origin/$BRANCH"
+
+            echo "🧩 Compose dir: $COMPOSE_DIR"
+            test -f "$COMPOSE_DIR/docker-compose.yml" -o -f "$COMPOSE_DIR/docker-compose.yaml" || (echo "❌ No docker-compose in $COMPOSE_DIR"; exit 1)
+
+            cd "$COMPOSE_DIR"
+            docker compose pull || true
+            docker compose up -d --build
+            echo "✅ Deployed uat"
