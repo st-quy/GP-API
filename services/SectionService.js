@@ -1,4 +1,11 @@
-const { Part, Skill, Question, Section, SectionPart } = require('../models');
+const {
+  Part,
+  Skill,
+  Question,
+  Section,
+  TopicSection,
+  SectionPart,
+} = require('../models');
 const { Op } = require('sequelize');
 
 async function resolveSkill({ skillId, skillName }) {
@@ -101,6 +108,149 @@ async function getAllSection(req) {
     throw new Error(`Error fetching parts: ${error.message}`);
   }
 }
+/* ============================================================
+   UPDATE SECTION
+   ============================================================ */
+async function updateSection(req) {
+  try {
+    const { id } = req.params;
+    const { name, skillId, skillName } = req.body;
+
+    if (!id) {
+      return { status: 400, message: 'Section ID is required' };
+    }
+
+    // 1) Find existing section
+    const section = await Section.findByPk(id);
+    if (!section) {
+      return { status: 404, message: `Section with id ${id} not found` };
+    }
+
+    // 2) Resolve new skill if provided
+    let updatedSkillId = section.SkillID;
+
+    if (skillId || skillName) {
+      const skill = await Skill.findOne({
+        where: {
+          ...(skillId && { ID: skillId }),
+          ...(skillName && { Name: skillName }),
+        },
+      });
+
+      if (!skill) {
+        return { status: 400, message: 'Skill not found' };
+      }
+
+      updatedSkillId = skill.ID;
+    }
+
+    // 3) Update fields
+    section.Name = name || section.Name;
+    section.SkillID = updatedSkillId;
+
+    await section.save();
+
+    return {
+      status: 200,
+      message: 'Section updated successfully',
+      data: section,
+    };
+  } catch (error) {
+    return {
+      status: 500,
+      message: `Error updating section: ${error.message}`,
+    };
+  }
+}
+
+/* ============================================================
+   DELETE SECTION
+   - Xóa Section
+   - Xóa kèm mapping SectionPart nếu có
+   - KHÔNG xóa Part hay Question (tránh mất dữ liệu)
+   ============================================================ */
+async function deleteSection(req) {
+  const t = await Section.sequelize.transaction();
+
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return { status: 400, message: 'Section ID is required' };
+    }
+
+    // 1) Kiểm tra Section tồn tại
+    const section = await Section.findByPk(id, { transaction: t });
+    if (!section) {
+      await t.rollback();
+      return { status: 404, message: `Section with id ${id} not found` };
+    }
+
+    // 2) Kiểm tra section có đang dùng trong TopicSection không
+    const usageCount = await TopicSection.count({
+      where: { SectionID: id },
+      transaction: t,
+    });
+
+    if (usageCount > 0) {
+      await t.rollback();
+      return {
+        status: 400,
+        message:
+          'Cannot delete section because it is already used in one or more Topics',
+        usedByTopics: usageCount,
+      };
+    }
+
+    // 3) Lấy danh sách Part qua SectionPart
+    const sectionParts = await SectionPart.findAll({
+      where: { SectionID: id },
+      transaction: t,
+    });
+
+    const partIDs = sectionParts.map((sp) => sp.PartID);
+
+    // 4) Xóa Question theo PartID
+    if (partIDs.length > 0) {
+      await Question.destroy({
+        where: { PartID: partIDs },
+        transaction: t,
+      });
+
+      // 5) Xóa Part
+      await Part.destroy({
+        where: { ID: partIDs },
+        transaction: t,
+      });
+    }
+
+    // 6) Xóa SectionPart mapping
+    await SectionPart.destroy({
+      where: { SectionID: id },
+      transaction: t,
+    });
+
+    // 7) Xóa Section
+    await section.destroy({ transaction: t });
+
+    await t.commit();
+
+    return {
+      status: 200,
+      message:
+        'Section and its linked Parts and Questions deleted successfully',
+    };
+  } catch (error) {
+    await t.rollback();
+    return {
+      status: 500,
+      message: `Error deleting section: ${error.message}`,
+    };
+  }
+}
+
 module.exports = {
   getAllSection,
+  updateSection,
+  deleteSection,
 };

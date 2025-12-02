@@ -56,7 +56,29 @@ async function getQuestionsByQuestionSetID(req, res) {
 
 async function createQuestionGroup(req, res) {
   try {
-    const result = await QuestionService.createSpeakingGroup(req);
+    const { SkillName } = req.body;
+
+    let result = null;
+    switch (SkillName) {
+      case 'SPEAKING':
+        result = await QuestionService.createSpeakingGroup(req);
+        break;
+      case 'READING':
+        result = await QuestionService.createReadingGroup(req);
+        break;
+      case 'WRITING':
+        result = await QuestionService.createWritingGroup(req);
+        break;
+      case 'LISTENING':
+        result = await QuestionService.createListeningGroup(req);
+        break;
+      case 'GRAMMAR AND VOCABULARY':
+        result = await QuestionService.createGrammarAndVocabGroup(req);
+        break;
+      default:
+        break;
+    }
+
     res.status(result.status).json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
