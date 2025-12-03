@@ -13,8 +13,8 @@ const createTopic = async (req, res) => {
 
 const getTopicWithRelations = async (req, res) => {
   try {
-    const topics = await topicService.getTopicWithRelations(req); // ❗ bỏ res
-    return res.status(200).json(topics); // ❗ chỉ gửi ở Controller
+    const topics = await topicService.getTopicWithRelations(req);
+    return res.status(200).json(topics);
   } catch (error) {
     console.error('Error fetching topic:', error);
     return res.status(500).json({ message: 'Internal server error' });
