@@ -5,6 +5,7 @@ const {
   getAllSection,
   updateSection,
   deleteSection,
+  createSection,
 } = require('../controller/SectionController');
 
 router.get('/', getAllSection);
