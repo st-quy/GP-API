@@ -8,6 +8,7 @@ const {
   addPartToTopic,
   getQuestionsByQuestionSetId,
   removePartFromTopic,
+  deleteTopic,
 } = require('../controller/TopicController');
 /**
  * @swagger
@@ -161,6 +162,30 @@ router.post('/remove-part', removePartFromTopic);
 // router.get('/', getQuestionsByQuestionSetId);
 
 router.get('/detail', getTopicByName);
+
+/**
+ * @swagger
+ * /topics/{id}:
+ *   delete:
+ *     summary: Delete a topic by ID
+ *     tags: [Topic]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID of the topic to delete
+ *     responses:
+ *       200:
+ *         description: Topic deleted successfully
+ *       404:
+ *         description: Topic not found
+ *       500:
+ *         description: Internal server error
+ */
+router.delete('/:id', deleteTopic);
+
 router.get('/:id', getTopicWithRelations);
 
 module.exports = router;

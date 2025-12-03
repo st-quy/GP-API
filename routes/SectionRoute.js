@@ -11,4 +11,6 @@ router.get('/', getAllSection);
 router.put('/:id', updateSection);
 router.delete('/:id', deleteSection);
 
+router.post('/', createSection);
+
 module.exports = router;

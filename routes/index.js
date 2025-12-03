@@ -26,7 +26,7 @@ router.use('/grades', require('./GradeRoute'));
 router.use('/presigned-url', File);
 router.use('/questions', require('./QuestionRoute'));
 router.use('/parts', require('./PartRoute'));
-router.use('/topicparts', require('./TopicPartRoute'));
+router.use('/topicsections', require('./TopicSectionRoute'));
 router.use('/sections', require('./SectionRoute'));
 
 module.exports = router;

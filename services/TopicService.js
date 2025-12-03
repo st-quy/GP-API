@@ -73,7 +73,10 @@ const createTopic = async (req) => {
   try {
     const { Name } = req.body;
     if (!Name) {
-      throw new Error('Topic Name is required');
+      return {
+        status: 400,
+        message: 'Name is required',
+      };
     }
     const newTopic = await Topic.create({
       Name,
@@ -255,6 +258,26 @@ async function removePartFromTopic(req, res) {
   }
 }
 
+async function deleteTopic(req) {
+  try {
+    const { id } = req.params;
+    const topic = await Topic.findByPk(id);
+    if (!topic) {
+      return {
+        status: 404,
+        message: `Topic with id ${id} not found`,
+      };
+    }
+    await topic.destroy();
+    return {
+      status: 200,
+      message: 'Topic deleted successfully',
+    };
+  } catch (error) {
+    throw new Error(`Error deleting topic: ${error.message}`);
+  }
+};
+
 module.exports = {
   getAllTopics,
   createTopic,
@@ -263,4 +286,5 @@ module.exports = {
   getTopicWithRelations,
   getTopicByName,
   getQuestionsByQuestionSetId,
+  deleteTopic,
 };

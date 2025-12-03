@@ -7,6 +7,7 @@ const {
   getPartByID,
   getAllPart,
   deletePart,
+  getPartByPartID,
 } = require("../controller/PartController");
 
 /**
@@ -172,4 +173,29 @@ router.put("/:partId", updatePart);
  *         description: Internal server error
  */
 router.delete("/:partId", deletePart);
+
+/**
+ * @swagger
+ * /parts/by/partId/{partId}:
+ *   get:
+ *     summary: Get part by partId (explicit field name)
+ *     tags: [Part]
+ *     parameters:
+ *       - in: path
+ *         name: partId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The PartID used to fetch the part
+ *     responses:
+ *       200:
+ *         description: Part fetched successfully
+ *       404:
+ *         description: Part not found
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/by/partId/:partId", getPartByPartID);
+
+
 module.exports = router;
