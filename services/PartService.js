@@ -231,10 +231,51 @@ async function deletePart(req) {
   }
 }
 
+async function getPartByPartID(req) {
+  try {
+    const { partId } = req.params;
+
+    if (!partId) {
+      return {
+        status: 400,
+        message: "partId is required",
+      };
+    }
+
+    const part = await Part.findOne({
+      where: { ID: partId },
+      include: [
+        {
+          model: Skill,
+          as: 'Skill',
+          attributes: ['ID', 'Name'],
+        },
+      ],
+    });
+
+    if (!part) {
+      return {
+        status: 404,
+        message: `Part with id ${partId} not found`,
+      };
+    }
+
+    return {
+      status: 200,
+      message: "Part fetched successfully",
+      data: part,
+    };
+  } catch (error) {
+    throw new Error(`Error fetching part by partId: ${error.message}`);
+  }
+}
+
+
 module.exports = {
   createPart,
   updatePart,
   getPartByID,
   getAllPart,
   deletePart,
+  getPartByPartID,
 };

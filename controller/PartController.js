@@ -49,10 +49,23 @@ const deletePart = async (req, res) => {
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
+
+const getPartByPartID = async (req, res) => {
+  try {
+    const part = await PartService.getPartByPartID(req);
+    return res.status(part.status).json(part);
+  } catch (error) {
+    console.error('Error fetching part by partId:', error.message);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+
 module.exports = {
   createPart,
   updatePart,
   getPartByID,
   getAllPart,
   deletePart,
+  getPartByPartID,
 };

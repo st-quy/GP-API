@@ -101,6 +101,38 @@ async function getAllSection(req) {
     throw new Error(`Error fetching parts: ${error.message}`);
   }
 }
+
+async function createSection(req) {
+  try {
+    const { Name, SkillID } = req.body;
+    if (!Name || !SkillID) {
+      return {
+        status: 400,
+        message: "Name and SkillID are required",
+      };
+    }
+    const skill = await Skill.findByPk(SkillID);
+    if (!skill) {
+      return {
+        status: 404,
+        message: `Skill with ID ${SkillID} not found`,
+      };
+    }
+    const newSection = await Section.create({
+      Name,
+      SkillID,
+    }); 
+    return {
+      status: 201,
+      message: "Section created successfully",
+      data: newSection,
+    };
+  } catch (error) {
+    throw new Error(`Error creating Section: ${error.message}`);
+  }
+}
+
 module.exports = {
   getAllSection,
+  createSection
 };
