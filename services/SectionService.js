@@ -73,26 +73,18 @@ async function getAllSection(req) {
       offset,
       order: [['createdAt', 'DESC']],
       include: [
-        {
-          model: Skill,
-          as: 'Skill',
-          attributes: ['ID', 'Name'],
-        },
-        {
-          model: Part,
-          as: 'Parts',
-          required: false,
-          order: [['createdAt', 'DESC']],
-          include: [
-            {
-              model: Question,
-              as: 'Questions',
-              required: false,
-              order: [['createdAt', 'DESC']],
-            },
-          ],
-        },
+        { model: Skill, as: 'Skill', attributes: ['ID', 'Name'] },
+        { model: Part, as: 'Parts', required: false, include: [{ model: Question, as: 'Questions', required: false }] },
       ],
+    });
+
+    // sort Parts và Questions theo Sequence
+    const sortedSections = sections.map(section => {
+      const parts = (section.Parts || []).slice().sort((a, b) => a.Sequence - b.Sequence);
+      parts.forEach(part => {
+        part.Questions = (part.Questions || []).slice().sort((a, b) => a.Sequence - b.Sequence);
+      });
+      return { ...section.toJSON(), Parts: parts };
     });
 
     return {
@@ -102,8 +94,9 @@ async function getAllSection(req) {
       pageSize,
       total,
       totalPages: Math.ceil(total / pageSize),
-      data: sections,
+      data: sortedSections,
     };
+
   } catch (error) {
     throw new Error(`Error fetching parts: ${error.message}`);
   }
@@ -128,7 +121,7 @@ async function createSection(req) {
     const newSection = await Section.create({
       Name,
       SkillID,
-    }); 
+    });
     return {
       status: 201,
       message: "Section created successfully",
