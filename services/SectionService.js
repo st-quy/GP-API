@@ -74,15 +74,24 @@ async function getAllSection(req) {
       order: [['createdAt', 'DESC']],
       include: [
         { model: Skill, as: 'Skill', attributes: ['ID', 'Name'] },
-        { model: Part, as: 'Parts', required: false, include: [{ model: Question, as: 'Questions', required: false }] },
+        {
+          model: Part,
+          as: 'Parts',
+          required: false,
+          include: [{ model: Question, as: 'Questions', required: false }],
+        },
       ],
     });
 
     // sort Parts và Questions theo Sequence
-    const sortedSections = sections.map(section => {
-      const parts = (section.Parts || []).slice().sort((a, b) => a.Sequence - b.Sequence);
-      parts.forEach(part => {
-        part.Questions = (part.Questions || []).slice().sort((a, b) => a.Sequence - b.Sequence);
+    const sortedSections = sections.map((section) => {
+      const parts = (section.Parts || [])
+        .slice()
+        .sort((a, b) => a.Sequence - b.Sequence);
+      parts.forEach((part) => {
+        part.Questions = (part.Questions || [])
+          .slice()
+          .sort((a, b) => a.Sequence - b.Sequence);
       });
       return { ...section.toJSON(), Parts: parts };
     });
@@ -96,7 +105,6 @@ async function getAllSection(req) {
       totalPages: Math.ceil(total / pageSize),
       data: sortedSections,
     };
-
   } catch (error) {
     throw new Error(`Error fetching parts: ${error.message}`);
   }
@@ -108,7 +116,7 @@ async function createSection(req) {
     if (!Name || !SkillID) {
       return {
         status: 400,
-        message: "Name and SkillID are required",
+        message: 'Name and SkillID are required',
       };
     }
     const skill = await Skill.findByPk(SkillID);
@@ -124,14 +132,13 @@ async function createSection(req) {
     });
     return {
       status: 201,
-      message: "Section created successfully",
+      message: 'Section created successfully',
       data: newSection,
     };
   } catch (error) {
     throw new Error(`Error creating Section: ${error.message}`);
   }
 }
-
 /* ============================================================
    UPDATE SECTION
    ============================================================ */
@@ -277,5 +284,5 @@ module.exports = {
   getAllSection,
   updateSection,
   deleteSection,
-  createSection
+  createSection,
 };
