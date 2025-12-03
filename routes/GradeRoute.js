@@ -5,6 +5,7 @@ const { allowAnonymous, authorize } = require("../middleware/AuthMiddleware");
 const {
   getExamOfParticipantBySession,
   calculatePointForWritingAndSpeaking,
+  getFullExamReview,
 } = require("../controller/GradeController");
 
 /**
@@ -107,5 +108,40 @@ router.get("/participants", getExamOfParticipantBySession);
  */
 
 router.post("/teacher-grade", calculatePointForWritingAndSpeaking);
+
+/**
+ * @swagger
+ * /grades/review/{sessionParticipantId}:
+ * get:
+ * summary: Get full exam review details for a participant
+ * description: Retrieves all questions, student answers, correct answers, and feedback grouped by skill.
+ * tags: [Grade]
+ * parameters:
+ * - in: path
+ * name: sessionParticipantId
+ * schema:
+ * type: string
+ * required: true
+ * description: The ID of the session participant
+ * responses:
+ * 200:
+ * description: Full exam review data retrieved successfully
+ * content:
+ * application/json:
+ * schema:
+ * type: object
+ * properties:
+ * status:
+ * type: integer
+ * example: 200
+ * data:
+ * type: object
+ * description: Object containing participant info and skills data
+ * 404:
+ * description: Participant or exam data not found
+ * 500:
+ * description: Internal server error
+ */
+router.get("/review/:sessionParticipantId", getFullExamReview);
 
 module.exports = router;
