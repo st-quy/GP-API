@@ -7,6 +7,7 @@ const {
   Topic,
   Question,
   Part,
+  Section,
   Skill,
 } = require('../models'); // Ensure models are imported
 const {
@@ -380,7 +381,7 @@ async function calculatePoints(req) {
             totalPoints += pointPerQuestion;
           }
         }
-      } else if (typeOfQuestion === "dropdown-list") {
+      } else if (type === "dropdown-list") {
         let studentAnswers = [];
         try {
           studentAnswers = JSON.parse(answer.AnswerText);
@@ -400,7 +401,7 @@ async function calculatePoints(req) {
             totalPoints += pointPerQuestion;
           }
         });
-      } else if (typeOfQuestion === "listening-questions-group") {
+      } else if (type === "listening-questions-group") {
         const studentAnswers = JSON.parse(answer.AnswerText);
         const correctList = correctContent.groupContent.listContent;
 
@@ -553,7 +554,7 @@ async function calculatePointForWritingAndSpeaking(req) {
 }
 async function getFullExamReview(sessionParticipantId) {
   try {
-    // 1. Lấy thông tin Participant, Session và TopicID
+    // 1. Lấy thông tin Participant
     const sessionParticipant = await SessionParticipant.findByPk(
       sessionParticipantId,
       {
@@ -575,22 +576,36 @@ async function getFullExamReview(sessionParticipantId) {
       return { status: 404, message: "Session participant not found" };
     }
 
-    // 2. Lấy toàn bộ cấu trúc đề thi (Topic -> Part -> Question)
+    // 2. Lấy Topic kèm theo Sections và Parts
+    // [FIX] Thêm include Section để lấy dữ liệu đúng cấu trúc
     const topic = await Topic.findByPk(sessionParticipant.Session.examSet, {
       include: [
         {
-          model: Part,
-          required: true,
-          order: [["Sequence", "ASC"]],
+          model: Section,
+          as: 'Sections',
+          required: false,
           include: [
             {
-              model: Question,
-              required: true,
-              order: [["Sequence", "ASC"]],
-              include: [{ model: Skill, attributes: ["Name"] }],
-            },
-          ],
+              model: Part,
+              as: 'Parts',
+              required: false,
+              include: [
+                {
+                  model: Question,
+                  as: 'Questions',
+                  required: false,
+                },
+                 {
+                  model: Skill,
+                  as: 'Skill',
+                  required: false,
+                  attributes: ["Name"]
+                },
+              ],
+            }
+          ]
         },
+      
       ],
     });
 
@@ -598,7 +613,7 @@ async function getFullExamReview(sessionParticipantId) {
       return { status: 404, message: "Topic data not found" };
     }
 
-    // 3. Lấy toàn bộ câu trả lời của học sinh
+    // 3. Lấy câu trả lời
     const studentAnswers = await StudentAnswer.findAll({
       where: {
         StudentID: sessionParticipant.UserID,
@@ -606,174 +621,147 @@ async function getFullExamReview(sessionParticipantId) {
       },
     });
 
-    // Map câu trả lời theo QuestionID để truy xuất nhanh (O(1))
     const answerMap = new Map();
     studentAnswers.forEach((ans) => {
       answerMap.set(ans.QuestionID, ans);
     });
 
-    // 4. Cấu trúc dữ liệu trả về
+    // 4. Chuẩn bị object reviewData
     const reviewData = {
-      speaking: {
-        score: sessionParticipant.Speaking,
-        level: sessionParticipant.SpeakingLevel,
-        questions: [],
-      },
-      listening: {
-        score: sessionParticipant.Listening,
-        level: sessionParticipant.ListeningLevel,
-        questions: [],
-      },
-      reading: {
-        score: sessionParticipant.Reading,
-        level: sessionParticipant.ReadingLevel,
-        questions: [],
-      },
-      writing: {
-        score: sessionParticipant.Writing,
-        level: sessionParticipant.WritingLevel,
-        questions: [],
-      },
-      grammar: {
-        score: sessionParticipant.GrammarVocab,
-        level: sessionParticipant.GrammarVocabLevel,
-        questions: [],
-      },
+      speaking: { score: sessionParticipant.Speaking, level: sessionParticipant.SpeakingLevel, questions: [] },
+      listening: { score: sessionParticipant.Listening, level: sessionParticipant.ListeningLevel, questions: [] },
+      reading: { score: sessionParticipant.Reading, level: sessionParticipant.ReadingLevel, questions: [] },
+      writing: { score: sessionParticipant.Writing, level: sessionParticipant.WritingLevel, questions: [] },
+      grammar: { score: sessionParticipant.GrammarVocab, level: sessionParticipant.GrammarVocabLevel, questions: [] },
     };
 
-    // Helper: Map tên skill từ DB sang key của object reviewData
     const getSkillKey = (dbName) => {
+      if (!dbName) return "grammar";
       const upper = dbName.toUpperCase();
       if (upper === "GRAMMAR AND VOCABULARY") return "grammar";
       return upper.toLowerCase();
     };
 
-    // Helper: Kiểm tra đúng sai (Logic tương tự calculatePoints nhưng trả về boolean/detail)
-    const checkCorrectness = (questionType, userAnswerText, correctAnswerContent) => {
-      if (!userAnswerText) return false;
-
-      try {
-        // 1. Multiple Choice
-        if (questionType === "multiple-choice") {
-          // Lưu ý: correctAnswer trong DB có thể là string hoặc object tùy seed
-          const correctVal = typeof correctAnswerContent.correctAnswer === 'string' 
-            ? correctAnswerContent.correctAnswer 
-            : correctAnswerContent.correctAnswer?.value; // Fallback nếu cấu trúc lạ
-            
-          return userAnswerText === correctVal;
-        }
-
-        // 2. Dropdown List / Matching / Ordering (Logic tương đồng: so sánh Key-Value)
-        if (["dropdown-list", "matching", "ordering"].includes(questionType)) {
-          const userAnsObj = JSON.parse(userAnswerText); // Parse JSON câu trả lời
-          const correctAnsObj = correctAnswerContent.correctAnswer; // Mảng đáp án đúng
-
-          if (!Array.isArray(userAnsObj) || !Array.isArray(correctAnsObj)) return false;
-
-          // Kiểm tra từng cặp. Nếu sai bất kỳ cặp nào => sai cả câu (hoặc tùy logic chấm điểm)
-          // Ở đây ta làm logic: Phải đúng tất cả mới tính là True
-          const isAllCorrect = correctAnsObj.every(correctItem => {
-            // Tìm item tương ứng trong bài làm của học sinh
-            // Matching/Dropdown thường dùng key 'left'/'right' hoặc 'key'/'value'
-            const match = userAnsObj.find(u => 
-              (u.key === correctItem.key || u.left === correctItem.left)
-            );
-            
-            if (!match) return false;
-            return (match.value === correctItem.value || match.right === correctItem.right);
-          });
-
-          return isAllCorrect;
-        }
-
-        // 3. Listening Group (Câu hỏi chùm)
-        if (questionType === "listening-questions-group") {
-           // Loại này phức tạp, thường FE sẽ tự render dựa trên listContent. 
-           // Backend trả về true nếu tất cả câu con đều đúng.
-           const userAnsList = JSON.parse(userAnswerText);
-           const correctList = correctAnswerContent.groupContent?.listContent || [];
-           
-           const isAllCorrect = correctList.every(subQ => {
-             const userSubAns = userAnsList.find(u => u.ID === subQ.ID);
-             return userSubAns && userSubAns.answer === subQ.correctAnswer;
-           });
-           return isAllCorrect;
-        }
-
-        return false; // Mặc định false cho các loại khác (Writing/Speaking)
-      } catch (e) {
-        console.error("Error parsing answer for check:", e);
-        return false;
-      }
+    // [FIX] Hàm parse JSON an toàn (Chống crash server)
+    const safeParse = (str) => {
+        if (typeof str === 'object' && str !== null) return str;
+        try { return JSON.parse(str); } catch { return null; }
     };
 
-    // 5. Duyệt qua từng câu hỏi để xử lý
-    topic.Parts.forEach((part) => {
-      if (part.Questions && part.Questions.length > 0) {
-        part.Questions.forEach((question) => {
-          const skillKey = getSkillKey(question.Skill.Name);
-          
-          // Nếu skill không nằm trong danh sách hỗ trợ thì bỏ qua
-          if (!reviewData[skillKey]) return;
-
-          const studentAnswer = answerMap.get(question.ID);
-          const answerContent = question.AnswerContent; // Sequelize đã tự parse JSON này
-
-          // Tạo object chi tiết cho câu hỏi
-          const questionDetail = {
-            id: question.ID,
-            type: question.Type,
-            questionContent: question.Content, // Nội dung câu hỏi
-            partContent: part.Content,         // Tên Part (VD: Part 1)
-            subContent: question.SubContent || part.SubContent,
-            
-            // Dữ liệu cần thiết để render UI câu hỏi (options, audio, image)
-            resources: {
-              audio: question.AudioKeys,
-              images: question.ImageKeys,
-              groupContent: question.GroupContent, // Cho bài đọc/nghe chùm
-              answerContent: answerContent // Chứa options, leftItems, rightItems...
-            },
-
-            // Dữ liệu bài làm của học sinh
-            userResponse: studentAnswer ? {
-              text: studentAnswer.AnswerText,   // Dạng text hoặc JSON string
-              audio: studentAnswer.AnswerAudio, // Link file ghi âm (Speaking)
-              comment: studentAnswer.Comment    // Nhận xét của giáo viên (Writing/Speaking)
-            } : null,
-
-            // Đáp án đúng (để FE hiển thị so sánh)
-            correctAnswer: answerContent ? answerContent.correctAnswer : null,
-            
-            // Trạng thái đúng sai
-            isCorrect: false,
-          };
-
-          // Xử lý logic đúng sai
-          if (studentAnswer) {
-            // Với Speaking/Writing: "Đúng" nghĩa là đã có điểm chấm > 0 hoặc giáo viên đã chấm
-            if (["speaking", "writing"].includes(skillKey)) {
-               // Logic tùy chỉnh: coi là completed nếu có bài làm
-               questionDetail.isCorrect = true; // Hoặc null, vì writing không có đúng/sai tuyệt đối
-            } else {
-               // Với trắc nghiệm, nối, điền từ: Dùng hàm checkCorrectness
-               questionDetail.isCorrect = checkCorrectness(
-                 question.Type, 
-                 studentAnswer.AnswerText, 
-                 answerContent
-               );
-            }
-          }
-
-          // Push vào mảng tương ứng
-          reviewData[skillKey].questions.push(questionDetail);
-        });
+    // [FIX] Hàm kiểm tra đúng sai an toàn
+    const checkCorrectness = (questionType, userAnswerText, correctAnswerContent) => {
+      if (!userAnswerText) return false;
+      
+      // Parse user answer an toàn
+      let userAnsObj = userAnswerText;
+      if (typeof userAnswerText === 'string') {
+          userAnsObj = safeParse(userAnswerText);
       }
-    });
 
-    // 6. Tính toán thời gian làm bài (Mock hoặc tính từ Session nếu có log)
-    // Hiện tại DB Session chỉ có startTime/endTime dự kiến, không có real-time log.
-    // Ta có thể trả về khoảng thời gian giữa Session startTime và endTime.
+      try {
+        if (questionType === "multiple-choice") {
+          const correctVal = typeof correctAnswerContent?.correctAnswer === 'string' 
+            ? correctAnswerContent.correctAnswer 
+            : correctAnswerContent?.correctAnswer?.value;
+          return String(userAnswerText).trim().toLowerCase() === String(correctVal).trim().toLowerCase();
+        }
+
+        if (["dropdown-list", "matching", "ordering"].includes(questionType)) {
+          if (!Array.isArray(userAnsObj) || !Array.isArray(correctAnswerContent?.correctAnswer)) return false;
+          
+          return correctAnswerContent.correctAnswer.every(correctItem => {
+            const match = userAnsObj.find(u => 
+              (String(u.key) === String(correctItem.key) || String(u.left) === String(correctItem.left))
+            );
+            if (!match) return false;
+            return (String(match.value).trim().toLowerCase() === String(correctItem.value).trim().toLowerCase() || 
+                    String(match.right).trim().toLowerCase() === String(correctItem.right).trim().toLowerCase());
+          });
+        }
+
+        if (questionType === "listening-questions-group") {
+           const correctList = correctAnswerContent?.groupContent?.listContent || [];
+           if (!Array.isArray(userAnsObj)) return false;
+           return correctList.every(subQ => {
+             const userSubAns = userAnsObj.find(u => String(u.ID || u.id) === String(subQ.ID));
+             return userSubAns && String(userSubAns.answer).trim().toLowerCase() === String(subQ.correctAnswer).trim().toLowerCase();
+           });
+        }
+        return false;
+      } catch (e) { return false; }
+    };
+
+    // [FIX] Helper xử lý danh sách parts để tái sử dụng
+    const processParts = (partsList) => {
+        if (!partsList || !Array.isArray(partsList)) return;
+        
+        partsList.forEach((part) => {
+            if (part.Questions && part.Questions.length > 0) {
+                part.Questions.forEach((question) => {
+                    // Skip nếu question lỗi hoặc không có skill
+                    if (!part.Skill || !part.Skill.Name) return;
+
+                    const skillKey = getSkillKey(part.Skill.Name);
+                    if (!reviewData[skillKey]) return;
+
+                    const studentAnswer = answerMap.get(question.ID);
+                    const answerContent = safeParse(question.AnswerContent);
+
+                    const questionDetail = {
+                        id: question.ID,
+                        type: question.Type,
+                        questionContent: question.Content,
+                        partContent: part.Content,
+                        subContent: question.SubContent || part.SubContent,
+                        resources: {
+                            audio: question.AudioKeys,
+                            images: question.ImageKeys,
+                            groupContent: question.GroupContent,
+                            answerContent: answerContent 
+                        },
+                        userResponse: studentAnswer ? {
+                            text: studentAnswer.AnswerText,
+                            audio: studentAnswer.AnswerAudio,
+                            comment: studentAnswer.Comment
+                        } : null,
+                        correctAnswer: answerContent ? answerContent.correctAnswer : null,
+                        isCorrect: false,
+                    };
+
+                    if (studentAnswer) {
+                        if (["speaking", "writing"].includes(skillKey)) {
+                            questionDetail.isCorrect = true; 
+                        } else {
+                            questionDetail.isCorrect = checkCorrectness(question.Type, studentAnswer.AnswerText, answerContent);
+                        }
+                    }
+                    
+                    reviewData[skillKey].questions.push(questionDetail);
+                });
+            }
+        });
+    };
+
+    // 5. Duyệt dữ liệu (Ưu tiên Sections trước)
+    let hasData = false;
+    
+    
+    // Case 1: Cấu trúc mới (Topic -> Sections -> Parts)
+    if (topic.Sections && topic.Sections.length > 0) {
+        topic.Sections.forEach(section => {
+            if (section.Parts && section.Parts.length > 0) {
+                processParts(section.Parts);
+            }
+        });
+    } 
+    
+    // Case 2: Cấu trúc cũ (Topic -> Parts trực tiếp)
+    // Chỉ chạy nếu Case 1 không có dữ liệu
+    // if (topic.Sections && topic.Sections.length > 0) {
+      
+    //     processParts(topic.Sections?.[0]?.Parts);
+    // }
+
     const durationMs = new Date(sessionParticipant.Session.endTime) - new Date(sessionParticipant.Session.startTime);
     const durationMinutes = Math.floor(durationMs / 60000);
 
@@ -786,7 +774,7 @@ async function getFullExamReview(sessionParticipantId) {
           sessionName: sessionParticipant.Session.sessionName,
           totalScore: sessionParticipant.Total,
           finalLevel: sessionParticipant.Level,
-          timeSpent: `${durationMinutes}m`, // Tạm tính
+          timeSpent: `${durationMinutes > 0 ? durationMinutes : 0}m`,
           date: sessionParticipant.Session.startTime,
         },
         skills: reviewData,
@@ -794,7 +782,8 @@ async function getFullExamReview(sessionParticipantId) {
     };
   } catch (error) {
     console.error("Error in getFullExamReview:", error);
-    throw new Error(`Error fetching full exam review: ${error.message}`);
+    // Trả về lỗi 500 kèm message để dễ debug, thay vì crash server
+    return { status: 500, message: `Server Error: ${error.message}` };
   }
 }
 
