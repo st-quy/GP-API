@@ -316,25 +316,33 @@ async function createSpeakingGroup(req, res) {
       };
     }
 
-    let section = await Section.findOne({ where: { Name: SectionName } });
-    if (!section) {
-      section = await Section.create(
-        {
-          ID: uuidv4(),
-          SkillID: skill.ID,
-          Name: SectionName,
-          Description: null,
-        },
+    const result = await sequelize.transaction(async (t) => {
+      /* =====================================================
+         1) CREATE / GET SECTION (INSIDE TRANSACTION)
+      ===================================================== */
+      let section = await Section.findOne(
+        { where: { Name: SectionName } },
         { transaction: t }
       );
-    }
 
-    const partKeys = Object.keys(parts);
+      if (!section) {
+        section = await Section.create(
+          {
+            ID: uuidv4(),
+            SkillID: skill.ID,
+            Name: SectionName,
+            Description: null,
+          },
+          { transaction: t }
+        );
+      }
 
-    const result = await sequelize.transaction(async (t) => {
+      /* =====================================================
+         2) CREATE / UPDATE PARTS
+      ===================================================== */
+      const partKeys = Object.keys(parts);
       let createdParts = {};
 
-      // =========== 1) CREATE / UPDATE 4 PART ===============
       for (const key of partKeys) {
         const p = parts[key];
 
@@ -344,8 +352,8 @@ async function createSpeakingGroup(req, res) {
 
         let partRow = null;
 
-        // ❗ Nếu FE gửi PartID → Update
         if (p.id) {
+          // Update
           partRow = await Part.findByPk(p.id, { transaction: t });
 
           if (!partRow) {
@@ -360,7 +368,7 @@ async function createSpeakingGroup(req, res) {
             { transaction: t }
           );
         } else {
-          // ❗ Nếu FE không gửi PartID → create 1 lần duy nhất
+          // Create
           partRow = await Part.create(
             {
               ID: uuidv4(),
@@ -378,8 +386,9 @@ async function createSpeakingGroup(req, res) {
         createdParts[key] = partRow;
       }
 
-      // ============ 2) CREATE QUESTIONS =============
-      // Trước khi tạo mới → xoá hết question cũ
+      /* =====================================================
+         3) DELETE OLD QUESTIONS
+      ===================================================== */
       const partIds = Object.values(createdParts).map((p) => p.ID);
 
       await Question.destroy(
@@ -392,9 +401,11 @@ async function createSpeakingGroup(req, res) {
         { transaction: t }
       );
 
+      /* =====================================================
+         4) CREATE NEW QUESTIONS
+      ===================================================== */
       let questionPayload = [];
 
-      // Tạo question cho từng part
       for (const key of partKeys) {
         const p = parts[key];
         const partRow = createdParts[key];
@@ -432,8 +443,9 @@ async function createSpeakingGroup(req, res) {
         transaction: t,
       });
 
-      // ============ 3) LINK SECTION <-> PART =============
-      // Xoá mapping cũ
+      /* =====================================================
+         5) LINK SECTION <-> PART
+      ===================================================== */
       await SectionPart.destroy(
         {
           where: { SectionID: section.ID },
@@ -441,7 +453,6 @@ async function createSpeakingGroup(req, res) {
         { transaction: t }
       );
 
-      // Tạo mapping mới
       await SectionPart.bulkCreate(
         partIds.map((partID, idx) => ({
           ID: uuidv4(),
@@ -467,6 +478,7 @@ async function createSpeakingGroup(req, res) {
     };
   }
 }
+
 async function createReadingGroup(req, res) {
   try {
     const { SkillName, SectionName, parts } = req.body;
@@ -629,31 +641,35 @@ async function createReadingGroup(req, res) {
 
 async function createWritingGroup(req, res) {
   const t = await sequelize.transaction();
+
   try {
     const { SectionName, parts } = req.body;
     const userId = req.user?.userId;
 
     if (!SectionName || !parts) {
-      return {
-        message: 'SectionName and parts are required',
-      };
+      await t.rollback();
+      return { message: 'SectionName and parts are required' };
     }
 
-    // ============ 0) Tìm Skill WRITING ============
+    // ================================================
+    // 0) Skill WRITING
+    // ================================================
     const skill = await Skill.findOne({
       where: { Name: 'WRITING' },
     });
 
     if (!skill) {
-      return {
-        message: 'Skill WRITING does not exist',
-      };
+      await t.rollback();
+      return { message: 'Skill WRITING does not exist' };
     }
 
-    // ============ 1) Tạo Section nếu chưa có ============
-    let section = await Section.findOne({
-      where: { Name: SectionName },
-    });
+    // ================================================
+    // 1) CREATE SECTION if not exists
+    // ================================================
+    let section = await Section.findOne(
+      { where: { Name: SectionName } },
+      { transaction: t }
+    );
 
     if (!section) {
       section = await Section.create(
@@ -669,12 +685,10 @@ async function createWritingGroup(req, res) {
       );
     }
 
-    // ===================================================
-    // 2) Tạo 4 PART (luôn create — không update)
-    // ===================================================
-
-    const createdParts = {}; // { part1: PartRow, part2: PartRow, part3: PartRow, part4: PartRow }
-
+    // ================================================
+    // 2) ALWAYS CREATE 4 PARTS (no update)
+    // ================================================
+    const createdParts = {};
     const partDefinitions = [
       { key: 'part1', sequence: 1 },
       { key: 'part2', sequence: 2 },
@@ -689,7 +703,7 @@ async function createWritingGroup(req, res) {
         throw new Error(`Missing name for ${def.key}`);
       }
 
-      const newPart = await Part.create(
+      const partRow = await Part.create(
         {
           ID: uuidv4(),
           SkillID: skill.ID,
@@ -702,14 +716,14 @@ async function createWritingGroup(req, res) {
         { transaction: t }
       );
 
-      createdParts[def.key] = newPart;
+      createdParts[def.key] = partRow;
     }
 
     const partIds = Object.values(createdParts).map((x) => x.ID);
 
-    // ===================================================
-    // 3) Xóa question cũ của toàn bộ 4 part
-    // ===================================================
+    // ================================================
+    // 3) DELETE OLD QUESTIONS
+    // ================================================
     await Question.destroy(
       {
         where: {
@@ -720,13 +734,15 @@ async function createWritingGroup(req, res) {
       { transaction: t }
     );
 
-    // ===================================================
-    // 4) CREATE ALL QUESTIONS
-    // ===================================================
+    // ================================================
+    // 4) CREATE QUESTIONS FOR 4 PARTS
+    // ================================================
     const bulkQuestions = [];
 
-    // ---------- PART 1: Short Answers ----------
-    if (parts.part1?.questions) {
+    /** ---------------------------
+     * PART 1 — SHORT ANSWERS
+     * -------------------------- */
+    if (Array.isArray(parts.part1?.questions)) {
       parts.part1.questions.forEach((q, idx) => {
         bulkQuestions.push({
           ID: uuidv4(),
@@ -746,7 +762,9 @@ async function createWritingGroup(req, res) {
       });
     }
 
-    // ---------- PART 2: Form Filling ----------
+    /** ---------------------------
+     * PART 2 — FORM FILLING
+     * -------------------------- */
     if (parts.part2?.question) {
       bulkQuestions.push({
         ID: uuidv4(),
@@ -765,8 +783,10 @@ async function createWritingGroup(req, res) {
       });
     }
 
-    // ---------- PART 3: Chat Room ----------
-    if (parts.part3?.chats) {
+    /** ---------------------------
+     * PART 3 — CHAT ROOM
+     * -------------------------- */
+    if (Array.isArray(parts.part3?.chats)) {
       parts.part3.chats.forEach((c, idx) => {
         bulkQuestions.push({
           ID: uuidv4(),
@@ -786,7 +806,9 @@ async function createWritingGroup(req, res) {
       });
     }
 
-    // ---------- PART 4: Email Writing ----------
+    /** ---------------------------
+     * PART 4 — EMAIL WRITING
+     * -------------------------- */
     if (parts.part4?.q1) {
       bulkQuestions.push({
         ID: uuidv4(),
@@ -823,12 +845,16 @@ async function createWritingGroup(req, res) {
       });
     }
 
-    // Create all questions
-    await Question.bulkCreate(bulkQuestions, { transaction: t });
+    // ================================================
+    // Write to DB
+    // ================================================
+    if (bulkQuestions.length > 0) {
+      await Question.bulkCreate(bulkQuestions, { transaction: t });
+    }
 
-    // ===================================================
-    // 5) Re-link Section ↔ Parts
-    // ===================================================
+    // ================================================
+    // 5) RELINK SECTION <-> PARTS
+    // ================================================
     await SectionPart.destroy(
       { where: { SectionID: section.ID } },
       { transaction: t }
@@ -858,6 +884,7 @@ async function createWritingGroup(req, res) {
     };
   }
 }
+
 async function createListeningGroup(req, res) {
   try {
     const { SkillName, SectionName, parts } = req.body;
@@ -870,7 +897,11 @@ async function createListeningGroup(req, res) {
       };
     }
 
+    // =====================================================
+    // 0) Validate Skill
+    // =====================================================
     const skill = await Skill.findOne({ where: { Name: SkillName } });
+
     if (!skill) {
       return {
         status: 400,
@@ -878,32 +909,44 @@ async function createListeningGroup(req, res) {
       };
     }
 
-    // ======================================
-    //  SECTION CREATE / UPDATE
-    // ======================================
-    let section = await Section.findOne({ where: { Name: SectionName } });
-
-    if (!section) {
-      section = await Section.create({
-        ID: uuidv4(),
-        SkillID: skill.ID,
-        Name: SectionName,
-        Description: null,
-      });
-    }
-
-    const partKeys = Object.keys(parts);
-
+    // =====================================================
+    // 🔥 Transaction start
+    // =====================================================
     const result = await sequelize.transaction(async (t) => {
+      // =====================================================
+      // 1) Create / Update Section
+      // =====================================================
+      let section = await Section.findOne(
+        { where: { Name: SectionName } },
+        { transaction: t }
+      );
+
+      if (!section) {
+        section = await Section.create(
+          {
+            ID: uuidv4(),
+            SkillID: skill.ID,
+            Name: SectionName,
+            Description: null,
+            CreatedBy: userId,
+            UpdatedBy: userId,
+          },
+          { transaction: t }
+        );
+      }
+
+      // =====================================================
+      // 2) Create / Update 4 PARTS
+      // =====================================================
+      const partKeys = Object.keys(parts); // part1 → part4
       let createdParts = {};
 
-      // =====================================================
-      // 1) CREATE / UPDATE PART (4 part)
-      // =====================================================
       for (const key of partKeys) {
         const p = parts[key];
 
-        if (!p || !p.name) throw new Error(`Part "${key}" missing name`);
+        if (!p || !p.name) {
+          throw new Error(`Part "${key}" missing name`);
+        }
 
         let partRow = null;
 
@@ -911,11 +954,14 @@ async function createListeningGroup(req, res) {
           // UPDATE
           partRow = await Part.findByPk(p.id, { transaction: t });
 
-          if (!partRow) throw new Error(`PartID ${p.id} not found`);
+          if (!partRow) {
+            throw new Error(`PartID ${p.id} not found`);
+          }
 
           await partRow.update(
             {
               Content: p.name,
+              Sequence: p.sequence,
               UpdatedBy: userId,
             },
             { transaction: t }
@@ -928,7 +974,7 @@ async function createListeningGroup(req, res) {
               SkillID: skill.ID,
               Content: p.name,
               SubContent: null,
-              Sequence: p.sequence, // FE gửi sequence 1-4
+              Sequence: p.sequence, // FE gửi sequence chuẩn
               CreatedBy: userId,
               UpdatedBy: userId,
             },
@@ -939,60 +985,65 @@ async function createListeningGroup(req, res) {
         createdParts[key] = partRow;
       }
 
-      // =====================================================
-      // 2) DELETE OLD QUESTIONS OF THESE PARTS
-      // =====================================================
       const partIds = Object.values(createdParts).map((p) => p.ID);
 
+      // =====================================================
+      // 3) DELETE OLD LISTENING QUESTIONS (Type = listening)
+      // =====================================================
       await Question.destroy(
         {
           where: {
             PartID: partIds,
+            Type: [
+              'listening',
+              'multiple-choice',
+              'dropdown-list',
+              'listening-questions-group',
+            ],
           },
         },
         { transaction: t }
       );
 
       // =====================================================
-      // 3) BUILD QUESTION PAYLOAD FOR EACH PART
+      // 4) BUILD NEW QUESTIONS
       // =====================================================
       let questionPayload = [];
 
       for (const key of partKeys) {
-        const partData = parts[key];
+        const p = parts[key];
         const partRow = createdParts[key];
 
-        const qs = Array.isArray(partData.questions) ? partData.questions : [];
+        const qs = Array.isArray(p.questions) ? p.questions : [];
 
         qs.forEach((q, idx) => {
-          const questionId = uuidv4();
-
           questionPayload.push({
-            ID: questionId,
+            ID: uuidv4(),
             Type: q.Type, // multiple-choice | dropdown-list | listening-questions-group
             SkillID: skill.ID,
             PartID: partRow.ID,
             Sequence: idx + 1,
-            Content: q.Content,
+            Content: q.Content || '',
             SubContent: q.SubContent || null,
             GroupContent: q.GroupContent || null,
-            ImageKeys: null,
+            ImageKeys: q.ImageKeys || null,
             AudioKeys: q.AudioKeys || null,
-            AnswerContent: JSON.stringify(q.AnswerContent), // FE đã build đúng format
+            AnswerContent: q.AnswerContent || null, // Không stringify → Sequelize JSON column tự nhận
             CreatedBy: userId,
             UpdatedBy: userId,
           });
         });
       }
 
-      // CREATE ALL QUESTIONS
-      await Question.bulkCreate(questionPayload, {
-        returning: true,
-        transaction: t,
-      });
+      if (questionPayload.length > 0) {
+        await Question.bulkCreate(questionPayload, {
+          returning: true,
+          transaction: t,
+        });
+      }
 
       // =====================================================
-      // 4) UPDATE SECTION PART MAPPING
+      // 5) UPDATE SECTION ↔ PART MAPPING
       // =====================================================
       await SectionPart.destroy(
         {
@@ -1014,6 +1065,9 @@ async function createListeningGroup(req, res) {
       return createdParts;
     });
 
+    // =====================================================
+    // 6) SUCCESS
+    // =====================================================
     return {
       status: 201,
       message: 'Listening created successfully',
@@ -1040,10 +1094,11 @@ async function createGrammarAndVocabGroup(req, res) {
       };
     }
 
-    // ================================
-    // 0. VALIDATE SKILL
-    // ================================
+    // =======================================
+    // 0) VALIDATE SKILL
+    // =======================================
     const skill = await Skill.findOne({ where: { Name: SkillName } });
+
     if (!skill) {
       return {
         status: 400,
@@ -1051,32 +1106,41 @@ async function createGrammarAndVocabGroup(req, res) {
       };
     }
 
-    // ================================
-    // 1. CREATE / FIND SECTION
-    // ================================
-    let section = await Section.findOne({ where: { Name: SectionName } });
-
-    if (!section) {
-      section = await Section.create({
-        ID: uuidv4(),
-        SkillID: skill.ID,
-        Name: SectionName,
-        Description: null,
-      });
-    }
-
-    // ================================
-    // 2. TRANSACTION
-    // ================================
+    // =======================================
+    // TRANSACTION
+    // =======================================
     const result = await sequelize.transaction(async (t) => {
+      // =======================================
+      // 1) CREATE / FIND SECTION
+      // =======================================
+      let section = await Section.findOne(
+        { where: { Name: SectionName } },
+        { transaction: t }
+      );
+
+      if (!section) {
+        section = await Section.create(
+          {
+            ID: uuidv4(),
+            SkillID: skill.ID,
+            Name: SectionName,
+            Description: null,
+            CreatedBy: userId,
+            UpdatedBy: userId,
+          },
+          { transaction: t }
+        );
+      }
+
+      // =======================================
+      // 2) PREPARE PART LIST
+      // =======================================
       let createdParts = [];
+      const partList = Object.values(parts); // FE gửi dạng object → convert array
 
-      // Convert FE parts OBJECT → ARRAY
-      const partList = Object.values(parts);
-
-      // ============================================
-      // 2A. CREATE / UPDATE PARTS
-      // ============================================
+      // =======================================
+      // 2A) CREATE / UPDATE PARTS
+      // =======================================
       for (let i = 0; i < partList.length; i++) {
         const FE = partList[i];
 
@@ -1087,13 +1151,12 @@ async function createGrammarAndVocabGroup(req, res) {
         if (FE.PartID) {
           // UPDATE PART
           partRow = await Part.findByPk(FE.PartID, { transaction: t });
-          if (!partRow)
-            throw new Error(`PartID ${FE.PartID} not found for update`);
+          if (!partRow) throw new Error(`PartID ${FE.PartID} not found`);
 
           await partRow.update(
             {
               Content: FE.name,
-              SubContent: null,
+              SubContent: FE.subContent || null,
               UpdatedBy: userId,
             },
             { transaction: t }
@@ -1105,7 +1168,7 @@ async function createGrammarAndVocabGroup(req, res) {
               ID: uuidv4(),
               SkillID: skill.ID,
               Content: FE.name,
-              SubContent: null,
+              SubContent: FE.subContent || null,
               Sequence: FE.sequence ?? i + 1,
               CreatedBy: userId,
               UpdatedBy: userId,
@@ -1117,24 +1180,28 @@ async function createGrammarAndVocabGroup(req, res) {
         createdParts.push({ FE, DB: partRow });
       }
 
-      // ============================================
-      // 2B. DELETE OLD QUESTIONS OF THESE PARTS
-      // ============================================
       const partIds = createdParts.map((p) => p.DB.ID);
 
-      await Question.destroy({
-        where: { PartID: partIds },
-        transaction: t,
-      });
+      // =======================================
+      // 3) DELETE OLD QUESTIONS
+      // =======================================
+      await Question.destroy(
+        {
+          where: {
+            PartID: partIds,
+            Type: ['multiple-choice', 'matching', 'grammar-vocabulary'],
+          },
+        },
+        { transaction: t }
+      );
 
-      // ============================================
-      // 2C. INSERT NEW QUESTIONS
-      // ============================================
+      // =======================================
+      // 4) INSERT NEW QUESTIONS
+      // =======================================
       const questionPayload = [];
 
       for (let i = 0; i < createdParts.length; i++) {
         const { FE, DB } = createdParts[i];
-
         const questions = FE.questions || [];
 
         questions.forEach((q, idx) => {
@@ -1149,7 +1216,7 @@ async function createGrammarAndVocabGroup(req, res) {
             GroupContent: q.GroupContent || null,
             AudioKeys: q.AudioKeys || null,
             ImageKeys: q.ImageKeys || null,
-            AnswerContent: q.AnswerContent,
+            AnswerContent: q.AnswerContent, // FE đã build chuẩn → không stringify
             CreatedBy: userId,
             UpdatedBy: userId,
           });
@@ -1163,29 +1230,30 @@ async function createGrammarAndVocabGroup(req, res) {
         });
       }
 
-      // ============================================
-      // 2D. UPDATE SECTION-PART MAPPING
-      // ============================================
-      await SectionPart.destroy({
-        where: { SectionID: section.ID },
-        transaction: t,
-      });
+      // =======================================
+      // 5) UPDATE SECTION <-> PART MAPPING
+      // =======================================
+      await SectionPart.destroy(
+        { where: { SectionID: section.ID } },
+        { transaction: t }
+      );
 
-      const newMappings = createdParts.map((p, idx) => ({
-        ID: uuidv4(),
-        SectionID: section.ID,
-        PartID: p.DB.ID,
-        Sequence: idx + 1,
-      }));
-
-      await SectionPart.bulkCreate(newMappings, {
-        returning: true,
-        transaction: t,
-      });
+      await SectionPart.bulkCreate(
+        createdParts.map((p, idx) => ({
+          ID: uuidv4(),
+          SectionID: section.ID,
+          PartID: p.DB.ID,
+          Sequence: idx + 1,
+        })),
+        { transaction: t }
+      );
 
       return createdParts.map((p) => p.DB);
     });
 
+    // =======================================
+    // SUCCESS
+    // =======================================
     return {
       status: 201,
       message: 'Grammar & Vocabulary created successfully',
