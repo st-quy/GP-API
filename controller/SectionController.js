@@ -36,8 +36,22 @@ const deleteSection = async (req, res) => {
   }
 };
 
+const getSectionDetail = async (req, res) => {
+  try {
+    const result = await SectionService.getSectionDetail(req);
+    return res.status(result.status).json(result);
+  } catch (err) {
+    console.error('Error fetching section detail:', err);
+    return res.status(500).json({
+      message: 'Internal server error',
+      error: err.message,
+    });
+  }
+};
+
 module.exports = {
   getAllSection,
   updateSection,
   deleteSection,
+  getSectionDetail,
 };
