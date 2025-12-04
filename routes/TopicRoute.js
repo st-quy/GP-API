@@ -9,6 +9,7 @@ const {
   getQuestionsByQuestionSetId,
   removePartFromTopic,
   deleteTopic,
+  updateTopic,
 } = require('../controller/TopicController');
 /**
  * @swagger
@@ -187,5 +188,48 @@ router.get('/detail', getTopicByName);
 router.delete('/:id', deleteTopic);
 
 router.get('/:id', getTopicWithRelations);
+
+/**
+ * @swagger
+ * /topics/{id}:
+ *   put:
+ *     summary: Update a topic by ID
+ *     tags: [Topic]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID of the topic to update
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               Name:
+ *                 type: string
+ *                 example: Practice Test Updated
+ *               Status:
+ *                 type: string
+ *                 enum: [draft, submited, approved, rejected]
+ *                 example: draft
+ *               updatedBy:
+ *                 type: string
+ *                 example: admin@gmail.com
+ *     responses:
+ *       200:
+ *         description: Topic updated successfully
+ *       400:
+ *         description: Invalid input
+ *       404:
+ *         description: Topic not found
+ *       500:
+ *         description: Internal server error
+ */
+router.put('/:id', updateTopic);
+
 
 module.exports = router;
