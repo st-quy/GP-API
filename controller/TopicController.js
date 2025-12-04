@@ -80,6 +80,15 @@ const deleteTopic = async (req, res) => {
   }
 };
 
+const updateTopic = async (req, res) => {
+  try {
+    const result = await topicService.updateTopic(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+};
+
 module.exports = {
   getTopicWithRelations,
   getTopicByName,
@@ -89,4 +98,5 @@ module.exports = {
   addPartToTopic,
   getQuestionsByQuestionSetId,
   deleteTopic,
+  updateTopic,
 };

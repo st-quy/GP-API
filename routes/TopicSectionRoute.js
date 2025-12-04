@@ -4,7 +4,8 @@ const { allowAnonymous, authorize } = require("../middleware/AuthMiddleware");
 const {
   createTopicSection,
   deleteTopicSection,
-  deleteTopicSectionbyTopicID
+  deleteTopicSectionbyTopicID,
+  updateTopicSectionByTopicID,
 } = require("../controller/TopicSectionController");
 
 /**
@@ -122,5 +123,62 @@ router.delete("/:id", deleteTopicSection);
  *         description: Internal server error
  */
 router.delete("/topic/:topicId", deleteTopicSectionbyTopicID);
+
+/**
+ * @swagger
+ * /topicSections/topic/{topicId}:
+ *   put:
+ *     summary: Update all Topic-Section relationships for a Topic
+ *     tags: [TopicSection]
+ *     parameters:
+ *       - in: path
+ *         name: topicId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The ID of the Topic whose TopicSections should be updated
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - sectionIds
+ *             properties:
+ *               sectionIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Array of SectionIDs to associate with the Topic
+ *             example:
+ *               sectionIds: ["7d8f3b6a-9b4c-4e3c-91f7-1f2e3d4a5b6c", "8a9b1c2d-3e4f-5g6h-7i8j-9k0l1m2n3o4p"]
+ *     responses:
+ *       200:
+ *         description: TopicSections updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: integer
+ *                   example: 200
+ *                 message:
+ *                   type: string
+ *                   example: Updated TopicSection relationships for TopicID 123
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/TopicSection'
+ *       400:
+ *         description: Bad request (missing sectionIds or invalid format)
+ *       404:
+ *         description: Topic not found
+ *       500:
+ *         description: Internal server error
+ */
+router.put("/topic/:topicId", updateTopicSectionByTopicID);
+
 
 module.exports = router;

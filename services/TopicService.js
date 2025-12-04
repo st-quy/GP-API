@@ -8,6 +8,7 @@ const {
   Section,
 } = require('../models');
 const { Op } = require('sequelize');
+const { TOPIC_STATUS } = require('../helpers/constants');
 
 const getQuestionsByQuestionSetId = async (req) => {
   try {
@@ -71,15 +72,21 @@ const getQuestionsByQuestionSetId = async (req) => {
 
 const createTopic = async (req) => {
   try {
-    const { Name } = req.body;
+    const { Name, Status } = req.body;
     if (!Name) {
       return {
         status: 400,
         message: 'Name is required',
       };
     }
+
+    const validStatuses = Object.values(TOPIC_STATUS);
+
+    let finalStatus = TOPIC_STATUS.DRAFT;
+
     const newTopic = await Topic.create({
       Name,
+      Status: validStatuses.includes(Status) ? Status : finalStatus,
     });
     return {
       status: 201,
@@ -268,6 +275,12 @@ async function deleteTopic(req) {
         message: `Topic with id ${id} not found`,
       };
     }
+    if (topic.Status !== 'draft' && topic.Status !== 'rejected') {
+      return {
+        status: 400,
+        message: `Cannot delete topic with status '${topic.Status}'`,
+      };
+    }
     await topic.destroy();
     return {
       status: 200,
@@ -278,6 +291,38 @@ async function deleteTopic(req) {
   }
 };
 
+async function updateTopic(req, res) {
+  try {
+    const { id } = req.params;
+    const updatedTopicData = req.body;
+    const topic = await Topic.findByPk(id);
+    if (!topic) {
+      return { 
+        status: 404,
+        message: 'Topic not found' 
+      };
+    }
+
+    if (topic.Status !== 'draft' && topic.Status !== 'rejected') {
+      return {
+        status: 400,
+        message: `Cannot delete topic with status '${topic.Status}'`,
+      };
+    }
+    
+    await topic.update(updatedTopicData);
+
+    return {
+      status: 200,
+      message: 'Topic updated successfully',
+      data: topic,
+    };
+  } catch (error) {
+
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
 module.exports = {
   getAllTopics,
   createTopic,
@@ -287,4 +332,5 @@ module.exports = {
   getTopicByName,
   getQuestionsByQuestionSetId,
   deleteTopic,
+  updateTopic,
 };

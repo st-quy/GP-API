@@ -85,8 +85,32 @@ const deleteTopicSectionbyTopicID = async (topicId) => {
   } 
 };
 
+const updateTopicSectionByTopicID = async (topicId, newSectionIds) => {
+  try {
+    await TopicSection.destroy({ where: { TopicID: topicId } });
+
+    const newTopicSections = [];
+    for (const sectionId of newSectionIds) {
+      const newTopicSection = await TopicSection.create({
+        TopicID: topicId,
+        SectionID: sectionId,
+      });
+      newTopicSections.push(newTopicSection);
+    }
+
+    return {
+      status: 200,
+      message: `Updated TopicSection relationships for TopicID ${topicId}`,
+      data: newTopicSections,
+    };
+  } catch (error) {
+    throw new Error(`Error updating TopicSections by TopicID: ${error.message}`);
+  }
+};
+
 module.exports = {
   createTopicSection,
   deleteTopicSection,
   deleteTopicSectionbyTopicID,
+  updateTopicSectionByTopicID,
 };
