@@ -135,7 +135,10 @@ async function getAllParticipantsGroupedByUser(req) {
 
 const getParticipantsByUserId = async (userId, req) => {
   const { searchKeyword } = req.query;
-  const whereClause = { UserID: userId, IsPublished: true };
+  const whereClause = { 
+      UserID: userId,
+      Reading: { [Op.ne]: null } 
+    };
   const includeClause = [
     {
       model: Session,
@@ -156,6 +159,7 @@ const getParticipantsByUserId = async (userId, req) => {
   const participants = await SessionParticipant.findAll({
     where: whereClause,
     include: includeClause,
+    order: [["createdAt", "DESC"]]
   });
 
   if (!participants.length) {

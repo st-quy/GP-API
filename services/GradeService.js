@@ -762,7 +762,12 @@ async function getFullExamReview(sessionParticipantId) {
     //     processParts(topic.Sections?.[0]?.Parts);
     // }
 
-    const durationMs = new Date(sessionParticipant.Session.endTime) - new Date(sessionParticipant.Session.startTime);
+    const startTime = new Date(sessionParticipant.createdAt);
+    const endTime = new Date(sessionParticipant.updatedAt);
+    let durationMs = endTime - startTime;
+
+    // Đảm bảo không bị số âm (trong trường hợp edge case)
+    if (durationMs < 0) durationMs = 0;
     const durationMinutes = Math.floor(durationMs / 60000);
 
     return {
