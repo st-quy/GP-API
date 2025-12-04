@@ -29,6 +29,9 @@ async function getParticipantExamBySession(req) {
       };
     }
 
+    // =============================
+    // 1) FIND SESSION PARTICIPANT
+    // =============================
     const sessionParticipant = await SessionParticipant.findByPk(
       sessionParticipantId,
       {
@@ -46,27 +49,35 @@ async function getParticipantExamBySession(req) {
       };
     }
 
+    // =========================================
+    // 2) LOAD TOPIC → SECTIONS → PARTS → QUESTIONS
+    // =========================================
     const topic = await Topic.findByPk(sessionParticipant.Session.examSet, {
       include: [
         {
-          model: Part,
-          as: 'Parts',
+          model: Section,
+          as: 'Sections',
           required: true,
-          order: [['Sequence', 'ASC']],
           include: [
             {
-              model: Question,
-              as: 'Questions',
+              model: Part,
+              as: 'Parts',
               required: true,
+              include: [
+                {
+                  model: Question,
+                  as: 'Questions',
+                  required: true,
+                  order: [['Sequence', 'ASC']],
+                },
+                {
+                  model: Skill,
+                  as: 'Skill',
+                  where: { Name: skillName.toUpperCase() },
+                  required: true,
+                },
+              ],
               order: [['Sequence', 'ASC']],
-            },
-            {
-              model: Skill,
-              as: 'Skill',
-              where: {
-                Name: skillName.toUpperCase(),
-              },
-              required: true,
             },
           ],
         },
@@ -80,11 +91,24 @@ async function getParticipantExamBySession(req) {
       };
     }
 
-    // Filter parts that have non-empty Questions array
-    topic.Parts = topic.Parts.filter(
-      (part) => part.Questions && part.Questions.length > 0
-    );
+    // =============================
+    // 3) FLATTEN Sections.Parts → topic.Parts
+    // =============================
+    let flatParts = [];
 
+    topic.Sections.forEach((section) => {
+      section.Parts.forEach((p) => flatParts.push(p));
+    });
+
+    // Remove parts without questions
+    flatParts = flatParts.filter((part) => part.Questions?.length > 0);
+
+    // Gắn vào topic để FE dễ dùng
+    topic.dataValues.Parts = flatParts;
+
+    // =============================
+    // 4) LOAD STUDENT ANSWERS
+    // =============================
     const studentAnswers = await StudentAnswer.findAll({
       where: {
         StudentID: sessionParticipant.UserID,
@@ -107,21 +131,26 @@ async function getParticipantExamBySession(req) {
     });
 
     const answerMap = new Map();
-    studentAnswers.forEach((answer) => {
-      answerMap.set(answer.QuestionID, answer);
-    });
+    studentAnswers.forEach((a) => answerMap.set(a.QuestionID, a));
 
-    topic.Parts = topic.Parts.map((part) => {
+    // =============================
+    // 5) MERGE STUDENT ANSWERS → QUESTIONS
+    // =============================
+    topic.dataValues.Parts = topic.dataValues.Parts.map((part) => {
       part.Questions = part.Questions.map((question) => {
-        const studentAnswer = answerMap.get(question.ID);
-        if (studentAnswer) {
-          question.dataValues.studentAnswer = studentAnswer;
+        const stdAnswer = answerMap.get(question.ID);
+        if (stdAnswer) {
+          question.dataValues.studentAnswer = stdAnswer;
         }
         return question;
       });
+
       return part;
     });
 
+    // =========================================
+    // RETURN
+    // =========================================
     return {
       status: 200,
       data: {
@@ -381,27 +410,30 @@ async function calculatePoints(req) {
             totalPoints += pointPerQuestion;
           }
         }
-      } else if (type === "dropdown-list") {
+      } else if (type === 'dropdown-list') {
         let studentAnswers = [];
         try {
           studentAnswers = JSON.parse(answer.AnswerText);
         } catch (e) {
-          console.error("Error parsing dropdown answer:", e);
+          console.error('Error parsing dropdown answer:', e);
         }
         const correctAnswers = correctContent.correctAnswer.filter(
-          (item) => item.key !== "0"
+          (item) => item.key !== '0'
         );
-        const normalizeKey = (k) => String(k).trim().replace(/\.$/, "");
+        const normalizeKey = (k) => String(k).trim().replace(/\.$/, '');
         correctAnswers.forEach((correct) => {
           const correctKey = normalizeKey(correct.key);
-          const match = studentAnswers.find((sa) => normalizeKey(sa.key) === correctKey);
+          const match = studentAnswers.find(
+            (sa) => normalizeKey(sa.key) === correctKey
+          );
           if (
-            match && String(match.value).trim() === String(correct.value).trim())
-             {
+            match &&
+            String(match.value).trim() === String(correct.value).trim()
+          ) {
             totalPoints += pointPerQuestion;
           }
         });
-      } else if (type === "listening-questions-group") {
+      } else if (type === 'listening-questions-group') {
         const studentAnswers = JSON.parse(answer.AnswerText);
         const correctList = correctContent.groupContent.listContent;
 
@@ -561,19 +593,25 @@ async function getFullExamReview(sessionParticipantId) {
         include: [
           {
             model: User,
-            attributes: ["ID", "firstName", "lastName", "email", "studentCode"],
+            attributes: ['ID', 'firstName', 'lastName', 'email', 'studentCode'],
           },
           {
             model: Session,
-            attributes: ["ID", "sessionName", "startTime", "endTime", "examSet"],
-            include: [{ model: Topic, attributes: ["ID", "Name"] }],
+            attributes: [
+              'ID',
+              'sessionName',
+              'startTime',
+              'endTime',
+              'examSet',
+            ],
+            include: [{ model: Topic, attributes: ['ID', 'Name'] }],
           },
         ],
       }
     );
 
     if (!sessionParticipant) {
-      return { status: 404, message: "Session participant not found" };
+      return { status: 404, message: 'Session participant not found' };
     }
 
     // 2. Lấy Topic kèm theo Sections và Parts
@@ -595,22 +633,21 @@ async function getFullExamReview(sessionParticipantId) {
                   as: 'Questions',
                   required: false,
                 },
-                 {
+                {
                   model: Skill,
                   as: 'Skill',
                   required: false,
-                  attributes: ["Name"]
+                  attributes: ['Name'],
                 },
               ],
-            }
-          ]
+            },
+          ],
         },
-      
       ],
     });
 
     if (!topic) {
-      return { status: 404, message: "Topic data not found" };
+      return { status: 404, message: 'Topic data not found' };
     }
 
     // 3. Lấy câu trả lời
@@ -628,137 +665,193 @@ async function getFullExamReview(sessionParticipantId) {
 
     // 4. Chuẩn bị object reviewData
     const reviewData = {
-      speaking: { score: sessionParticipant.Speaking, level: sessionParticipant.SpeakingLevel, questions: [] },
-      listening: { score: sessionParticipant.Listening, level: sessionParticipant.ListeningLevel, questions: [] },
-      reading: { score: sessionParticipant.Reading, level: sessionParticipant.ReadingLevel, questions: [] },
-      writing: { score: sessionParticipant.Writing, level: sessionParticipant.WritingLevel, questions: [] },
-      grammar: { score: sessionParticipant.GrammarVocab, level: sessionParticipant.GrammarVocabLevel, questions: [] },
+      speaking: {
+        score: sessionParticipant.Speaking,
+        level: sessionParticipant.SpeakingLevel,
+        questions: [],
+      },
+      listening: {
+        score: sessionParticipant.Listening,
+        level: sessionParticipant.ListeningLevel,
+        questions: [],
+      },
+      reading: {
+        score: sessionParticipant.Reading,
+        level: sessionParticipant.ReadingLevel,
+        questions: [],
+      },
+      writing: {
+        score: sessionParticipant.Writing,
+        level: sessionParticipant.WritingLevel,
+        questions: [],
+      },
+      grammar: {
+        score: sessionParticipant.GrammarVocab,
+        level: sessionParticipant.GrammarVocabLevel,
+        questions: [],
+      },
     };
 
     const getSkillKey = (dbName) => {
-      if (!dbName) return "grammar";
+      if (!dbName) return 'grammar';
       const upper = dbName.toUpperCase();
-      if (upper === "GRAMMAR AND VOCABULARY") return "grammar";
+      if (upper === 'GRAMMAR AND VOCABULARY') return 'grammar';
       return upper.toLowerCase();
     };
 
     // [FIX] Hàm parse JSON an toàn (Chống crash server)
     const safeParse = (str) => {
-        if (typeof str === 'object' && str !== null) return str;
-        try { return JSON.parse(str); } catch { return null; }
+      if (typeof str === 'object' && str !== null) return str;
+      try {
+        return JSON.parse(str);
+      } catch {
+        return null;
+      }
     };
 
     // [FIX] Hàm kiểm tra đúng sai an toàn
-    const checkCorrectness = (questionType, userAnswerText, correctAnswerContent) => {
+    const checkCorrectness = (
+      questionType,
+      userAnswerText,
+      correctAnswerContent
+    ) => {
       if (!userAnswerText) return false;
-      
+
       // Parse user answer an toàn
       let userAnsObj = userAnswerText;
       if (typeof userAnswerText === 'string') {
-          userAnsObj = safeParse(userAnswerText);
+        userAnsObj = safeParse(userAnswerText);
       }
 
       try {
-        if (questionType === "multiple-choice") {
-          const correctVal = typeof correctAnswerContent?.correctAnswer === 'string' 
-            ? correctAnswerContent.correctAnswer 
-            : correctAnswerContent?.correctAnswer?.value;
-          return String(userAnswerText).trim().toLowerCase() === String(correctVal).trim().toLowerCase();
+        if (questionType === 'multiple-choice') {
+          const correctVal =
+            typeof correctAnswerContent?.correctAnswer === 'string'
+              ? correctAnswerContent.correctAnswer
+              : correctAnswerContent?.correctAnswer?.value;
+          return (
+            String(userAnswerText).trim().toLowerCase() ===
+            String(correctVal).trim().toLowerCase()
+          );
         }
 
-        if (["dropdown-list", "matching", "ordering"].includes(questionType)) {
-          if (!Array.isArray(userAnsObj) || !Array.isArray(correctAnswerContent?.correctAnswer)) return false;
-          
-          return correctAnswerContent.correctAnswer.every(correctItem => {
-            const match = userAnsObj.find(u => 
-              (String(u.key) === String(correctItem.key) || String(u.left) === String(correctItem.left))
+        if (['dropdown-list', 'matching', 'ordering'].includes(questionType)) {
+          if (
+            !Array.isArray(userAnsObj) ||
+            !Array.isArray(correctAnswerContent?.correctAnswer)
+          )
+            return false;
+
+          return correctAnswerContent.correctAnswer.every((correctItem) => {
+            const match = userAnsObj.find(
+              (u) =>
+                String(u.key) === String(correctItem.key) ||
+                String(u.left) === String(correctItem.left)
             );
             if (!match) return false;
-            return (String(match.value).trim().toLowerCase() === String(correctItem.value).trim().toLowerCase() || 
-                    String(match.right).trim().toLowerCase() === String(correctItem.right).trim().toLowerCase());
+            return (
+              String(match.value).trim().toLowerCase() ===
+                String(correctItem.value).trim().toLowerCase() ||
+              String(match.right).trim().toLowerCase() ===
+                String(correctItem.right).trim().toLowerCase()
+            );
           });
         }
 
-        if (questionType === "listening-questions-group") {
-           const correctList = correctAnswerContent?.groupContent?.listContent || [];
-           if (!Array.isArray(userAnsObj)) return false;
-           return correctList.every(subQ => {
-             const userSubAns = userAnsObj.find(u => String(u.ID || u.id) === String(subQ.ID));
-             return userSubAns && String(userSubAns.answer).trim().toLowerCase() === String(subQ.correctAnswer).trim().toLowerCase();
-           });
+        if (questionType === 'listening-questions-group') {
+          const correctList =
+            correctAnswerContent?.groupContent?.listContent || [];
+          if (!Array.isArray(userAnsObj)) return false;
+          return correctList.every((subQ) => {
+            const userSubAns = userAnsObj.find(
+              (u) => String(u.ID || u.id) === String(subQ.ID)
+            );
+            return (
+              userSubAns &&
+              String(userSubAns.answer).trim().toLowerCase() ===
+                String(subQ.correctAnswer).trim().toLowerCase()
+            );
+          });
         }
         return false;
-      } catch (e) { return false; }
+      } catch (e) {
+        return false;
+      }
     };
 
     // [FIX] Helper xử lý danh sách parts để tái sử dụng
     const processParts = (partsList) => {
-        if (!partsList || !Array.isArray(partsList)) return;
-        
-        partsList.forEach((part) => {
-            if (part.Questions && part.Questions.length > 0) {
-                part.Questions.forEach((question) => {
-                    // Skip nếu question lỗi hoặc không có skill
-                    if (!part.Skill || !part.Skill.Name) return;
+      if (!partsList || !Array.isArray(partsList)) return;
 
-                    const skillKey = getSkillKey(part.Skill.Name);
-                    if (!reviewData[skillKey]) return;
+      partsList.forEach((part) => {
+        if (part.Questions && part.Questions.length > 0) {
+          part.Questions.forEach((question) => {
+            // Skip nếu question lỗi hoặc không có skill
+            if (!part.Skill || !part.Skill.Name) return;
 
-                    const studentAnswer = answerMap.get(question.ID);
-                    const answerContent = safeParse(question.AnswerContent);
+            const skillKey = getSkillKey(part.Skill.Name);
+            if (!reviewData[skillKey]) return;
 
-                    const questionDetail = {
-                        id: question.ID,
-                        type: question.Type,
-                        questionContent: question.Content,
-                        partContent: part.Content,
-                        subContent: question.SubContent || part.SubContent,
-                        resources: {
-                            audio: question.AudioKeys,
-                            images: question.ImageKeys,
-                            groupContent: question.GroupContent,
-                            answerContent: answerContent 
-                        },
-                        userResponse: studentAnswer ? {
-                            text: studentAnswer.AnswerText,
-                            audio: studentAnswer.AnswerAudio,
-                            comment: studentAnswer.Comment
-                        } : null,
-                        correctAnswer: answerContent ? answerContent.correctAnswer : null,
-                        isCorrect: false,
-                    };
+            const studentAnswer = answerMap.get(question.ID);
+            const answerContent = safeParse(question.AnswerContent);
 
-                    if (studentAnswer) {
-                        if (["speaking", "writing"].includes(skillKey)) {
-                            questionDetail.isCorrect = true; 
-                        } else {
-                            questionDetail.isCorrect = checkCorrectness(question.Type, studentAnswer.AnswerText, answerContent);
-                        }
-                    }
-                    
-                    reviewData[skillKey].questions.push(questionDetail);
-                });
+            const questionDetail = {
+              id: question.ID,
+              type: question.Type,
+              questionContent: question.Content,
+              partContent: part.Content,
+              subContent: question.SubContent || part.SubContent,
+              resources: {
+                audio: question.AudioKeys,
+                images: question.ImageKeys,
+                groupContent: question.GroupContent,
+                answerContent: answerContent,
+              },
+              userResponse: studentAnswer
+                ? {
+                    text: studentAnswer.AnswerText,
+                    audio: studentAnswer.AnswerAudio,
+                    comment: studentAnswer.Comment,
+                  }
+                : null,
+              correctAnswer: answerContent ? answerContent.correctAnswer : null,
+              isCorrect: false,
+            };
+
+            if (studentAnswer) {
+              if (['speaking', 'writing'].includes(skillKey)) {
+                questionDetail.isCorrect = true;
+              } else {
+                questionDetail.isCorrect = checkCorrectness(
+                  question.Type,
+                  studentAnswer.AnswerText,
+                  answerContent
+                );
+              }
             }
-        });
+
+            reviewData[skillKey].questions.push(questionDetail);
+          });
+        }
+      });
     };
 
     // 5. Duyệt dữ liệu (Ưu tiên Sections trước)
     let hasData = false;
-    
-    
+
     // Case 1: Cấu trúc mới (Topic -> Sections -> Parts)
     if (topic.Sections && topic.Sections.length > 0) {
-        topic.Sections.forEach(section => {
-            if (section.Parts && section.Parts.length > 0) {
-                processParts(section.Parts);
-            }
-        });
-    } 
-    
+      topic.Sections.forEach((section) => {
+        if (section.Parts && section.Parts.length > 0) {
+          processParts(section.Parts);
+        }
+      });
+    }
+
     // Case 2: Cấu trúc cũ (Topic -> Parts trực tiếp)
     // Chỉ chạy nếu Case 1 không có dữ liệu
     // if (topic.Sections && topic.Sections.length > 0) {
-      
+
     //     processParts(topic.Sections?.[0]?.Parts);
     // }
 
@@ -786,7 +879,7 @@ async function getFullExamReview(sessionParticipantId) {
       },
     };
   } catch (error) {
-    console.error("Error in getFullExamReview:", error);
+    console.error('Error in getFullExamReview:', error);
     // Trả về lỗi 500 kèm message để dễ debug, thay vì crash server
     return { status: 500, message: `Server Error: ${error.message}` };
   }
