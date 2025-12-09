@@ -33,13 +33,14 @@ const getTopicByName = async (req, res) => {
 
 const getAllTopics = async (req, res) => {
   try {
-    const topics = await topicService.getAllTopics();
-    return res.status(topics.status).json(topics);
+    const result = await topicService.getAllTopics(req);
+    return res.status(result.status).json(result);
   } catch (error) {
     console.error('Error fetching all topics:', error);
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
+
 
 const removePartFromTopic = async (req, res) => {
   try {

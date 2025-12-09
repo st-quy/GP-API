@@ -98,19 +98,57 @@ const createTopic = async (req) => {
   }
 };
 
-const getAllTopics = async () => {
+const getAllTopics = async (req) => {
   try {
-    const topics = await Topic.findAll();
+    const { status, searchName } = req.query;
+
+    const page = Number(req.query.page) || 1;
+    const pageSize = Number(req.query.pageSize) || 5;
+    const offset = (page - 1) * pageSize;
+
+    const whereClause = {};
+
+    if (searchName) {
+      whereClause.Name = {
+        [Op.iLike]: `%${searchName}%`,
+      };
+    }
+
+    if (status && status !== "all") {
+      whereClause.Status = status;
+    }
+
+     const allTopics = await Topic.findAll({ attributes: ["Status"] });
+
+    const statusCounts = {
+      submited: allTopics.filter(t => t.Status === "submited").length,
+      approved: allTopics.filter(t => t.Status === "approved").length,
+      draft: allTopics.filter(t => t.Status === "draft").length,
+      rejected: allTopics.filter(t => t.Status === "rejected").length,
+    };
+
+    const { rows, count } = await Topic.findAndCountAll({
+      where: whereClause,
+      offset,
+      limit: pageSize,
+      order: [['Name', 'ASC']],
+    });
 
     return {
       status: 200,
-      message: 'Get all topic successfully',
-      data: topics,
+      message: 'Get all topics successfully',
+      page,
+      pageSize,
+      totalItems: count,
+      totalPages: Math.ceil(count / pageSize),
+      data: rows,
+      statusCounts,
     };
   } catch (error) {
     throw new Error(`Error get all topic: ${error.message}`);
   }
 };
+
 
 const getTopicWithRelations = async (req, res) => {
   try {
@@ -300,13 +338,6 @@ async function updateTopic(req, res) {
       return { 
         status: 404,
         message: 'Topic not found' 
-      };
-    }
-
-    if (topic.Status !== 'draft' && topic.Status !== 'rejected') {
-      return {
-        status: 400,
-        message: `Cannot delete topic with status '${topic.Status}'`,
       };
     }
     
