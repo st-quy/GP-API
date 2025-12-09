@@ -94,17 +94,17 @@ async function createQuestionReading(req, res) {
   }
 }
 
-async function getQuestionByID(req, res) {
-  try {
-    const result = await QuestionService.getQuestionByID(req);
-    return res.status(result.status).json(result);
-  } catch (err) {
-    console.error('getQuestionByID error:', err);
-    return res.status(500).json({
-      message: 'Internal server error',
-    });
-  }
-}
+// async function getQuestionByID(req, res) {
+//   try {
+//     const result = await QuestionService.getQuestionByID(req);
+//     return res.status(result.status).json(result);
+//   } catch (err) {
+//     console.error('getQuestionByID error:', err);
+//     return res.status(500).json({
+//       message: 'Internal server error',
+//     });
+//   }
+// }
 
 async function updateQuestion(req, res) {
   try {
@@ -124,16 +124,67 @@ async function deleteQuestion(req, res) {
   }
 }
 
+async function getQuestionGroupDetail(req, res) {
+  try {
+    const result = await QuestionService.getQuestionGroupDetail(req);
+    return res.status(result.status).json(result);
+  } catch (err) {
+    console.error('getQuestionGroupDetail error:', err);
+    return res.status(500).json({
+      message: 'Internal server error',
+    });
+  }
+}
+
+async function updateQuestionGroup(req, res) {
+  try {
+    const payload = req.body;
+
+    const { SkillName } = payload;
+    const { sectionId } = req.params;
+
+    let result = null;
+    switch (SkillName) {
+      case 'SPEAKING':
+        result = await QuestionService.updateSpeakingGroup(sectionId, payload);
+        break;
+      case 'READING':
+        result = await QuestionService.updateReadingGroup(sectionId, payload);
+        break;
+      case 'WRITING':
+        result = await QuestionService.updateWritingGroup(sectionId, payload);
+        break;
+      case 'LISTENING':
+        result = await QuestionService.updateListeningGroup(sectionId, payload);
+        break;
+      case 'GRAMMAR AND VOCABULARY':
+        result = await QuestionService.updateGrammarAndVocabGroup(
+          sectionId,
+          payload
+        );
+        break;
+      default:
+        break;
+    }
+
+    res.status(result.status).json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
 module.exports = {
   createQuestion,
   createQuestionGroup,
   getQuestionsByPartID,
   getQuestionsByTopicID,
   getQuestionsByQuestionSetID,
-  getQuestionByID,
+  // getQuestionByID,
   updateQuestion,
   deleteQuestion,
   getAllQuestions,
   createSpeakingGroup,
   createQuestionReading,
+  getQuestionGroupDetail,
+  updateQuestionGroup,
 };

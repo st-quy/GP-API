@@ -10,6 +10,8 @@ const {
   deleteQuestion,
   getAllQuestions,
   createQuestionReading,
+  getQuestionGroupDetail,
+  updateQuestionGroup,
 } = require('../controller/QuestionController');
 
 router.get('/', getAllQuestions);
@@ -179,7 +181,7 @@ router.get('/topic/:topicId', getQuestionsByTopicID);
  *       500:
  *         description: Internal server error
  */
-router.get('/:questionId', getQuestionByID);
+// router.get('/:questionId', getQuestionByID);
 
 /**
  * @swagger
@@ -206,7 +208,10 @@ router.get('/:questionId', getQuestionByID);
  *         description: Internal server error
  */
 router.post('/', createQuestionGroup);
-router.post('/reading/create', createQuestionReading);
+
+router.get('/detail', getQuestionGroupDetail);
+
+router.put('/update/:sectionId', updateQuestionGroup);
 
 /**
  * @swagger
@@ -238,7 +243,6 @@ router.post('/reading/create', createQuestionReading);
  *         description: Internal server error
  */
 router.put('/:questionId', updateQuestion);
-
 /**
  * @swagger
  * /questions/{questionId}:
