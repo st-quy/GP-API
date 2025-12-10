@@ -42,6 +42,10 @@ module.exports = (sequelize, DataTypes) => {
         key: 'ID',
       },
     },
+    ReasonReject: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    }
   });
 
   return Topic;
