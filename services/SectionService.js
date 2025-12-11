@@ -334,6 +334,7 @@ function buildListeningDetail(section) {
     .sort((a, b) => (a.Sequence || 0) - (b.Sequence || 0));
 
   const r = {
+    section: section,
     SectionID: section.ID,
     SectionName: section.Name,
     SkillName: 'LISTENING',
@@ -416,17 +417,16 @@ function buildListeningDetail(section) {
   // ========================
   const p4 = parts.find((p) => p.Sequence === 4);
   if (p4 && p4.Questions.length) {
-    const q = p4.Questions[0];
-    const ac = getAC(q);
-
-    const list = ac.groupContent?.listContent || [];
-
     r.part4 = {
       PartID: p4.ID,
       Type: 'listening-questions-group',
-      groups: [
-        {
-          id: 1, // luôn 1 group trong dữ liệu chuẩn này
+      groups: p4.Questions.map((q, index) => {
+        const ac = getAC(q);
+
+        const list = ac.groupContent?.listContent || [];
+
+        return {
+          id: index + 1,
           instruction: ac.content || q.Content,
           audioUrl: audioOf(q),
           subQuestions: list.map((it) => ({
@@ -435,8 +435,8 @@ function buildListeningDetail(section) {
             options: it.options || [],
             correctAnswer: it.correctAnswer || null,
           })),
-        },
-      ],
+        };
+      }),
     };
   }
 
