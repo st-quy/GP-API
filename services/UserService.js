@@ -1,5 +1,5 @@
 const bcrypt = require('bcrypt');
-const { User, Role } = require('../models');
+const { User, Role, UserRole } = require('../models');
 const jwtUtils = require('../helpers/jwt');
 const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
@@ -8,9 +8,9 @@ const { Op } = require('sequelize');
 // Logic for user registration
 async function registerUser(data) {
   try {
-    const { email, password, teacherCode, phone } = data;
+    const { email, password, teacherCode, phone, role } = data;
 
-    // Validate email format
+    // --- Validate email format ---
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return {
@@ -19,6 +19,7 @@ async function registerUser(data) {
       };
     }
 
+    // --- Validate phone ---
     if (phone) {
       const phoneRegex = /^\d{10}$/;
       if (!phoneRegex.test(phone)) {
@@ -29,21 +30,45 @@ async function registerUser(data) {
       }
     }
 
+    // --- Validate role (only student & teacher allowed) ---
+    const allowedRoles = ['student', 'teacher'];
+    const roleName = role && allowedRoles.includes(role) ? role : 'student';
+
+    // --- Prepare password ---
     const hashedPassword = await bcrypt.hash(password, 10);
+
+    // --- Create User ---
     const newUser = await User.create({
       ...data,
       phone: phone ? String(phone) : null,
       teacherCode: teacherCode ? String(teacherCode) : null,
       password: hashedPassword,
     });
-    await newUser.save();
+
+    // --- Assign Role ---
+    const roleRecord = await Role.findOne({ where: { Name: roleName } });
+
+    if (!roleRecord) {
+      return {
+        status: 500,
+        message: `Role '${roleName}' not found in database`,
+      };
+    }
+
+    await UserRole.create({
+      UserID: newUser.ID,
+      RoleID: roleRecord.ID,
+    });
 
     const { password: _, ...userWithoutPassword } = newUser.toJSON();
 
     return {
       status: 200,
       message: 'Register Successfully',
-      data: userWithoutPassword,
+      data: {
+        ...userWithoutPassword,
+        role: roleName,
+      },
     };
   } catch (error) {
     if (error.name === 'SequelizeUniqueConstraintError') {
@@ -68,7 +93,6 @@ async function registerUser(data) {
       };
     }
 
-    // ❗ Catch all other unexpected errors
     return {
       status: 500,
       message: 'Internal Server Error',
@@ -340,22 +364,15 @@ async function getAllUsersByRoleTeacher(req) {
     const { page = 1, limit = 10, search = '', status } = req.query;
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    const searchTerms = search
-      .trim()
-      .split(' ')
-      .filter((term) => term);
+    const searchTerms = search.trim().split(' ').filter(Boolean);
 
-    const whereClause = {
-      roleIDs: {
-        [Op.contains]: ['teacher'],
-      },
-    };
+    const whereClause = {};
 
     if (searchTerms.length > 0) {
       whereClause[Op.and] = searchTerms.map((term) => ({
         [Op.or]: [
-          { lastName: { [Op.iLike]: `%${term}%` } },
           { firstName: { [Op.iLike]: `%${term}%` } },
+          { lastName: { [Op.iLike]: `%${term}%` } },
           { teacherCode: { [Op.iLike]: `%${term}%` } },
         ],
       }));
@@ -367,9 +384,17 @@ async function getAllUsersByRoleTeacher(req) {
 
     const { rows: teachers, count: total } = await User.findAndCountAll({
       where: whereClause,
+      include: [
+        {
+          model: Role,
+          where: { Name: 'teacher' }, // 👈 Filter role here
+          through: { attributes: [] }, // Ẩn UserRole
+        },
+      ],
       offset,
       limit: parseInt(limit),
       order: [['updatedAt', 'DESC']],
+      distinct: true, // 👈 để count chính xác khi JOIN
     });
 
     return {

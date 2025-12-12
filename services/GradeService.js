@@ -420,12 +420,17 @@ async function calculatePoints(req) {
         const correctAnswers = correctContent.correctAnswer.filter(
           (item) => item.key !== '0'
         );
-        const normalizeKey = (k) => String(k).trim().replace(/\.$/, '');
+
+        const normalizeKey = (k) => {
+          return String(k).trim().split('.')[0];
+        };
         correctAnswers.forEach((correct) => {
           const correctKey = normalizeKey(correct.key);
+
           const match = studentAnswers.find(
             (sa) => normalizeKey(sa.key) === correctKey
           );
+
           if (
             match &&
             String(match.value).trim() === String(correct.value).trim()
