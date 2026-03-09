@@ -10,7 +10,7 @@ const MINIO_URL_BASE = process.env.MINIO_URL_BASE;
 const minioClient = new Minio.Client({
   endPoint: MINIO_HOST,
   port: parseInt(MINIO_PORT, 10),
-  useSSL: true,
+  useSSL: process.env.MINIO_USE_SSL === 'true',
   accessKey: process.env.MINIO_ACCESS_KEY,
   secretKey: process.env.MINIO_SECRET_KEY,
 });
@@ -63,6 +63,7 @@ const uploadAudioToMinIO = async (filename) => {
       data: { uploadUrl, fileUrl, objectKey },
     };
   } catch (err) {
+    console.error('uploadAudioToMinIO error:', err);
     throw new Error('Failed to get presigned URL for audio');
   }
 };
