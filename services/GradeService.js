@@ -374,23 +374,25 @@ async function calculatePoints(req) {
         logItem.studentAnswer = studentAnswers;
         logItem.correctAnswer = correctAnswers;
 
-        correctAnswers.forEach((correct) => {
-          const matched = studentAnswers.find(
+        // Check if ALL pairs match (All-or-Nothing logic to match checkCorrectness)
+        const allMatched = correctAnswers.every((correct) => {
+          return studentAnswers.some(
             (s) =>
               s.left.trim() === correct.left.trim() &&
               s.right.trim() === correct.right.trim()
           );
-          if (matched) {
-            isCorrect = true;
-            totalPoints += pointPerQuestion;
-          }
         });
-      }
 
-      // ================================
-      // ORDERING
-      // ================================
-      else if (type === 'ordering') {
+        if (allMatched && correctAnswers.length > 0) {
+          isCorrect = true;
+          totalPoints += pointPerQuestion;
+        }
+        }
+
+        // ================================
+        // ORDERING
+        // ================================
+        else if (type === 'ordering') {
         const studentAnswers = JSON.parse(rawStudentAnswer).sort(
           (a, b) => a.value - b.value
         );
@@ -399,16 +401,20 @@ async function calculatePoints(req) {
         logItem.studentAnswer = studentAnswers;
         logItem.correctAnswer = correctAnswers;
 
-        const minLength = Math.min(
-          studentAnswers.length,
-          correctAnswers.length
-        );
-
-        for (let i = 0; i < minLength; i++) {
-          if (studentAnswers[i].key.trim() === correctAnswers[i].key.trim()) {
-            isCorrect = true;
-            totalPoints += pointPerQuestion;
+        // Check if ALL items are in correct order (All-or-Nothing)
+        let allCorrect = studentAnswers.length === correctAnswers.length;
+        if (allCorrect) {
+          for (let i = 0; i < correctAnswers.length; i++) {
+            if (studentAnswers[i].key.trim() !== correctAnswers[i].key.trim()) {
+              allCorrect = false;
+              break;
+            }
           }
+        }
+
+        if (allCorrect && correctAnswers.length > 0) {
+          isCorrect = true;
+          totalPoints += pointPerQuestion;
         }
       } else if (type === 'dropdown-list') {
         let studentAnswers = [];
