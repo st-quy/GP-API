@@ -189,7 +189,7 @@ router.post("/", createSession);
  * @swagger
  * /sessions/{sessionId}:
  *   put:
- *     summary: Update a session by class ID
+ *     summary: Update a session (blocked if status is ON_GOING)
  *     tags: [Session]
  *     parameters:
  *       - in: path
@@ -197,13 +197,33 @@ router.post("/", createSession);
  *         schema:
  *           type: string
  *         required: true
- *         description: The ID of the class
+ *         description: The ID of the session to update
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/Session'
+ *             type: object
+ *             properties:
+ *               sessionName:
+ *                 type: string
+ *               sessionKey:
+ *                 type: string
+ *               startTime:
+ *                 type: string
+ *                 format: date-time
+ *               endTime:
+ *                 type: string
+ *                 format: date-time
+ *               examSet:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Topic ID representing the question set
+ *               ClassID:
+ *                 type: string
+ *                 format: uuid
+ *               isPublished:
+ *                 type: boolean
  *     responses:
  *       200:
  *         description: Session updated successfully
@@ -211,6 +231,10 @@ router.post("/", createSession);
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Session'
+ *       400:
+ *         description: Validation error (duplicate key/name, invalid examSet/ClassID, invalid time range)
+ *       403:
+ *         description: Cannot edit a session that is currently ON_GOING
  *       404:
  *         description: Session not found
  *       500:
