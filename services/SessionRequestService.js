@@ -13,13 +13,16 @@ async function getAllSessionRequests(req) {
     const { sessionId } = req.params;
     const status = req.query.status;
 
-    const whereClause = { SessionID: sessionId };
+    const whereClause = {};
+    if (sessionId) {
+      whereClause.SessionID = sessionId;
+    }
     if (Object.values(SESSION_REQUEST_STATUS).includes(status)) {
       whereClause.status = status;
     }
     const sessionRequests = await SessionRequest.findAll({
       where: whereClause,
-      include: ["User"],
+      include: ["User", "Session"],
     });
     return {
       status: 200,
@@ -40,13 +43,22 @@ async function getSessionRequestByStudentId(req) {
     const { sessionId, studentId } = req.params;
     const { requestId } = req.query;
 
+    if (sessionId === "undefined" || studentId === "undefined") {
+      return {
+        status: 400,
+        message: "Invalid sessionId or studentId provided",
+      };
+    }
+
     const status = req.query.status;
 
     const whereClause = {
       UserID: studentId,
       SessionID: sessionId,
-      ID: requestId,
     };
+    if (requestId && requestId !== "undefined") {
+      whereClause.ID = requestId;
+    }
     if (Object.values(SESSION_REQUEST_STATUS).includes(status)) {
       whereClause.status = status;
     }
@@ -128,7 +140,7 @@ async function createSessionRequest(req) {
       return {
         status: 201,
         message: "Session request created successfully",
-        data: [pendingRequest],
+        data: pendingRequest.toJSON ? pendingRequest.toJSON() : pendingRequest,
       };
     }
 
@@ -174,7 +186,7 @@ async function createSessionRequest(req) {
     return {
       status: 201,
       message: "Session request created successfully",
-      data: sessionRequest,
+      data: sessionRequest.toJSON ? sessionRequest.toJSON() : sessionRequest,
     };
   } catch (error) {
     const errorMsg = `Error creating session request: ${error.message}`;

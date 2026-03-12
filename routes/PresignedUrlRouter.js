@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
 
-const { getFileURL, getUploadUrl } = require('../controller/MinIOController');
+const { getFileURL, getUploadUrl, uploadFile } = require('../controller/MinIOController');
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
 
 /**
  * @swagger
@@ -35,5 +37,7 @@ const { getFileURL, getUploadUrl } = require('../controller/MinIOController');
 router.get('/', getFileURL);
 
 router.post('/upload-url', getUploadUrl);
+
+router.post('/upload', upload.single('file'), uploadFile);
 
 module.exports = router;
