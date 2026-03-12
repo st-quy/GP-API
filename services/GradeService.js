@@ -367,6 +367,9 @@ async function calculatePoints(req) {
       // ================================
       // MATCHING
       // ================================
+      // ================================
+      // MATCHING
+      // ================================
       else if (type === 'matching') {
         const studentAnswers = JSON.parse(rawStudentAnswer);
         const correctAnswers = correctContent.correctAnswer;
@@ -374,6 +377,7 @@ async function calculatePoints(req) {
         logItem.studentAnswer = studentAnswers;
         logItem.correctAnswer = correctAnswers;
 
+        let matchedCount = 0;
         correctAnswers.forEach((correct) => {
           const matched = studentAnswers.find(
             (s) =>
@@ -381,10 +385,16 @@ async function calculatePoints(req) {
               s.right.trim() === correct.right.trim()
           );
           if (matched) {
-            isCorrect = true;
-            totalPoints += pointPerQuestion;
+            matchedCount++;
           }
         });
+
+        // Award points only if ALL matched (All-or-nothing logic ensures pointAdded accuracy)
+        if (matchedCount === correctAnswers.length && correctAnswers.length > 0) {
+          isCorrect = true;
+          totalPoints += pointPerQuestion;
+          logItem.pointAdded = pointPerQuestion;
+        }
       }
 
       // ================================
@@ -399,6 +409,7 @@ async function calculatePoints(req) {
         logItem.studentAnswer = studentAnswers;
         logItem.correctAnswer = correctAnswers;
 
+        let matchedCount = 0;
         const minLength = Math.min(
           studentAnswers.length,
           correctAnswers.length
@@ -406,11 +417,18 @@ async function calculatePoints(req) {
 
         for (let i = 0; i < minLength; i++) {
           if (studentAnswers[i].key.trim() === correctAnswers[i].key.trim()) {
-            isCorrect = true;
-            totalPoints += pointPerQuestion;
+            matchedCount++;
           }
         }
-      } else if (type === 'dropdown-list') {
+
+        // Award points only if ALL items are in correct order
+        if (matchedCount === correctAnswers.length && correctAnswers.length > 0) {
+          isCorrect = true;
+          totalPoints += pointPerQuestion;
+          logItem.pointAdded = pointPerQuestion;
+        }
+      }
+ else if (type === 'dropdown-list') {
         let studentAnswers = [];
         try {
           studentAnswers = JSON.parse(answer.AnswerText);
@@ -466,21 +484,27 @@ async function calculatePoints(req) {
         logItem.studentAnswer = studentAnswers;
         logItem.correctAnswer = correctList;
 
+        let questionPoints = 0;
         correctList.forEach((q) => {
           const stu = studentAnswers.find((x) => x.ID === q.ID);
 
           if (stu && stu.answer.trim() === q.correctAnswer.trim()) {
             isCorrect = true;
-            totalPoints += pointPerQuestion;
+            questionPoints += pointPerQuestion;
           }
         });
+        totalPoints += questionPoints;
+        logItem.pointAdded = questionPoints;
       }
 
       // ================================
       // Finalize tracking
       // ================================
       logItem.result = isCorrect ? 'correct' : 'incorrect';
-      logItem.pointAdded = isCorrect ? pointPerQuestion : 0;
+      // Only set pointAdded if it hasn't been specifically set by a complex handler above
+      if (logItem.pointAdded === 0) {
+        logItem.pointAdded = isCorrect ? pointPerQuestion : 0;
+      }
 
       logs.push(logItem);
     });
