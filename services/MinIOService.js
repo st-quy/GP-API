@@ -7,12 +7,27 @@ const MINIO_HOST = process.env.MINIO_HOST;
 const BUCKET = process.env.BUCKET;
 const MINIO_URL_BASE = process.env.MINIO_URL_BASE;
 
+// Internal client — for bucket ops, delete, etc. (Docker network)
 const minioClient = new Minio.Client({
   endPoint: MINIO_HOST,
   port: parseInt(MINIO_PORT, 10),
-  useSSL: true,
+  useSSL: process.env.MINIO_USE_SSL === 'true',
   accessKey: process.env.MINIO_ACCESS_KEY,
   secretKey: process.env.MINIO_SECRET_KEY,
+});
+
+// External client — for presigned URLs that browsers will access
+const MINIO_EXTERNAL_HOST = process.env.MINIO_EXTERNAL_HOST || MINIO_HOST;
+const MINIO_EXTERNAL_PORT = parseInt(process.env.MINIO_EXTERNAL_PORT || '443', 10);
+const MINIO_EXTERNAL_USE_SSL = process.env.MINIO_EXTERNAL_USE_SSL !== 'false'; // default true
+
+const externalMinioClient = new Minio.Client({
+  endPoint: MINIO_EXTERNAL_HOST,
+  port: MINIO_EXTERNAL_PORT,
+  useSSL: MINIO_EXTERNAL_USE_SSL,
+  accessKey: process.env.MINIO_ACCESS_KEY,
+  secretKey: process.env.MINIO_SECRET_KEY,
+  region: 'us-east-1',
 });
 
 // Policy cho bucket
@@ -55,7 +70,7 @@ const buildObjectKey = (folder, originalFileName) => {
 const uploadAudioToMinIO = async (filename) => {
   try {
     const objectKey = buildObjectKey('audio', filename);
-    const uploadUrl = await minioClient.presignedPutObject(BUCKET, objectKey);
+    const uploadUrl = await externalMinioClient.presignedPutObject(BUCKET, objectKey);
     const fileUrl = `${MINIO_URL_BASE}/${objectKey}`;
 
     return {
@@ -63,6 +78,7 @@ const uploadAudioToMinIO = async (filename) => {
       data: { uploadUrl, fileUrl, objectKey },
     };
   } catch (err) {
+    console.error('uploadAudioToMinIO error:', err);
     throw new Error('Failed to get presigned URL for audio');
   }
 };
@@ -74,7 +90,7 @@ const uploadToMinIO = async (type = 'images', originalFileName) => {
     const objectKey = buildObjectKey(type, originalFileName);
 
     // Có thể truyền thêm expiry (giây) nếu muốn, vd: 60 * 5 = 5 phút
-    const uploadUrl = await minioClient.presignedPutObject(BUCKET, objectKey);
+    const uploadUrl = await externalMinioClient.presignedPutObject(BUCKET, objectKey);
 
     const fileUrl = `${MINIO_URL_BASE}/${objectKey}`;
 
