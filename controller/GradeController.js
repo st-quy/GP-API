@@ -40,7 +40,7 @@ const getFullExamReview = async (req, res) => {
     const { sessionParticipantId } = req.params;
     
     // Gọi service để lấy dữ liệu review chi tiết
-    const result = await GradeService.getFullExamReview(sessionParticipantId);
+    const result = await GradeService.getFullExamReview(sessionParticipantId, req.user);
 
     return res.status(result.status).json(result);
   } catch (error) {
