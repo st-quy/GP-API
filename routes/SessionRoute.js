@@ -7,6 +7,7 @@ const {
   updateSession,
   getSessionDetailById,
   removeSession,
+  archiveSession,
   generateSessionKey,
   getAllSessions,
 } = require("../controller/SessionController");
@@ -44,7 +45,7 @@ const {
  *           description: The exam set associated with the session
  *         status:
  *           type: string
- *           enum: [NOT_STARTED, ON_GOING, COMPLETE]
+ *           enum: [NOT_STARTED, ON_GOING, COMPLETE, ARCHIVED]
  *           description: The status of the session
  *         ClassID:
  *           type: string
@@ -96,7 +97,7 @@ router.get("/all", getAllSessions);
  *               properties:
  *                 sessionKey:
  *                   type: string
- *       500:
+       500:
  *         description: Internal server error
  */
 router.get("/generate-key", generateSessionKey);
@@ -267,5 +268,28 @@ router.get("/:sessionId", getSessionDetailById);
  *         description: Internal server error
  */
 router.delete("/:sessionId", removeSession);
+
+/**
+ * @swagger
+ * /sessions/{sessionId}/archive:
+ *   patch:
+ *     summary: Archive a session by session ID
+ *     tags: [Session]
+ *     parameters:
+ *       - in: path
+ *         name: sessionId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: The ID of the session
+ *     responses:
+ *       200:
+ *         description: Session archived or deleted successfully
+ *       404:
+ *         description: Session not found
+ *       500:
+ *         description: Internal server error
+ */
+router.patch("/:sessionId/archive", archiveSession);
 
 module.exports = router;
