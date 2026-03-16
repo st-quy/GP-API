@@ -334,6 +334,232 @@ cron.schedule("*/2 * * * *", async () => {
   await cronStatusAllSessions();
 });
 
+async function batchUpdateStatus(req) {
+  const { sessionIds, status } = req.body;
+
+  if (!sessionIds || !Array.isArray(sessionIds) || sessionIds.length === 0) {
+    return {
+      status: 400,
+      message: "sessionIds must be a non-empty array",
+    };
+  }
+
+  const validStatuses = ["NOT_STARTED", "ON_GOING", "COMPLETE"];
+  if (!status || !validStatuses.includes(status)) {
+    return {
+      status: 400,
+      message: `status must be one of: ${validStatuses.join(", ")}`,
+    };
+  }
+
+  const results = { success: [], failed: [] };
+
+  for (const sessionId of sessionIds) {
+    try {
+      const session = await Session.findByPk(sessionId);
+      if (!session) {
+        results.failed.push({
+          sessionId,
+          reason: "Session not found",
+        });
+        continue;
+      }
+
+      await session.update({ status });
+      results.success.push(sessionId);
+    } catch (error) {
+      results.failed.push({
+        sessionId,
+        reason: error.message,
+      });
+    }
+  }
+
+  const httpStatus = results.failed.length === sessionIds.length ? 400
+    : results.failed.length > 0 ? 207
+    : 200;
+
+  return {
+    status: httpStatus,
+    message: `${results.success.length}/${sessionIds.length} sessions updated`,
+    data: results,
+  };
+}
+
+async function batchClone(req) {
+  const { sessionIds } = req.body;
+
+  if (!sessionIds || !Array.isArray(sessionIds) || sessionIds.length === 0) {
+    return {
+      status: 400,
+      message: "sessionIds must be a non-empty array",
+    };
+  }
+
+  const results = { success: [], failed: [] };
+
+  for (const sessionId of sessionIds) {
+    try {
+      const session = await Session.findByPk(sessionId);
+      if (!session) {
+        results.failed.push({
+          sessionId,
+          reason: "Session not found",
+        });
+        continue;
+      }
+
+      // Generate unique session key
+      const characters =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+      let newKey;
+      let isUnique = false;
+      while (!isUnique) {
+        newKey = "";
+        for (let i = 0; i < 10; i++) {
+          newKey += characters.charAt(
+            Math.floor(Math.random() * characters.length)
+          );
+        }
+        const existing = await Session.findOne({
+          where: { sessionKey: newKey },
+        });
+        if (!existing) isUnique = true;
+      }
+
+      // Generate unique session name within the same class
+      let newName = `${session.sessionName} (Copy)`;
+      let nameCounter = 1;
+      while (
+        await Session.findOne({
+          where: { sessionName: newName, ClassID: session.ClassID },
+        })
+      ) {
+        nameCounter++;
+        newName = `${session.sessionName} (Copy ${nameCounter})`;
+      }
+
+      const cloned = await Session.create({
+        sessionName: newName,
+        sessionKey: newKey,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        examSet: session.examSet,
+        ClassID: session.ClassID,
+        status: "NOT_STARTED",
+      });
+
+      results.success.push({ originalId: sessionId, clonedSession: cloned });
+    } catch (error) {
+      results.failed.push({
+        sessionId,
+        reason: error.message,
+      });
+    }
+  }
+
+  const httpStatus = results.failed.length === sessionIds.length ? 400
+    : results.failed.length > 0 ? 207
+    : 201;
+
+  return {
+    status: httpStatus,
+    message: `${results.success.length}/${sessionIds.length} sessions cloned`,
+    data: results,
+  };
+}
+
+async function batchExportReport(req) {
+  const { sessionIds } = req.body;
+
+  if (!sessionIds || !Array.isArray(sessionIds) || sessionIds.length === 0) {
+    return {
+      status: 400,
+      message: "sessionIds must be a non-empty array",
+    };
+  }
+
+  const results = { success: [], failed: [] };
+
+  for (const sessionId of sessionIds) {
+    try {
+      const session = await Session.findOne({
+        where: { ID: sessionId },
+        include: [
+          { model: Class, as: "Classes" },
+          { model: Topic, as: "Topic" },
+          {
+            model: SessionParticipant,
+            as: "SessionParticipants",
+          },
+        ],
+      });
+
+      if (!session) {
+        results.failed.push({
+          sessionId,
+          reason: "Session not found",
+        });
+        continue;
+      }
+
+      const participants = session.SessionParticipants || [];
+      if (participants.length === 0) {
+        results.failed.push({
+          sessionId,
+          reason: "No participants found",
+        });
+        continue;
+      }
+
+      const report = {
+        sessionId: session.ID,
+        sessionName: session.sessionName,
+        sessionKey: session.sessionKey,
+        className: session.Classes?.className || null,
+        topicName: session.Topic?.Name || null,
+        status: session.status,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        totalParticipants: participants.length,
+        participants: participants.map((p) => ({
+          participantId: p.ID,
+          userId: p.UserID,
+          grammarVocab: p.GrammarVocab,
+          reading: p.Reading,
+          readingLevel: p.ReadingLevel,
+          listening: p.Listening,
+          listeningLevel: p.ListeningLevel,
+          writing: p.Writing,
+          writingLevel: p.WritingLevel,
+          speaking: p.Speaking,
+          speakingLevel: p.SpeakingLevel,
+          total: p.Total,
+          level: p.Level,
+          isPublished: p.IsPublished,
+        })),
+      };
+
+      results.success.push(report);
+    } catch (error) {
+      results.failed.push({
+        sessionId,
+        reason: error.message,
+      });
+    }
+  }
+
+  const httpStatus = results.failed.length === sessionIds.length ? 400
+    : results.failed.length > 0 ? 207
+    : 200;
+
+  return {
+    status: httpStatus,
+    message: `${results.success.length}/${sessionIds.length} reports generated`,
+    data: results,
+  };
+}
+
 module.exports = {
   getAllSessions,
   getSessionByClass,
@@ -343,4 +569,7 @@ module.exports = {
   removeSession,
   cronStatusAllSessions,
   checkAndRemoveOldAudios,
+  batchUpdateStatus,
+  batchClone,
+  batchExportReport,
 };
