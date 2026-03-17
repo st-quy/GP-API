@@ -14,7 +14,7 @@ const swaggerDefinition = {
     {
       url: process.env.NODE_ENV === 'production' 
         ? `${process.env.DEPLOY_URL}/api`
-        : 'http://localhost:3010/api',
+        : 'https://127.0.0.1:3010/api',
       description: process.env.NODE_ENV === 'production' ? 'Production server' : 'Development server',
     }
   ],
