@@ -4,7 +4,7 @@ FROM node:20.19-alpine AS build
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+RUN if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
 
 COPY . .
 
