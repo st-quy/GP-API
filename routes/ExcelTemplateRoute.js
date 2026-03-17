@@ -8,7 +8,7 @@ const {
 const router = express.Router();
 /**
  * @swagger
- * excel/import-excel:
+ * /excel/import-excel:
  *   post:
  *     summary: Import questions from Excel file
  *     tags:
@@ -67,7 +67,7 @@ router.post("/import-excel", upload.single("file"), handleImportExcel);
 
 /**
  * @swagger
- * excel/export-template:
+ * /excel/export-template:
  *   get:
  *     summary: "Export Test Template"
  *     tags:
