@@ -589,7 +589,7 @@ async function calculatePointForWritingAndSpeaking(req) {
     };
   }
 }
-async function getFullExamReview(sessionParticipantId) {
+async function getFullExamReview(sessionParticipantId, user) {
   try {
     // 1. Lấy thông tin Participant
     const sessionParticipant = await SessionParticipant.findByPk(
@@ -608,6 +608,8 @@ async function getFullExamReview(sessionParticipantId) {
               'startTime',
               'endTime',
               'examSet',
+              'status',
+              'isPublished'
             ],
             include: [{ model: Topic, attributes: ['ID', 'Name'] }],
           },
@@ -617,6 +619,26 @@ async function getFullExamReview(sessionParticipantId) {
 
     if (!sessionParticipant) {
       return { status: 404, message: 'Session participant not found' };
+    }
+
+    if (user && user.role === 'student') {
+      const session = sessionParticipant.Session;
+      const now = new Date();
+      
+      if (sessionParticipant.UserID !== user.id) {
+        return { status: 403, message: 'Unauthorized access to this review.' };
+      }
+
+      if (
+        session.status !== 'COMPLETE' || 
+        !sessionParticipant.IsPublished || 
+        new Date(session.endTime) >= now
+      ) {
+        return { 
+          status: 403, 
+          message: 'Chưa thể xem lại bài làm lúc này. Kỳ thi chưa kết thúc hoặc điểm chưa được công bố.' 
+        };
+      }
     }
 
     // 2. Lấy Topic kèm theo Sections và Parts
