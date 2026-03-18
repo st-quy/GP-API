@@ -299,7 +299,7 @@ async function createQuestionGroup(req) {
 
 async function createSpeakingGroup(req, res) {
   try {
-    const { SkillName, SectionName, parts } = req.body;
+    const { SkillName, SectionName, Description, parts } = req.body;
     const userId = req.user?.userId;
 
     if (!SkillName || !parts || !SectionName) {
@@ -332,7 +332,7 @@ async function createSpeakingGroup(req, res) {
             ID: uuidv4(),
             SkillID: skill.ID,
             Name: SectionName,
-            Description: null,
+            Description: Description?.trim() || null,
           },
           { transaction: t }
         );
@@ -482,7 +482,7 @@ async function createSpeakingGroup(req, res) {
 
 async function createReadingGroup(req, res) {
   try {
-    const { SkillName, SectionName, parts } = req.body;
+    const { SkillName, SectionName, Description, parts } = req.body;
     const userId = req.user?.userId;
 
     if (!SkillName || !parts || !SectionName) {
@@ -515,7 +515,7 @@ async function createReadingGroup(req, res) {
         ID: uuidv4(),
         SkillID: skill.ID,
         Name: SectionName,
-        Description: null,
+        Description: Description?.trim() || null,
       });
     }
 
@@ -644,7 +644,7 @@ async function createWritingGroup(req, res) {
   const t = await sequelize.transaction();
 
   try {
-    const { SectionName, parts } = req.body;
+    const { SectionName, Description, parts } = req.body;
     const userId = req.user?.userId;
 
     if (!SectionName || !parts) {
@@ -678,7 +678,7 @@ async function createWritingGroup(req, res) {
           ID: uuidv4(),
           SkillID: skill.ID,
           Name: SectionName,
-          Description: null,
+          Description: Description?.trim() || null,
           CreatedBy: userId,
           UpdatedBy: userId,
         },
@@ -888,7 +888,7 @@ async function createWritingGroup(req, res) {
 
 async function createListeningGroup(req, res) {
   try {
-    const { SkillName, SectionName, parts } = req.body;
+    const { SkillName, SectionName, Description, parts } = req.body;
     const userId = req.user?.userId;
 
     if (!SkillName || !SectionName || !parts) {
@@ -928,7 +928,7 @@ async function createListeningGroup(req, res) {
             ID: uuidv4(),
             SkillID: skill.ID,
             Name: SectionName,
-            Description: null,
+            Description: Description?.trim() || null,
             CreatedBy: userId,
             UpdatedBy: userId,
           },
@@ -1085,7 +1085,7 @@ async function createListeningGroup(req, res) {
 
 async function createGrammarAndVocabGroup(req, res) {
   try {
-    const { SkillName, SectionName, parts } = req.body;
+    const { SkillName, SectionName, Description, parts } = req.body;
     const userId = req.user?.userId;
 
     if (!SkillName || !SectionName || !parts) {
@@ -1125,7 +1125,7 @@ async function createGrammarAndVocabGroup(req, res) {
             ID: uuidv4(),
             SkillID: skill.ID,
             Name: SectionName,
-            Description: null,
+            Description: Description?.trim() || null,
             CreatedBy: userId,
             UpdatedBy: userId,
           },
@@ -1540,6 +1540,7 @@ async function getQuestionGroupDetail(req) {
     const payload = {
       SectionID: section.ID,
       SectionName: section.Name,
+      Description: section.Description || '',
     };
 
     // ================================
@@ -1668,13 +1669,13 @@ async function updateSpeakingGroup(sectionId, payload) {
   const t = await sequelize.transaction();
 
   try {
-    const { SectionName, parts } = payload;
+    const { SectionName, Description, parts } = payload;
 
     /** =============================
      * 1. Update Section
      * ============================= */
     await Section.update(
-      { Name: SectionName },
+      { Name: SectionName, Description: Description?.trim() || null },
       { where: { ID: sectionId }, transaction: t }
     );
 
@@ -1796,7 +1797,7 @@ async function updateReadingGroup(sectionId, payload) {
   const t = await sequelize.transaction();
 
   try {
-    const { SectionName, parts } = payload;
+    const { SectionName, Description, parts } = payload;
 
     if (!SectionName || !Array.isArray(parts)) {
       throw new Error('SectionName and parts are required');
@@ -1804,7 +1805,7 @@ async function updateReadingGroup(sectionId, payload) {
 
     // 1) Update SECTION
     await Section.update(
-      { Name: SectionName },
+      { Name: SectionName, Description: Description?.trim() || null },
       { where: { ID: sectionId }, transaction: t }
     );
 
@@ -1964,7 +1965,7 @@ async function updateWritingGroup(sectionId, payload) {
   const t = await sequelize.transaction();
 
   try {
-    const { SectionName, parts } = payload;
+    const { SectionName, Description, parts } = payload;
     const userId = payload.userId;
 
     if (!SectionName || !parts) {
@@ -1975,7 +1976,7 @@ async function updateWritingGroup(sectionId, payload) {
     // 1) UPDATE SECTION
     // ================================================
     await Section.update(
-      { Name: SectionName },
+      { Name: SectionName, Description: Description?.trim() || null },
       { where: { ID: sectionId }, transaction: t }
     );
 
@@ -2178,7 +2179,7 @@ async function updateListeningGroup(sectionId, payload) {
   const t = await sequelize.transaction();
 
   try {
-    const { SkillName, SectionName, parts } = payload;
+    const { SkillName, SectionName, Description, parts } = payload;
     const userId = payload.userId;
 
     if (!SkillName || !SectionName || !parts) {
@@ -2212,7 +2213,11 @@ async function updateListeningGroup(sectionId, payload) {
     // 3) UPDATE SECTION
     // =====================================================
     await section.update(
-      { Name: SectionName, UpdatedBy: userId },
+      {
+        Name: SectionName,
+        Description: Description?.trim() || null,
+        UpdatedBy: userId,
+      },
       { transaction: t }
     );
 
@@ -2347,7 +2352,7 @@ async function updateGrammarAndVocabGroup(sectionId, payload) {
   const t = await sequelize.transaction();
 
   try {
-    const { SkillName, SectionName, parts } = payload;
+    const { SkillName, SectionName, Description, parts } = payload;
     const userId = payload.userId;
 
     if (!SkillName || !SectionName || !parts) {
@@ -2387,6 +2392,7 @@ async function updateGrammarAndVocabGroup(sectionId, payload) {
     await section.update(
       {
         Name: SectionName,
+        Description: Description?.trim() || null,
         UpdatedBy: userId,
       },
       { transaction: t }
