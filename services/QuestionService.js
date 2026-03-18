@@ -322,7 +322,7 @@ async function createSpeakingGroup(req, res) {
          1) CREATE / GET SECTION (INSIDE TRANSACTION)
       ===================================================== */
       let section = await Section.findOne(
-        { where: { Name: SectionName } },
+        { where: { Name: SectionName, SkillID: skill.ID } },
         { transaction: t }
       );
 
@@ -507,7 +507,7 @@ async function createReadingGroup(req, res) {
     // 1) FIND OR CREATE SECTION
     // -----------------------------------------
     let section = await Section.findOne({
-      where: { Name: SectionName },
+      where: { Name: SectionName, SkillID: skill.ID },
     });
 
     if (!section) {
@@ -668,7 +668,7 @@ async function createWritingGroup(req, res) {
     // 1) CREATE SECTION if not exists
     // ================================================
     let section = await Section.findOne(
-      { where: { Name: SectionName } },
+      { where: { Name: SectionName, SkillID: skill.ID } },
       { transaction: t }
     );
 
@@ -918,7 +918,7 @@ async function createListeningGroup(req, res) {
       // 1) Create / Update Section
       // =====================================================
       let section = await Section.findOne(
-        { where: { Name: SectionName } },
+        { where: { Name: SectionName, SkillID: skill.ID } },
         { transaction: t }
       );
 
@@ -1115,7 +1115,7 @@ async function createGrammarAndVocabGroup(req, res) {
       // 1) CREATE / FIND SECTION
       // =======================================
       let section = await Section.findOne(
-        { where: { Name: SectionName } },
+        { where: { Name: SectionName, SkillID: skill.ID } },
         { transaction: t }
       );
 
