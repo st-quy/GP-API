@@ -14,7 +14,7 @@ async function findAll(req) {
     }
     if (searchName) {
       whereCondition.className = {
-        [Op.like]: `%${searchName}%`,
+        [Op.iLike]: `%${searchName}%`,
       };
     }
 
@@ -62,15 +62,22 @@ async function findAll(req) {
 
 async function createClass(req) {
   try {
-    const { className, userId } = req.body;
+    let { className, userId } = req.body;
 
     if (!className || !userId) {
       throw new Error('Class name and user ID are required');
     }
 
-    // 1. Check class name trùng
+    // Normalize: Trim and collapse multiple spaces into one
+    className = className.trim().replace(/\s+/g, ' ');
+
+    // 1. Check class name trùng (Case-insensitive)
     const existingClass = await Class.findOne({
-      where: { className },
+      where: sequelize.where(
+        sequelize.fn('LOWER', sequelize.col('className')),
+        '=',
+        className.toLowerCase()
+      ),
     });
 
     if (existingClass) {
@@ -150,11 +157,32 @@ async function getClassDetailById(req) {
 
 async function updateClass(req) {
   try {
-    const { className } = req.body;
+    let { className } = req.body;
     const { classId } = req.params;
 
     if (!className) {
       throw new Error('Class name is required');
+    }
+
+    // Normalize: Trim and collapse multiple spaces into one
+    className = className.trim().replace(/\s+/g, ' ');
+
+    // Check if another class already has this name (Case-insensitive)
+    const existingClass = await Class.findOne({
+      where: {
+        [Op.and]: [
+          sequelize.where(
+            sequelize.fn('LOWER', sequelize.col('className')),
+            '=',
+            className.toLowerCase()
+          ),
+          { ID: { [Op.ne]: classId } }
+        ]
+      },
+    });
+
+    if (existingClass) {
+      throw new Error('Class name already exists');
     }
 
     const [updatedRows] = await Class.update(
