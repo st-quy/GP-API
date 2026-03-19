@@ -200,6 +200,15 @@ async function suggestLevels(score, skillName) {
       else if (score < 48) return level.B2;
       else return level.C;
     }
+
+    if (skillName === 'GRAMMAR AND VOCABULARY') {
+      if (score < 8) return level.X;
+      else if (score < 16) return level.A1;
+      else if (score < 26) return level.A2;
+      else if (score < 38) return level.B1;
+      else if (score < 46) return level.B2;
+      else return level.C;
+    }
   } catch (error) {
     throw new Error(error.message);
   }
@@ -241,11 +250,15 @@ async function calculateTotalPoints(
 
     const totalPoints = listening + reading + writing + speaking;
 
-    const levelSkill = await suggestLevels(skillScore, skillName.toUpperCase());
+    const lookupName = (skillName === 'GrammarVocab') ? 'GRAMMAR AND VOCABULARY' : skillName.toUpperCase();
+    const levelSkill = await suggestLevels(skillScore, lookupName);
 
-    if (skillName === skillMapping['GRAMMAR AND VOCABULARY']) {
+    if (skillName === 'GrammarVocab' || skillName === skillMapping['GRAMMAR AND VOCABULARY']) {
       await SessionParticipant.update(
-        { [skillName]: skillScore },
+        { 
+          [skillName]: skillScore,
+          GrammarVocabLevel: levelSkill
+        },
         { where: { ID: sessionParticipantId } }
       );
     } else {
