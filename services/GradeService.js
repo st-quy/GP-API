@@ -9,6 +9,7 @@ const {
   Part,
   Section,
   Skill,
+  sequelize,
 } = require('../models'); // Ensure models are imported
 const {
   skillMapping,
@@ -387,25 +388,30 @@ async function calculatePoints(req) {
         logItem.studentAnswer = studentAnswers;
         logItem.correctAnswer = correctAnswers;
 
-        // Check if ALL pairs match (All-or-Nothing logic to match checkCorrectness)
-        const allMatched = correctAnswers.every((correct) => {
-          return studentAnswers.some(
+        let matchedCount = 0;
+        correctAnswers.forEach((correct) => {
+          const matched = studentAnswers.find(
             (s) =>
               s.left.trim() === correct.left.trim() &&
               s.right.trim() === correct.right.trim()
           );
+          if (matched) {
+            matchedCount++;
+          }
         });
 
-        if (allMatched && correctAnswers.length > 0) {
+        // Award points only if ALL matched (All-or-nothing logic)
+        if (matchedCount === correctAnswers.length && correctAnswers.length > 0) {
           isCorrect = true;
           totalPoints += pointPerQuestion;
+          logItem.pointAdded = pointPerQuestion;
         }
-        }
+      }
 
-        // ================================
-        // ORDERING
-        // ================================
-        else if (type === 'ordering') {
+      // ================================
+      // ORDERING
+      // ================================
+      else if (type === 'ordering') {
         const studentAnswers = JSON.parse(rawStudentAnswer).sort(
           (a, b) => a.value - b.value
         );
@@ -414,20 +420,23 @@ async function calculatePoints(req) {
         logItem.studentAnswer = studentAnswers;
         logItem.correctAnswer = correctAnswers;
 
-        // Check if ALL items are in correct order (All-or-Nothing)
-        let allCorrect = studentAnswers.length === correctAnswers.length;
-        if (allCorrect) {
-          for (let i = 0; i < correctAnswers.length; i++) {
-            if (studentAnswers[i].key.trim() !== correctAnswers[i].key.trim()) {
-              allCorrect = false;
-              break;
-            }
+        let matchedCount = 0;
+        const minLength = Math.min(
+          studentAnswers.length,
+          correctAnswers.length
+        );
+
+        for (let i = 0; i < minLength; i++) {
+          if (studentAnswers[i].key.trim() === correctAnswers[i].key.trim()) {
+            matchedCount++;
           }
         }
 
-        if (allCorrect && correctAnswers.length > 0) {
+        // Award points only if ALL items are in correct order
+        if (matchedCount === correctAnswers.length && correctAnswers.length > 0) {
           isCorrect = true;
           totalPoints += pointPerQuestion;
+          logItem.pointAdded = pointPerQuestion;
         }
       } else if (type === 'dropdown-list') {
         let studentAnswers = [];
@@ -464,21 +473,27 @@ async function calculatePoints(req) {
         logItem.studentAnswer = studentAnswers;
         logItem.correctAnswer = correctList;
 
+        let questionPoints = 0;
         correctList.forEach((q) => {
           const stu = studentAnswers.find((x) => x.ID === q.ID);
 
           if (stu && stu.answer.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase()) {
             isCorrect = true;
-            totalPoints += pointPerQuestion;
+            questionPoints += pointPerQuestion;
           }
         });
+        totalPoints += questionPoints;
+        logItem.pointAdded = questionPoints;
       }
 
       // ================================
       // Finalize tracking
       // ================================
       logItem.result = isCorrect ? 'correct' : 'incorrect';
-      logItem.pointAdded = isCorrect ? pointPerQuestion : 0;
+      // Only set pointAdded if it hasn't been specifically set by a complex handler above
+      if (logItem.pointAdded === 0) {
+        logItem.pointAdded = isCorrect ? pointPerQuestion : 0;
+      }
 
       logs.push(logItem);
     });
