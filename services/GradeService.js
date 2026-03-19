@@ -288,9 +288,6 @@ async function calculatePoints(req) {
       };
     }
 
-    const pointPerQuestion =
-      pointsPerQuestion[formattedSkillName.toLowerCase()] || 1;
-
     const sessionParticipant = await SessionParticipant.findByPk(
       sessionParticipantId,
       {
@@ -312,22 +309,71 @@ async function calculatePoints(req) {
             {
               model: Part,
               as: 'Part',
-              include: [{ model: Skill, as: 'Skill' }],
+              include: [{ model: Skill, as: 'Skill', where: { Name: skillName.toUpperCase() } }],
             },
           ],
         },
       ],
     });
 
-    if (answers.length === 0) {
-      return { status: 404, message: 'No answers found for the student' };
+    // BUG_CM059: We need to know the TOTAL number of questions for this skill in the topic
+    // to calculate the score out of 50 correctly.
+    const allQuestionsInSkill = await Question.findAll({
+      include: [
+        {
+          model: Part,
+          as: 'Part',
+          required: true,
+          include: [{
+            model: Skill,
+            as: 'Skill',
+            where: { Name: skillName.toUpperCase() },
+            required: true
+          }],
+          include: [{
+            model: Section,
+            as: 'Sections',
+            required: true,
+            include: [{
+              model: Topic,
+              as: 'Topics',
+              where: { ID: sessionParticipant.Session.examSet },
+              required: true
+            }]
+          }]
+        }
+      ]
+    });
+    
+    // Simplification: Let's just find all parts for this topic and skill
+    const parts = await Part.findAll({
+      include: [
+        { model: Skill, as: 'Skill', where: { Name: skillName.toUpperCase() }, required: true },
+        {
+          model: Section,
+          as: 'Sections',
+          required: true,
+          include: [{ model: Topic, as: 'Topics', where: { ID: sessionParticipant.Session.examSet }, required: true }]
+        },
+        { model: Question, as: 'Questions' }
+      ]
+    });
+
+    let totalQuestionsCount = 0;
+    parts.forEach(p => {
+      totalQuestionsCount += (p.Questions?.length || 0);
+    });
+
+    if (totalQuestionsCount === 0) {
+      // Fallback to constants if topic structure is missing questions
+      totalQuestionsCount = formattedSkillName.toLowerCase() === 'reading' ? 29 : 25;
     }
 
-    let totalPoints = 0;
+    let correctCount = 0;
     const logs = [];
 
     answers.forEach((answer) => {
-      if (!answer.AnswerText) return;
+      if (!answer.AnswerText || !answer.Question?.Part?.Skill) return;
 
       const questionId = answer.QuestionID;
       const type = answer.Question.Type;
@@ -349,143 +395,64 @@ async function calculatePoints(req) {
       };
 
       // ================================
-      // MULTIPLE CHOICE
+      // GRADING LOGIC
       // ================================
-      if (type === 'multiple-choice') {
-        const stu = rawStudentAnswer.trim();
-        const cor = correctContent.correctAnswer.trim();
-
-        logItem.studentAnswer = stu;
-        logItem.correctAnswer = cor;
-
-        if (stu === cor) {
-          isCorrect = true;
-          totalPoints += pointPerQuestion;
+      try {
+        if (type === 'multiple-choice') {
+          const stu = rawStudentAnswer.trim().toLowerCase();
+          const cor = correctContent.correctAnswer.trim().toLowerCase();
+          logItem.studentAnswer = stu;
+          logItem.correctAnswer = cor;
+          if (stu === cor) isCorrect = true;
+        } 
+        else if (type === 'matching') {
+          const studentAns = JSON.parse(rawStudentAnswer);
+          const correctAns = correctContent.correctAnswer;
+          correctAns.forEach((c) => {
+            const matched = studentAns.find(
+              (s) => s.left.trim() === c.left.trim() && s.right.trim() === c.right.trim()
+            );
+            if (matched) correctCount++; // Increment count instead of points
+          });
+          // For matching, we handle isCorrect differently or just track total correct
         }
-      }
-
-      // ================================
-      // MATCHING
-      // ================================
-      else if (type === 'matching') {
-        const studentAnswers = JSON.parse(rawStudentAnswer);
-        const correctAnswers = correctContent.correctAnswer;
-
-        logItem.studentAnswer = studentAnswers;
-        logItem.correctAnswer = correctAnswers;
-
-        correctAnswers.forEach((correct) => {
-          const matched = studentAnswers.find(
-            (s) =>
-              s.left.trim() === correct.left.trim() &&
-              s.right.trim() === correct.right.trim()
-          );
-          if (matched) {
-            isCorrect = true;
-            totalPoints += pointPerQuestion;
-          }
-        });
-      }
-
-      // ================================
-      // ORDERING
-      // ================================
-      else if (type === 'ordering') {
-        const studentAnswers = JSON.parse(rawStudentAnswer).sort(
-          (a, b) => a.value - b.value
-        );
-        const correctAnswers = correctContent.correctAnswer;
-
-        logItem.studentAnswer = studentAnswers;
-        logItem.correctAnswer = correctAnswers;
-
-        const minLength = Math.min(
-          studentAnswers.length,
-          correctAnswers.length
-        );
-
-        for (let i = 0; i < minLength; i++) {
-          if (studentAnswers[i].key.trim() === correctAnswers[i].key.trim()) {
-            isCorrect = true;
-            totalPoints += pointPerQuestion;
+        else if (type === 'ordering') {
+          const studentAns = JSON.parse(rawStudentAnswer).sort((a, b) => a.value - b.value);
+          const correctAns = correctContent.correctAnswer;
+          const minLen = Math.min(studentAns.length, correctAns.length);
+          for (let i = 0; i < minLen; i++) {
+            if (studentAns[i].key.trim() === correctAns[i].key.trim()) correctCount++;
           }
         }
-      } else if (type === 'dropdown-list') {
-        let studentAnswers = [];
-        try {
-          studentAnswers = JSON.parse(answer.AnswerText);
-        } catch (e) {
-          console.error('Error parsing dropdown answer:', e);
+        else if (type === 'dropdown-list') {
+          const studentAns = JSON.parse(rawStudentAnswer);
+          const correctAns = correctContent.correctAnswer.filter(item => item.key !== '0');
+          correctAns.forEach((c) => {
+            const match = studentAns.find(sa => String(sa.key).trim().split('.')[0] === String(c.key).trim().split('.')[0]);
+            if (match && String(match.value).trim() === String(c.value).trim()) correctCount++;
+          });
         }
-        const correctAnswers = correctContent.correctAnswer.filter(
-          (item) => item.key !== '0'
-        );
+        else if (type === 'listening-questions-group') {
+          const studentAns = JSON.parse(rawStudentAnswer);
+          const correctList = correctContent.groupContent.listContent;
+          correctList.forEach((q) => {
+            const stu = studentAns.find(x => x.ID === q.ID);
+            if (stu && stu.answer.trim() === q.correctAnswer.trim()) correctCount++;
+          });
+        }
 
-        const normalizeKey = (k) => {
-          return String(k).trim().split('.')[0];
-        };
-        correctAnswers.forEach((correct) => {
-          const correctKey = normalizeKey(correct.key);
-
-          const match = studentAnswers.find(
-            (sa) => normalizeKey(sa.key) === correctKey
-          );
-
-          if (
-            match &&
-            String(match.value).trim() === String(correct.value).trim()
-          ) {
-            totalPoints += pointPerQuestion;
-          }
-        });
-      } else if (type === 'listening-questions-group') {
-        const studentAnswers = JSON.parse(answer.AnswerText);
-        const correctList = correctContent.groupContent.listContent;
-
-        correctList.forEach((question) => {
-          const studentAnswer = studentAnswers.find(
-            (ans) => ans.ID === question.ID
-          );
-          if (
-            studentAnswer &&
-            studentAnswer.answer === question.correctAnswer
-          ) {
-            isCorrect = true;
-            totalPoints += pointPerQuestion;
-          }
-        });
+        if (isCorrect) correctCount++;
+      } catch (e) {
+        console.error('Grading error for question', questionId, e);
       }
 
-      // ================================
-      // LISTENING GROUP
-      // ================================
-      else if (type === 'listening-questions-group') {
-        const studentAnswers = JSON.parse(rawStudentAnswer);
-        const correctList = correctContent.groupContent.listContent;
-
-        logItem.studentAnswer = studentAnswers;
-        logItem.correctAnswer = correctList;
-
-        correctList.forEach((q) => {
-          const stu = studentAnswers.find((x) => x.ID === q.ID);
-
-          if (stu && stu.answer.trim() === q.correctAnswer.trim()) {
-            isCorrect = true;
-            totalPoints += pointPerQuestion;
-          }
-        });
-      }
-
-      // ================================
-      // Finalize tracking
-      // ================================
       logItem.result = isCorrect ? 'correct' : 'incorrect';
-      logItem.pointAdded = isCorrect ? pointPerQuestion : 0;
-
       logs.push(logItem);
     });
 
-    totalPoints = parseFloat(totalPoints.toFixed(1));
+    // Final point calculation: (Correct / Total) * 50
+    let totalPoints = (correctCount / totalQuestionsCount) * 50;
+    totalPoints = Math.min(50, parseFloat(totalPoints.toFixed(1)));
 
     await calculateTotalPoints(
       sessionParticipantId,
