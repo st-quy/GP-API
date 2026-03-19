@@ -162,18 +162,119 @@ async function createSession(req) {
 async function updateSession(req) {
   try {
     const { sessionId } = req.params;
-    const { sessionName, sessionKey, startTime, endTime, examSet } = req.body;
+    const {
+      sessionName,
+      sessionKey,
+      startTime,
+      endTime,
+      examSet,
+      ClassID,
+      isPublished,
+      minioAudioRemoved
+    } = req.body;
 
-    const session = await Session.update(
-      { sessionName, sessionKey, startTime, endTime, examSet },
-      { where: { ID: sessionId } }
-    );
+    const session = await Session.findByPk(sessionId);
     if (!session) {
       return {
         status: 404,
         message: "Session not found",
       };
     }
+
+    if (session.status === "ON_GOING") {
+      return {
+        status: 403,
+        message: "Cannot edit a session that is currently ON_GOING",
+      };
+    }
+
+    // Validate examSet if provided
+    if (examSet) {
+      const checkExistTopic = await Topic.findByPk(examSet);
+      if (!checkExistTopic) {
+        return {
+          status: 400,
+          message: "Topic (exam set) not found",
+        };
+      }
+    }
+
+    // Validate ClassID if provided
+    if (ClassID) {
+      const checkExistClass = await Class.findByPk(ClassID);
+      if (!checkExistClass) {
+        return {
+          status: 400,
+          message: "Class not found",
+        };
+      }
+    }
+
+    // Check unique sessionKey (excluding current session)
+    if (sessionKey && sessionKey !== session.sessionKey) {
+      const duplicate = await Session.findOne({
+        where: { sessionKey, ID: { [Op.ne]: sessionId } },
+      });
+      if (duplicate) {
+        return {
+          status: 400,
+          message: `Session with key ${sessionKey} already exists`,
+        };
+      }
+    }
+
+    // Check unique sessionName within the same class (excluding current session)
+    const resolvedClassID = ClassID || session.ClassID;
+    const resolvedSessionName = sessionName || session.sessionName;
+    if (sessionName && sessionName !== session.sessionName) {
+      const duplicate = await Session.findOne({
+        where: {
+          sessionName: resolvedSessionName,
+          ClassID: resolvedClassID,
+          ID: { [Op.ne]: sessionId },
+        },
+      });
+      if (duplicate) {
+        return {
+          status: 400,
+          message: `Session with name ${resolvedSessionName} already exists in this class`,
+        };
+      }
+    }
+
+    // Validate and recalculate status when time fields change
+    const resolvedStartTime = startTime ? new Date(startTime) : session.startTime;
+    const resolvedEndTime = endTime ? new Date(endTime) : session.endTime;
+    if (resolvedStartTime >= resolvedEndTime) {
+      return {
+        status: 400,
+        message: "Start time must be before end time",
+      };
+    }
+
+    const now = new Date();
+    let newStatus;
+    if (resolvedStartTime > now) {
+      newStatus = "NOT_STARTED";
+    } else if (resolvedEndTime > now) {
+      newStatus = "ON_GOING";
+    } else {
+      newStatus = "COMPLETE";
+    }
+
+    const updateFields = {
+      ...(sessionName !== undefined && { sessionName }),
+      ...(sessionKey !== undefined && { sessionKey }),
+      ...(startTime !== undefined && { startTime }),
+      ...(endTime !== undefined && { endTime }),
+      ...(examSet !== undefined && { examSet }),
+      ...(ClassID !== undefined && { ClassID }),
+      ...(isPublished !== undefined && { isPublished }),
+      ...(minioAudioRemoved !== undefined && { minioAudioRemoved }),
+      status: newStatus,
+    };
+
+    await session.update(updateFields);
 
     return {
       status: 200,
