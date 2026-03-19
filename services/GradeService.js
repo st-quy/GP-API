@@ -587,7 +587,11 @@ async function calculatePointForWritingAndSpeaking(req) {
     };
   }
 }
+<<<<<<< HEAD
 async function getFullExamReview(sessionParticipantId, currentUser) {
+=======
+async function getFullExamReview(sessionParticipantId, user) {
+>>>>>>> fix/APTIS-184
   try {
     // 1. Lấy thông tin Participant
     const sessionParticipant = await SessionParticipant.findByPk(
@@ -606,6 +610,8 @@ async function getFullExamReview(sessionParticipantId, currentUser) {
               'startTime',
               'endTime',
               'examSet',
+              'status',
+              'isPublished'
             ],
             include: [{ model: Topic, attributes: ['ID', 'Name'] }],
           },
@@ -617,9 +623,30 @@ async function getFullExamReview(sessionParticipantId, currentUser) {
       return { status: 404, message: 'Session participant not found' };
     }
 
+<<<<<<< HEAD
     // Ownership check: Student can only see their own review
     if (currentUser.role === 'student' && currentUser.ID !== sessionParticipant.UserID) {
       return { status: 403, message: 'Forbidden: You can only view your own exam review' };
+=======
+    if (user && user.role === 'student') {
+      const session = sessionParticipant.Session;
+      const now = new Date();
+      
+      if (sessionParticipant.UserID !== user.id) {
+        return { status: 403, message: 'Unauthorized access to this review.' };
+      }
+
+      if (
+        session.status !== 'COMPLETE' || 
+        !sessionParticipant.IsPublished || 
+        new Date(session.endTime) >= now
+      ) {
+        return { 
+          status: 403, 
+          message: 'Chưa thể xem lại bài làm lúc này. Kỳ thi chưa kết thúc hoặc điểm chưa được công bố.' 
+        };
+      }
+>>>>>>> fix/APTIS-184
     }
 
     // 2. Lấy Topic kèm theo Sections và Parts
