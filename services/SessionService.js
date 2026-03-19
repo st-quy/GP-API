@@ -2,10 +2,16 @@ const { Sequelize, Op } = require("sequelize");
 const cron = require("node-cron");
 const { Session, SessionParticipant, Class, Topic } = require("../models");
 const { removeMinIOAudio } = require("./StudentAnswerService");
+const { SESSION_STATUS } = require("../helpers/constants");
 
 async function getAllSessions(req) {
   try {
     const sessions = await Session.findAll({
+      where: {
+        status: {
+          [Op.ne]: SESSION_STATUS.ARCHIVED,
+        },
+      },
       include: [
         {
           model: Class,
@@ -245,10 +251,57 @@ async function removeSession(req) {
   }
 }
 
+async function archiveSession(req) {
+  try {
+    const { sessionId } = req.params;
+
+    const session = await Session.findByPk(sessionId);
+    if (!session) {
+      return {
+        status: 404,
+        message: "Session not found",
+      };
+    }
+
+    const participantCount = await SessionParticipant.count({
+      where: { SessionID: sessionId },
+    });
+
+    if (participantCount > 0) {
+      // If there are participants, change status to ARCHIVED
+      await Session.update(
+        { status: SESSION_STATUS.ARCHIVED },
+        { where: { ID: sessionId } }
+      );
+      return {
+        status: 200,
+        message: "Session has participants, moved to ARCHIVED status instead of deleting.",
+      };
+    } else {
+      // If no participants, delete the session
+      await Session.destroy({
+        where: { ID: sessionId },
+      });
+      return {
+        status: 200,
+        message: "Session deleted successfully because it has no participants.",
+      };
+    }
+  } catch (error) {
+    throw new Error(`Error archiving session: ${error.message}`);
+  }
+}
+
 async function cronStatusAllSessions() {
   try {
     const now = new Date();
-    const sessions = await Session.findAll();
+    const sessions = await Session.findAll({
+      where: {
+        status: {
+          [Op.ne]: SESSION_STATUS.ARCHIVED,
+        },
+      },
+    });
 
     for (const session of sessions) {
       let newStatus;
@@ -341,6 +394,7 @@ module.exports = {
   updateSession,
   getSessionDetailById,
   removeSession,
+  archiveSession,
   cronStatusAllSessions,
   checkAndRemoveOldAudios,
 };

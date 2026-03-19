@@ -4,6 +4,12 @@ module.exports = {
     APPROVED: 'approved',
     REJECTED: 'rejected',
   },
+  SESSION_STATUS: {
+    NOT_STARTED: 'NOT_STARTED',
+    ON_GOING: 'ON_GOING',
+    COMPLETE: 'COMPLETE',
+    ARCHIVED: 'ARCHIVED',
+  },
   TOPIC_STATUS: {
     APPROVED: 'approved',
     REJECTED: 'rejected',
