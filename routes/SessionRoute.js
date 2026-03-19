@@ -5,6 +5,7 @@ const {
   getAllSessionsByClass,
   createSession,
   updateSession,
+  updateSessionStatus,
   getSessionDetailById,
   removeSession,
   generateSessionKey,
@@ -44,7 +45,7 @@ const {
  *           description: The exam set associated with the session
  *         status:
  *           type: string
- *           enum: [NOT_STARTED, ON_GOING, COMPLETE]
+ *           enum: [NOT_STARTED, ON_GOING, COMPLETE, DRAFT, PUBLISHED, ARCHIVED, DELETED]
  *           description: The status of the session
  *         ClassID:
  *           type: string
@@ -184,6 +185,44 @@ router.get("/", getAllSessionsByClass);
  *         description: Internal server error
  */
 router.post("/", createSession);
+
+/**
+ * @swagger
+ * /sessions/{sessionId}/status:
+ *   patch:
+ *     summary: Update session status with transition validation
+ *     tags: [Session]
+ *     parameters:
+ *       - in: path
+ *         name: sessionId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: The ID of the session
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - status
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [NOT_STARTED, ON_GOING, COMPLETE, DRAFT, PUBLISHED, ARCHIVED, DELETED]
+ *                 description: The new status to transition to
+ *     responses:
+ *       200:
+ *         description: Session status updated successfully
+ *       400:
+ *         description: Invalid status transition
+ *       404:
+ *         description: Session not found
+ *       500:
+ *         description: Internal server error
+ */
+router.patch("/:sessionId/status", updateSessionStatus);
 
 /**
  * @swagger

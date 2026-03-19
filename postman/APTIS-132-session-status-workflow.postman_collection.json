@@ -1,0 +1,329 @@
+{
+  "info": {
+    "name": "APTIS-132 Session Status Workflow",
+    "_postman_id": "aptis-132-session-status",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://localhost:3010/api"
+    },
+    {
+      "key": "sessionId",
+      "value": "17e76c71-2858-4708-baba-6d31fbf8d9b6"
+    }
+  ],
+  "item": [
+    {
+      "name": "Test 1: COMPLETE → PUBLISHED (valid)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/sessions/{{sessionId}}/status",
+          "host": ["{{baseUrl}}"],
+          "path": ["sessions", "{{sessionId}}", "status"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"status\": \"PUBLISHED\" }"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Status is PUBLISHED', () => {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.data.status).to.eql('PUBLISHED');",
+              "  pm.expect(json.message).to.include('COMPLETE to PUBLISHED');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test 2: PUBLISHED → DRAFT (invalid)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/sessions/{{sessionId}}/status",
+          "host": ["{{baseUrl}}"],
+          "path": ["sessions", "{{sessionId}}", "status"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"status\": \"DRAFT\" }"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 400', () => pm.response.to.have.status(400));",
+              "pm.test('Invalid transition message', () => {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.message).to.include('Cannot transition from PUBLISHED to DRAFT');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test 3: PUBLISHED → ARCHIVED (valid)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/sessions/{{sessionId}}/status",
+          "host": ["{{baseUrl}}"],
+          "path": ["sessions", "{{sessionId}}", "status"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"status\": \"ARCHIVED\" }"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Status is ARCHIVED', () => {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.data.status).to.eql('ARCHIVED');",
+              "  pm.expect(json.message).to.include('PUBLISHED to ARCHIVED');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test 4: ARCHIVED → PUBLISHED (valid)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/sessions/{{sessionId}}/status",
+          "host": ["{{baseUrl}}"],
+          "path": ["sessions", "{{sessionId}}", "status"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"status\": \"PUBLISHED\" }"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Status is PUBLISHED', () => {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.data.status).to.eql('PUBLISHED');",
+              "  pm.expect(json.message).to.include('ARCHIVED to PUBLISHED');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test 5: PUBLISHED → DELETED (valid)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/sessions/{{sessionId}}/status",
+          "host": ["{{baseUrl}}"],
+          "path": ["sessions", "{{sessionId}}", "status"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"status\": \"DELETED\" }"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Status is DELETED', () => {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.data.status).to.eql('DELETED');",
+              "  pm.expect(json.message).to.include('PUBLISHED to DELETED');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test 6: DELETED → PUBLISHED (dead end)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/sessions/{{sessionId}}/status",
+          "host": ["{{baseUrl}}"],
+          "path": ["sessions", "{{sessionId}}", "status"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"status\": \"PUBLISHED\" }"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 400', () => pm.response.to.have.status(400));",
+              "pm.test('Dead end message', () => {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.message).to.include('Allowed transitions: none');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test 7: Invalid status value (BANANA)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/sessions/{{sessionId}}/status",
+          "host": ["{{baseUrl}}"],
+          "path": ["sessions", "{{sessionId}}", "status"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"status\": \"BANANA\" }"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 400', () => pm.response.to.have.status(400));",
+              "pm.test('Invalid status message', () => {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.message).to.include('Invalid status');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test 8: Session not found",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/sessions/00000000-0000-0000-0000-000000000000/status",
+          "host": ["{{baseUrl}}"],
+          "path": ["sessions", "00000000-0000-0000-0000-000000000000", "status"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"status\": \"DRAFT\" }"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 404', () => pm.response.to.have.status(404));",
+              "pm.test('Not found message', () => {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.message).to.eql('Session not found');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test 9: Missing status field",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/sessions/{{sessionId}}/status",
+          "host": ["{{baseUrl}}"],
+          "path": ["sessions", "{{sessionId}}", "status"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 400', () => pm.response.to.have.status(400));",
+              "pm.test('Missing status message', () => {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.message).to.eql('status is required');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Restore: Reset to COMPLETE (cleanup)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/sessions/{{sessionId}}/status",
+          "host": ["{{baseUrl}}"],
+          "path": ["sessions", "{{sessionId}}", "status"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"status\": \"COMPLETE\" }"
+        }
+      }
+    }
+  ]
+}
