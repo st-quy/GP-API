@@ -439,27 +439,6 @@ async function calculatePoints(req) {
           }
         });
       } else if (type === 'listening-questions-group') {
-        const studentAnswers = JSON.parse(answer.AnswerText);
-        const correctList = correctContent.groupContent.listContent;
-
-        correctList.forEach((question) => {
-          const studentAnswer = studentAnswers.find(
-            (ans) => ans.ID === question.ID
-          );
-          if (
-            studentAnswer &&
-            studentAnswer.answer === question.correctAnswer
-          ) {
-            isCorrect = true;
-            totalPoints += pointPerQuestion;
-          }
-        });
-      }
-
-      // ================================
-      // LISTENING GROUP
-      // ================================
-      else if (type === 'listening-questions-group') {
         const studentAnswers = JSON.parse(rawStudentAnswer);
         const correctList = correctContent.groupContent.listContent;
 
@@ -469,7 +448,7 @@ async function calculatePoints(req) {
         correctList.forEach((q) => {
           const stu = studentAnswers.find((x) => x.ID === q.ID);
 
-          if (stu && stu.answer.trim() === q.correctAnswer.trim()) {
+          if (stu && stu.answer.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase()) {
             isCorrect = true;
             totalPoints += pointPerQuestion;
           }
