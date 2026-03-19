@@ -142,6 +142,6 @@ router.post("/teacher-grade", calculatePointForWritingAndSpeaking);
  * 500:
  * description: Internal server error
  */
-router.get("/review/:sessionParticipantId", getFullExamReview);
+router.get("/review/:sessionParticipantId", authorize(), getFullExamReview);
 
 module.exports = router;

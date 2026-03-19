@@ -574,7 +574,7 @@ async function calculatePointForWritingAndSpeaking(req) {
     };
   }
 }
-async function getFullExamReview(sessionParticipantId) {
+async function getFullExamReview(sessionParticipantId, currentUser) {
   try {
     // 1. Lấy thông tin Participant
     const sessionParticipant = await SessionParticipant.findByPk(
@@ -602,6 +602,11 @@ async function getFullExamReview(sessionParticipantId) {
 
     if (!sessionParticipant) {
       return { status: 404, message: 'Session participant not found' };
+    }
+
+    // Ownership check: Student can only see their own review
+    if (currentUser.role === 'student' && currentUser.ID !== sessionParticipant.UserID) {
+      return { status: 403, message: 'Forbidden: You can only view your own exam review' };
     }
 
     // 2. Lấy Topic kèm theo Sections và Parts
