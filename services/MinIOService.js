@@ -50,12 +50,20 @@ const policy = {
 
 // Khởi tạo bucket nếu chưa có
 const initializeBucket = async () => {
-  const exists = await minioClient.bucketExists(BUCKET);
-  if (!exists) {
-    await minioClient.makeBucket(BUCKET);
-    await minioClient.setBucketPolicy(BUCKET, JSON.stringify(policy));
-  } else {
-    console.info('MinIO bucket already exists.');
+  try {
+    console.info(`Checking if bucket "${BUCKET}" exists at ${MINIO_HOST}:${MINIO_PORT} (SSL: ${process.env.MINIO_USE_SSL})...`);
+    const exists = await minioClient.bucketExists(BUCKET);
+    if (!exists) {
+      console.info(`Bucket "${BUCKET}" does not exist. Creating...`);
+      await minioClient.makeBucket(BUCKET);
+      await minioClient.setBucketPolicy(BUCKET, JSON.stringify(policy));
+      console.info(`Bucket "${BUCKET}" created and policy set.`);
+    } else {
+      console.info('MinIO bucket already exists.');
+    }
+  } catch (err) {
+    console.error('Error in initializeBucket:', err);
+    throw err;
   }
 };
 
@@ -70,7 +78,13 @@ const buildObjectKey = (folder, originalFileName) => {
 const uploadAudioToMinIO = async (filename) => {
   try {
     const objectKey = buildObjectKey('audio', filename);
-    const uploadUrl = await externalMinioClient.presignedPutObject(BUCKET, objectKey);
+    let uploadUrl = await externalMinioClient.presignedPutObject(BUCKET, objectKey);
+    
+    // Map internal docker host to localhost for browser accessibility (Local Development Only)
+    if (MINIO_HOST === 'minio.local' || process.env.NODE_ENV === 'development') {
+      uploadUrl = uploadUrl.replace('minio.local', '127.0.0.1');
+    }
+
     const fileUrl = `${MINIO_URL_BASE}/${objectKey}`;
 
     return {
@@ -90,7 +104,12 @@ const uploadToMinIO = async (type = 'images', originalFileName) => {
     const objectKey = buildObjectKey(type, originalFileName);
 
     // Có thể truyền thêm expiry (giây) nếu muốn, vd: 60 * 5 = 5 phút
-    const uploadUrl = await externalMinioClient.presignedPutObject(BUCKET, objectKey);
+    let uploadUrl = await externalMinioClient.presignedPutObject(BUCKET, objectKey);
+
+    // Map internal docker host to localhost for browser accessibility (Local Development Only)
+    if (MINIO_HOST === 'minio.local' || process.env.NODE_ENV === 'development') {
+      uploadUrl = uploadUrl.replace('minio.local', '127.0.0.1');
+    }
 
     const fileUrl = `${MINIO_URL_BASE}/${objectKey}`;
 
@@ -134,10 +153,29 @@ const deleteFilesFromMinIO = async (filenamesOrObjectKeys) => {
   }
 };
 
+// Upload directly from server (buffer)
+const uploadBufferToMinIO = async (folder, filename, buffer, mimetype) => {
+  try {
+    const objectKey = buildObjectKey(folder, filename);
+    await minioClient.putObject(BUCKET, objectKey, buffer, {
+      'Content-Type': mimetype,
+    });
+    const fileUrl = `${MINIO_URL_BASE}/${objectKey}`;
+    return {
+      status: 200,
+      data: { fileUrl, objectKey },
+    };
+  } catch (err) {
+    console.error('uploadBufferToMinIO error:', err);
+    throw new Error('Failed to upload file to MinIO');
+  }
+};
+
 module.exports = {
   initializeBucket,
   uploadAudioToMinIO,
-  uploadToMinIO, // 👈 NEW
+  uploadToMinIO,
   deleteFileFromMinIO,
   deleteFilesFromMinIO,
+  uploadBufferToMinIO,
 };
