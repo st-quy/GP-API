@@ -85,15 +85,17 @@ const deleteTopicSectionbyTopicID = async (topicId) => {
   } 
 };
 
-const updateTopicSectionByTopicID = async (topicId, newSectionIds) => {
+const updateTopicSectionByTopicID = async (topicId, data) => {
   try {
+    const { sectionIds, scoreConfig } = data;
     await TopicSection.destroy({ where: { TopicID: topicId } });
 
     const newTopicSections = [];
-    for (const sectionId of newSectionIds) {
+    for (const sectionId of sectionIds) {
       const newTopicSection = await TopicSection.create({
         TopicID: topicId,
         SectionID: sectionId,
+        ScoreConfig: scoreConfig || null // Lưu cấu hình điểm số
       });
       newTopicSections.push(newTopicSection);
     }
