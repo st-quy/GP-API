@@ -9,6 +9,7 @@ const {
   Part,
   Section,
   Skill,
+  sequelize,
 } = require('../models'); // Ensure models are imported
 const {
   skillMapping,
@@ -587,11 +588,7 @@ async function calculatePointForWritingAndSpeaking(req) {
     };
   }
 }
-<<<<<<< HEAD
-async function getFullExamReview(sessionParticipantId, currentUser) {
-=======
 async function getFullExamReview(sessionParticipantId, user) {
->>>>>>> fix/APTIS-184
   try {
     // 1. Lấy thông tin Participant
     const sessionParticipant = await SessionParticipant.findByPk(
@@ -623,11 +620,6 @@ async function getFullExamReview(sessionParticipantId, user) {
       return { status: 404, message: 'Session participant not found' };
     }
 
-<<<<<<< HEAD
-    // Ownership check: Student can only see their own review
-    if (currentUser.role === 'student' && currentUser.ID !== sessionParticipant.UserID) {
-      return { status: 403, message: 'Forbidden: You can only view your own exam review' };
-=======
     if (user && user.role === 'student') {
       const session = sessionParticipant.Session;
       const now = new Date();
@@ -646,11 +638,9 @@ async function getFullExamReview(sessionParticipantId, user) {
           message: 'Chưa thể xem lại bài làm lúc này. Kỳ thi chưa kết thúc hoặc điểm chưa được công bố.' 
         };
       }
->>>>>>> fix/APTIS-184
     }
 
     // 2. Lấy Topic kèm theo Sections và Parts
-    // [FIX] Thêm include Section để lấy dữ liệu đúng cấu trúc
     const topic = await Topic.findByPk(sessionParticipant.Session.examSet, {
       include: [
         {
@@ -734,7 +724,6 @@ async function getFullExamReview(sessionParticipantId, user) {
       return upper.toLowerCase();
     };
 
-    // [FIX] Hàm parse JSON an toàn (Chống crash server)
     const safeParse = (str) => {
       if (typeof str === 'object' && str !== null) return str;
       try {
@@ -744,7 +733,6 @@ async function getFullExamReview(sessionParticipantId, user) {
       }
     };
 
-    // [FIX] Hàm kiểm tra đúng sai an toàn
     const checkCorrectness = (
       questionType,
       userAnswerText,
@@ -752,7 +740,6 @@ async function getFullExamReview(sessionParticipantId, user) {
     ) => {
       if (!userAnswerText) return false;
 
-      // Parse user answer an toàn
       let userAnsObj = userAnswerText;
       if (typeof userAnswerText === 'string') {
         userAnsObj = safeParse(userAnswerText);
@@ -814,14 +801,12 @@ async function getFullExamReview(sessionParticipantId, user) {
       }
     };
 
-    // [FIX] Helper xử lý danh sách parts để tái sử dụng
     const processParts = (partsList) => {
       if (!partsList || !Array.isArray(partsList)) return;
 
       partsList.forEach((part) => {
         if (part.Questions && part.Questions.length > 0) {
           part.Questions.forEach((question) => {
-            // Skip nếu question lỗi hoặc không có skill
             if (!part.Skill || !part.Skill.Name) return;
 
             const skillKey = getSkillKey(part.Skill.Name);
@@ -871,10 +856,6 @@ async function getFullExamReview(sessionParticipantId, user) {
       });
     };
 
-    // 5. Duyệt dữ liệu (Ưu tiên Sections trước)
-    let hasData = false;
-
-    // Case 1: Cấu trúc mới (Topic -> Sections -> Parts)
     if (topic.Sections && topic.Sections.length > 0) {
       topic.Sections.forEach((section) => {
         if (section.Parts && section.Parts.length > 0) {
@@ -883,18 +864,10 @@ async function getFullExamReview(sessionParticipantId, user) {
       });
     }
 
-    // Case 2: Cấu trúc cũ (Topic -> Parts trực tiếp)
-    // Chỉ chạy nếu Case 1 không có dữ liệu
-    // if (topic.Sections && topic.Sections.length > 0) {
-
-    //     processParts(topic.Sections?.[0]?.Parts);
-    // }
-
     const startTime = new Date(sessionParticipant.createdAt);
     const endTime = new Date(sessionParticipant.updatedAt);
     let durationMs = endTime - startTime;
 
-    // Đảm bảo không bị số âm (trong trường hợp edge case)
     if (durationMs < 0) durationMs = 0;
     const durationMinutes = Math.floor(durationMs / 60000);
 
@@ -915,7 +888,6 @@ async function getFullExamReview(sessionParticipantId, user) {
     };
   } catch (error) {
     console.error('Error in getFullExamReview:', error);
-    // Trả về lỗi 500 kèm message để dễ debug, thay vì crash server
     return { status: 500, message: `Server Error: ${error.message}` };
   }
 }
