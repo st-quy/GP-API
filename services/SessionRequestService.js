@@ -159,29 +159,23 @@ async function createSessionRequest(req) {
       throw new Error("Session request limit reached");
     }
 
-    let sessionRequest;
-    const hasApprovedSessionRequest = allSessionRequest.some(
+    const approvedRequest = allSessionRequest.find(
       (request) => request.status === SESSION_REQUEST_STATUS.APPROVED
     );
 
-    if (!hasApprovedSessionRequest) {
-      sessionRequest = await SessionRequest.create({
-        UserID,
-        SessionID: session.ID,
-      });
-    } else {
-      const approvedSessionRequest = await SessionRequest.findOne({
-        where: {
-          UserID,
-          SessionID: session.ID,
-          status: SESSION_REQUEST_STATUS.APPROVED,
-        },
-      });
-
-      approvedSessionRequest.status = SESSION_REQUEST_STATUS.PENDING;
-      await approvedSessionRequest.save();
-      sessionRequest = approvedSessionRequest;
+    if (approvedRequest) {
+      return {
+        status: 200,
+        message: "Student is already approved for this session",
+        data: approvedRequest.toJSON ? approvedRequest.toJSON() : approvedRequest,
+      };
     }
+
+    let sessionRequest;
+    sessionRequest = await SessionRequest.create({
+      UserID,
+      SessionID: session.ID,
+    });
 
     return {
       status: 201,
