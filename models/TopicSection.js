@@ -22,6 +22,10 @@ module.exports = (sequelize, DataTypes) => {
         key: 'ID',
       },
     },
+    ScoreConfig: {
+      type: DataTypes.JSON,
+      allowNull: true,
+    },
   });
 
   return TopicSection;
