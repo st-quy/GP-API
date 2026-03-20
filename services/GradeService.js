@@ -302,6 +302,9 @@ async function calculatePoints(req) {
       };
     }
 
+    const pointPerQuestion =
+      pointsPerQuestion[formattedSkillName.toLowerCase()] || 1;
+
     const sessionParticipant = await SessionParticipant.findByPk(
       sessionParticipantId,
       {
@@ -323,43 +326,22 @@ async function calculatePoints(req) {
             {
               model: Part,
               as: 'Part',
-              include: [{ model: Skill, as: 'Skill', where: { Name: skillName.toUpperCase() } }],
+              include: [{ model: Skill, as: 'Skill' }],
             },
           ],
         },
       ],
     });
 
-    // BUG_CM059: We need to know the TOTAL number of questions for this skill in the topic
-    // to calculate the score out of 50 correctly.
-    const parts = await Part.findAll({
-      include: [
-        { model: Skill, as: 'Skill', where: { Name: skillName.toUpperCase() }, required: true },
-        {
-          model: Section,
-          as: 'Sections',
-          required: true,
-          include: [{ model: Topic, as: 'Topics', where: { ID: sessionParticipant.Session.examSet }, required: true }]
-        },
-        { model: Question, as: 'Questions' }
-      ]
-    });
-
-    let totalQuestionsCount = 0;
-    parts.forEach(p => {
-      totalQuestionsCount += (p.Questions?.length || 0);
-    });
-
-    if (totalQuestionsCount === 0) {
-      // Fallback to constants if topic structure is missing questions
-      totalQuestionsCount = formattedSkillName.toLowerCase() === 'reading' ? 29 : 25;
+    if (answers.length === 0) {
+      return { status: 404, message: 'No answers found for the student' };
     }
 
-    let correctCount = 0;
+    let totalPoints = 0;
     const logs = [];
 
     answers.forEach((answer) => {
-      if (!answer.AnswerText || !answer.Question?.Part?.Skill) return;
+      if (!answer.AnswerText) return;
 
       const questionId = answer.QuestionID;
       const type = answer.Question.Type;
@@ -381,75 +363,128 @@ async function calculatePoints(req) {
       };
 
       // ================================
-      // GRADING LOGIC
+      // MULTIPLE CHOICE
       // ================================
-      try {
-        if (type === 'multiple-choice') {
-          const stu = rawStudentAnswer.trim().toLowerCase();
-          const cor = correctContent.correctAnswer.trim().toLowerCase();
-          logItem.studentAnswer = stu;
-          logItem.correctAnswer = cor;
-          if (stu === cor) isCorrect = true;
-        } 
-        else if (type === 'matching') {
-          const studentAns = JSON.parse(rawStudentAnswer);
-          const correctAns = correctContent.correctAnswer;
-          
-          // All-or-Nothing check for matching
-          const allMatched = correctAns.every((correct) => {
-            return studentAns.some(
-              (s) =>
-                s.left.trim() === correct.left.trim() &&
-                s.right.trim() === correct.right.trim()
-            );
-          });
-          if (allMatched && correctAns.length > 0) isCorrect = true;
-        }
-        else if (type === 'ordering') {
-          const studentAns = JSON.parse(rawStudentAnswer).sort((a, b) => a.value - b.value);
-          const correctAns = correctContent.correctAnswer;
-          
-          // All-or-Nothing check for ordering
-          let allCorrect = studentAns.length === correctAns.length;
-          if (allCorrect) {
-            for (let i = 0; i < correctAns.length; i++) {
-              if (studentAns[i].key.trim() !== correctAns[i].key.trim()) {
-                allCorrect = false;
-                break;
-              }
-            }
-          }
-          if (allCorrect && correctAns.length > 0) isCorrect = true;
-        }
-        else if (type === 'dropdown-list') {
-          const studentAns = JSON.parse(rawStudentAnswer);
-          const correctAns = correctContent.correctAnswer.filter(item => item.key !== '0');
-          correctAns.forEach((c) => {
-            const match = studentAns.find(sa => String(sa.key).trim().split('.')[0] === String(c.key).trim().split('.')[0]);
-            if (match && String(match.value).trim() === String(c.value).trim()) correctCount++;
-          });
-        }
-        else if (type === 'listening-questions-group') {
-          const studentAns = JSON.parse(rawStudentAnswer);
-          const correctList = correctContent.groupContent.listContent;
-          correctList.forEach((q) => {
-            const stu = studentAns.find(x => x.ID === q.ID);
-            if (stu && stu.answer.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase()) correctCount++;
-          });
-        }
+      if (type === 'multiple-choice') {
+        const stu = rawStudentAnswer.trim();
+        const cor = correctContent.correctAnswer.trim();
 
-        if (isCorrect) correctCount++;
-      } catch (e) {
-        console.error('Grading error for question', questionId, e);
+        logItem.studentAnswer = stu;
+        logItem.correctAnswer = cor;
+
+        if (stu === cor) {
+          isCorrect = true;
+          totalPoints += pointPerQuestion;
+        }
       }
 
+      // ================================
+      // MATCHING
+      // ================================
+      else if (type === 'matching') {
+        const studentAnswers = JSON.parse(rawStudentAnswer);
+        const correctAnswers = correctContent.correctAnswer;
+
+        logItem.studentAnswer = studentAnswers;
+        logItem.correctAnswer = correctAnswers;
+
+        // Check if ALL pairs match (All-or-Nothing logic to match checkCorrectness)
+        const allMatched = correctAnswers.every((correct) => {
+          return studentAnswers.some(
+            (s) =>
+              s.left.trim() === correct.left.trim() &&
+              s.right.trim() === correct.right.trim()
+          );
+        });
+
+        if (allMatched && correctAnswers.length > 0) {
+          isCorrect = true;
+          totalPoints += pointPerQuestion;
+        }
+        }
+
+        // ================================
+        // ORDERING
+        // ================================
+        else if (type === 'ordering') {
+        const studentAnswers = JSON.parse(rawStudentAnswer).sort(
+          (a, b) => a.value - b.value
+        );
+        const correctAnswers = correctContent.correctAnswer;
+
+        logItem.studentAnswer = studentAnswers;
+        logItem.correctAnswer = correctAnswers;
+
+        // Check if ALL items are in correct order (All-or-Nothing)
+        let allCorrect = studentAnswers.length === correctAnswers.length;
+        if (allCorrect) {
+          for (let i = 0; i < correctAnswers.length; i++) {
+            if (studentAnswers[i].key.trim() !== correctAnswers[i].key.trim()) {
+              allCorrect = false;
+              break;
+            }
+          }
+        }
+
+        if (allCorrect && correctAnswers.length > 0) {
+          isCorrect = true;
+          totalPoints += pointPerQuestion;
+        }
+      } else if (type === 'dropdown-list') {
+        let studentAnswers = [];
+        try {
+          studentAnswers = JSON.parse(answer.AnswerText);
+        } catch (e) {
+          console.error('Error parsing dropdown answer:', e);
+        }
+        const correctAnswers = correctContent.correctAnswer.filter(
+          (item) => item.key !== '0'
+        );
+
+        const normalizeKey = (k) => {
+          return String(k).trim().split('.')[0];
+        };
+        correctAnswers.forEach((correct) => {
+          const correctKey = normalizeKey(correct.key);
+
+          const match = studentAnswers.find(
+            (sa) => normalizeKey(sa.key) === correctKey
+          );
+
+          if (
+            match &&
+            String(match.value).trim() === String(correct.value).trim()
+          ) {
+            totalPoints += pointPerQuestion;
+          }
+        });
+      } else if (type === 'listening-questions-group') {
+        const studentAnswers = JSON.parse(rawStudentAnswer);
+        const correctList = correctContent.groupContent.listContent;
+
+        logItem.studentAnswer = studentAnswers;
+        logItem.correctAnswer = correctList;
+
+        correctList.forEach((q) => {
+          const stu = studentAnswers.find((x) => x.ID === q.ID);
+
+          if (stu && stu.answer.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase()) {
+            isCorrect = true;
+            totalPoints += pointPerQuestion;
+          }
+        });
+      }
+
+      // ================================
+      // Finalize tracking
+      // ================================
       logItem.result = isCorrect ? 'correct' : 'incorrect';
+      logItem.pointAdded = isCorrect ? pointPerQuestion : 0;
+
       logs.push(logItem);
     });
 
-    // Final point calculation: (Correct / Total) * 50
-    let totalPoints = (correctCount / totalQuestionsCount) * 50;
-    totalPoints = Math.min(50, parseFloat(totalPoints.toFixed(1)));
+    totalPoints = parseFloat(totalPoints.toFixed(1));
 
     await calculateTotalPoints(
       sessionParticipantId,
