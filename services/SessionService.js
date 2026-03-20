@@ -1,6 +1,6 @@
 const { Sequelize, Op } = require("sequelize");
 const cron = require("node-cron");
-const { Session, SessionParticipant, Class, Topic } = require("../models");
+const { Session, SessionParticipant, Class, Topic, sequelize } = require("../models");
 const { removeMinIOAudio } = require("./StudentAnswerService");
 
 async function getAllSessions(req) {
@@ -88,6 +88,32 @@ async function createSession(req) {
       };
     }
 
+    if (new Date(startTime).getTime() === new Date(endTime).getTime()) {
+      return {
+        status: 400,
+        message: "Start time and end time cannot be the same",
+      };
+    }
+
+    // Normalize: Trim and collapse multiple spaces into one
+    const normalizedName = sessionName.trim().replace(/\s+/g, ' ');
+
+    // Check duplicate name (Case-insensitive)
+    const existingName = await Session.findOne({
+      where: sequelize.where(
+        sequelize.fn('LOWER', sequelize.col('sessionName')),
+        '=',
+        normalizedName.toLowerCase()
+      ),
+    });
+
+    if (existingName) {
+      return {
+        status: 400,
+        message: "Session name already exists",
+      };
+    }
+
     const checkExistTopic = await Topic.findByPk(examSet);
 
     if (!checkExistTopic) {
@@ -164,20 +190,68 @@ async function updateSession(req) {
     const { sessionId } = req.params;
     const { sessionName, sessionKey, startTime, endTime, examSet } = req.body;
 
-    const session = await Session.update(
-      { sessionName, sessionKey, startTime, endTime, examSet },
-      { where: { ID: sessionId } }
-    );
-    if (!session) {
+    if (startTime && endTime && new Date(startTime).getTime() === new Date(endTime).getTime()) {
       return {
-        status: 404,
-        message: "Session not found",
+        status: 400,
+        message: "Start time and end time cannot be the same",
       };
     }
 
+    // Normalize: Trim and collapse multiple spaces into one
+    const normalizedName = sessionName.trim().replace(/\s+/g, ' ');
+
+    // Check duplicate name (Case-insensitive)
+    const existingName = await Session.findOne({
+      where: {
+        [Op.and]: [
+          sequelize.where(
+            sequelize.fn('LOWER', sequelize.col('sessionName')),
+            '=',
+            normalizedName.toLowerCase()
+          ),
+          { ID: { [Op.ne]: sessionId } }
+        ]
+      },
+    });
+
+    if (existingName) {
+      return {
+        status: 400,
+        message: "Session name already exists",
+      };
+    }
+
+    let updateData = { sessionName: normalizedName, sessionKey, startTime, endTime, examSet };
+
+    // Recalculate status if times are provided
+    if (startTime && endTime) {
+      const now = new Date();
+      if (new Date(startTime) > now) {
+        updateData.status = "NOT_STARTED";
+      } else if (new Date(endTime) > now) {
+        updateData.status = "ON_GOING";
+      } else {
+        updateData.status = "COMPLETE";
+      }
+    }
+
+    const [updatedRows] = await Session.update(
+      updateData,
+      { where: { ID: sessionId } }
+    );
+    
+    if (updatedRows === 0) {
+      return {
+        status: 404,
+        message: "Session not found or no changes made",
+      };
+    }
+
+    const updatedSession = await Session.findByPk(sessionId);
+
     return {
       status: 200,
-      data: session,
+      data: updatedSession,
     };
   } catch (error) {
     throw new Error(`Error updating session: ${error.message}`);
