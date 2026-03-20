@@ -211,10 +211,39 @@ async function updateUser(userId, data) {
       throw new Error('User not found');
     }
 
+    // Trim string fields
+    if (data.firstName) data.firstName = data.firstName.trim();
+    if (data.lastName) data.lastName = data.lastName.trim();
+    if (data.email) data.email = data.email.trim();
+    if (data.address) data.address = data.address.trim();
+    if (data.phone) data.phone = data.phone.trim();
+
+    // Validate maxLength
+    if (data.firstName && data.firstName.length > 50) {
+      throw new Error('First name must not exceed 50 characters');
+    }
+    if (data.lastName && data.lastName.length > 50) {
+      throw new Error('Last name must not exceed 50 characters');
+    }
+    if (data.email && data.email.length > 100) {
+      throw new Error('Email must not exceed 100 characters');
+    }
+    if (data.address && data.address.length > 200) {
+      throw new Error('Address must not exceed 200 characters');
+    }
+
+    // Validate not only spaces
+    if (data.firstName !== undefined && data.firstName.length === 0) {
+      throw new Error('First name is required');
+    }
+    if (data.lastName !== undefined && data.lastName.length === 0) {
+      throw new Error('Last name is required');
+    }
+
     if (data.phone) {
-      const phoneRegex = /^\d{10}$/;
+      const phoneRegex = /^\d{9,20}$/;
       if (!phoneRegex.test(data.phone)) {
-        throw new Error(`Invalid phone format: ${data.phone}`);
+        throw new Error(`Invalid phone format: ${data.phone}. Phone must contain 9-20 digits only.`);
       }
 
       const existingPhone = await User.findOne({
