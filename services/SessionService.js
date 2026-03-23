@@ -322,52 +322,49 @@ async function removeSession(req) {
 async function cronStatusAllSessions() {
   try {
     const now = new Date();
-    const sessions = await Session.findAll();
 
-    for (const session of sessions) {
-      let newStatus;
-
-      const startTime = new Date(session.startTime);
-      const endTime = new Date(session.endTime);
-
-      newStatus =
-        startTime > now
-          ? "NOT_STARTED"
-          : endTime > now
-          ? "ON_GOING"
-          : "COMPLETE";
-
-      if (session.isPublished) {
-        newStatus = "COMPLETE";
-      }
-
-      if (session.status !== newStatus) {
-        await Session.update(
-          { status: newStatus },
-          { where: { ID: session.ID } }
-        );
-      }
-    }
-
-    const updatedSessions = await Session.findAll({
-      include: [
-        {
-          model: Class,
-          as: "Classes",
+    // [OPTIMIZATION]: Use bulk updates instead of fetching and looping
+    // 1. NOT_STARTED -> ON_GOING
+    await Session.update(
+      { status: "ON_GOING" },
+      {
+        where: {
+          status: "NOT_STARTED",
+          startTime: { [Op.lte]: now },
+          endTime: { [Op.gt]: now },
+          isPublished: false
         },
-        {
-          model: Topic,
-          as: "Topic",
-        },
-      ],
-    });
+      }
+    );
 
+    // 2. Anything (NOT_STARTED or ON_GOING) -> COMPLETE if endTime is past OR isPublished is true
+    await Session.update(
+      { status: "COMPLETE" },
+      {
+        where: {
+          [Op.or]: [
+            {
+              status: { [Op.ne]: "COMPLETE" },
+              endTime: { [Op.lte]: now },
+            },
+            {
+              status: { [Op.ne]: "COMPLETE" },
+              isPublished: true
+            }
+          ]
+        },
+      }
+    );
+
+    console.log(`[Cron] Session statuses synchronized at ${now.toISOString()}`);
+    
     return {
       status: 200,
-      data: updatedSessions,
+      message: "Session statuses synchronized successfully",
     };
   } catch (error) {
-    throw new Error(`Error updating session statuses: ${error.message}`);
+    console.error(`[Cron Error] Failed to update statuses: ${error.message}`);
+    return { status: 500, message: error.message };
   }
 }
 

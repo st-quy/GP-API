@@ -37,37 +37,18 @@ async function getAllParticipants(req) {
       {
         model: User,
         as: "User",
+        attributes: ["ID", "firstName", "lastName", "studentCode", "class"],
         where: searchKeyword
           ? {
               [Op.or]: [
-                {
-                  firstName: { [Op.like]: `%${searchKeyword.toLowerCase()}%` },
-                },
-                { lastName: { [Op.like]: `%${searchKeyword.toLowerCase()}%` } },
-                Sequelize.where(
-                  Sequelize.fn(
-                    "LOWER",
-                    Sequelize.fn(
-                      "CONCAT",
-                      Sequelize.col("User.firstName"),
-                      " ",
-                      Sequelize.col("User.lastName")
-                    )
-                  ),
-                  { [Op.like]: `%${searchKeyword.toLowerCase()}%` }
-                ),
+                { firstName: { [Op.iLike]: `%${searchKeyword}%` } },
+                { lastName: { [Op.iLike]: `%${searchKeyword}%` } },
+                { studentCode: { [Op.iLike]: `%${searchKeyword}%` } },
               ],
             }
           : undefined,
       },
     ];
-
-    // Get total count first
-    const totalCount = await SessionParticipant.count({
-      where,
-      include,
-      distinct: true,
-    });
 
     // Ensure page and limit are integers and >= 1
     const page = Math.max(parseInt(req.query.page) || 1, 1);
@@ -78,21 +59,49 @@ async function getAllParticipants(req) {
       paginate: limit,
       where,
       include,
-      order: [["ID", "ASC"]], // Add a stable order to avoid duplicate/overlap
+      attributes: [
+        "ID",
+        "GrammarVocab",
+        "GrammarVocabLevel",
+        "Reading",
+        "ReadingLevel",
+        "Listening",
+        "ListeningLevel",
+        "Speaking",
+        "SpeakingLevel",
+        "Writing",
+        "WritingLevel",
+        "Total",
+        "Level",
+        "IsPublished",
+        "SessionID",
+        "UserID",
+      ],
+      order: [["ID", "ASC"]],
+      distinct: true,
     };
 
     const result = await SessionParticipant.paginate(options);
 
+    // Map docs to ensure fullName is present (Sequelize virtual getters might not serialize automatically with limited attributes)
+    const processedDocs = result.docs.map(doc => {
+      const plainDoc = doc.get({ plain: true });
+      if (plainDoc.User) {
+        plainDoc.User.fullName = `${plainDoc.User.firstName} ${plainDoc.User.lastName}`;
+      }
+      return plainDoc;
+    });
+
     return {
       status: 200,
       message: "Participants retrieved successfully",
-      data: result.docs,
+      data: processedDocs,
       pagination: {
         currentPage: page,
         pageSize: limit,
         itemsOnPage: result.docs.length,
         totalPages: result.pages,
-        totalItems: totalCount,
+        totalItems: result.total,
       },
     };
   } catch (error) {
