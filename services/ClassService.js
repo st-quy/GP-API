@@ -129,16 +129,23 @@ async function getClassDetailById(req) {
 
     const classDetail = await Class.findOne({
       where: { ID: classId },
+      attributes: ['ID', 'className', 'UserID', 'createdAt', 'updatedAt'],
       include: [
         {
           association: 'Sessions',
-          include: [
-            {
-              association: 'SessionParticipants',
-            },
-          ],
+          attributes: {
+            include: [
+              [
+                sequelize.literal(
+                  '(SELECT COUNT(*)::int FROM "SessionParticipants" WHERE "SessionParticipants"."SessionID" = "Sessions"."ID")'
+                ),
+                'participantCount',
+              ],
+            ],
+          },
         },
       ],
+      order: [[{ model: Session, as: 'Sessions' }, 'createdAt', 'DESC']],
     });
 
     if (!classDetail) {
