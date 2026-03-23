@@ -9,6 +9,7 @@ const {
   Part,
   Section,
   Skill,
+  sequelize,
 } = require('../models'); // Ensure models are imported
 const {
   skillMapping,
@@ -200,6 +201,15 @@ async function suggestLevels(score, skillName) {
       else if (score < 48) return level.B2;
       else return level.C;
     }
+
+    if (skillName === 'GRAMMAR AND VOCABULARY') {
+      if (score < 8) return level.X;
+      else if (score < 16) return level.A1;
+      else if (score < 26) return level.A2;
+      else if (score < 38) return level.B1;
+      else if (score < 46) return level.B2;
+      else return level.C;
+    }
   } catch (error) {
     throw new Error(error.message);
   }
@@ -241,11 +251,15 @@ async function calculateTotalPoints(
 
     const totalPoints = listening + reading + writing + speaking;
 
-    const levelSkill = await suggestLevels(skillScore, skillName.toUpperCase());
+    const lookupName = (skillName === 'GrammarVocab') ? 'GRAMMAR AND VOCABULARY' : skillName.toUpperCase();
+    const levelSkill = await suggestLevels(skillScore, lookupName);
 
-    if (skillName === skillMapping['GRAMMAR AND VOCABULARY']) {
+    if (skillName === 'GrammarVocab' || skillName === skillMapping['GRAMMAR AND VOCABULARY']) {
       await SessionParticipant.update(
-        { [skillName]: skillScore },
+        { 
+          [skillName]: skillScore,
+          GrammarVocabLevel: levelSkill
+        },
         { where: { ID: sessionParticipantId } }
       );
     } else {
@@ -288,9 +302,6 @@ async function calculatePoints(req) {
       };
     }
 
-    const pointPerQuestion =
-      pointsPerQuestion[formattedSkillName.toLowerCase()] || 1;
-
     const sessionParticipant = await SessionParticipant.findByPk(
       sessionParticipantId,
       {
@@ -312,22 +323,50 @@ async function calculatePoints(req) {
             {
               model: Part,
               as: 'Part',
-              include: [{ model: Skill, as: 'Skill' }],
+              include: [{ model: Skill, as: 'Skill', where: { Name: skillName.toUpperCase() } }],
             },
           ],
         },
       ],
     });
 
-    if (answers.length === 0) {
-      return { status: 404, message: 'No answers found for the student' };
-    }
+    // [OPTIMIZATION]: Use count query instead of fetching all Part objects
+    const totalQuestionsCount = await Question.count({
+      include: [
+        {
+          model: Part,
+          as: 'Part',
+          required: true,
+          include: [
+            {
+              model: Skill,
+              as: 'Skill',
+              where: { Name: skillName.toUpperCase() },
+              required: true,
+            },
+            {
+              model: Section,
+              as: 'Sections',
+              required: true,
+              include: [
+                {
+                  model: Topic,
+                  as: 'Topics',
+                  where: { ID: sessionParticipant.Session.examSet },
+                  required: true,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }) || (formattedSkillName.toLowerCase() === 'reading' ? 29 : 25);
 
-    let totalPoints = 0;
+    let correctCount = 0;
     const logs = [];
 
     answers.forEach((answer) => {
-      if (!answer.AnswerText) return;
+      if (!answer.AnswerText || !answer.Question?.Part?.Skill) return;
 
       const questionId = answer.QuestionID;
       const type = answer.Question.Type;
@@ -349,143 +388,71 @@ async function calculatePoints(req) {
       };
 
       // ================================
-      // MULTIPLE CHOICE
+      // GRADING LOGIC
       // ================================
-      if (type === 'multiple-choice') {
-        const stu = rawStudentAnswer.trim();
-        const cor = correctContent.correctAnswer.trim();
-
-        logItem.studentAnswer = stu;
-        logItem.correctAnswer = cor;
-
-        if (stu === cor) {
-          isCorrect = true;
-          totalPoints += pointPerQuestion;
+      try {
+        if (type === 'multiple-choice') {
+          const stu = rawStudentAnswer.trim().toLowerCase();
+          const cor = correctContent.correctAnswer.trim().toLowerCase();
+          logItem.studentAnswer = stu;
+          logItem.correctAnswer = cor;
+          if (stu === cor) isCorrect = true;
+        } 
+        else if (type === 'matching') {
+          const studentAns = JSON.parse(rawStudentAnswer);
+          const correctAns = correctContent.correctAnswer;
+          const allMatched = correctAns.every((correct) => {
+            return studentAns.some(
+              (s) =>
+                s.left.trim() === correct.left.trim() &&
+                s.right.trim() === correct.right.trim()
+            );
+          });
+          if (allMatched && correctAns.length > 0) isCorrect = true;
         }
-      }
-
-      // ================================
-      // MATCHING
-      // ================================
-      else if (type === 'matching') {
-        const studentAnswers = JSON.parse(rawStudentAnswer);
-        const correctAnswers = correctContent.correctAnswer;
-
-        logItem.studentAnswer = studentAnswers;
-        logItem.correctAnswer = correctAnswers;
-
-        correctAnswers.forEach((correct) => {
-          const matched = studentAnswers.find(
-            (s) =>
-              s.left.trim() === correct.left.trim() &&
-              s.right.trim() === correct.right.trim()
-          );
-          if (matched) {
-            isCorrect = true;
-            totalPoints += pointPerQuestion;
+        else if (type === 'ordering') {
+          const studentAns = JSON.parse(rawStudentAnswer).sort((a, b) => a.value - b.value);
+          const correctAns = correctContent.correctAnswer;
+          let allCorrect = studentAns.length === correctAns.length;
+          if (allCorrect) {
+            for (let i = 0; i < correctAns.length; i++) {
+              if (studentAns[i].key.trim() !== correctAns[i].key.trim()) {
+                allCorrect = false;
+                break;
+              }
+            }
           }
-        });
-      }
-
-      // ================================
-      // ORDERING
-      // ================================
-      else if (type === 'ordering') {
-        const studentAnswers = JSON.parse(rawStudentAnswer).sort(
-          (a, b) => a.value - b.value
-        );
-        const correctAnswers = correctContent.correctAnswer;
-
-        logItem.studentAnswer = studentAnswers;
-        logItem.correctAnswer = correctAnswers;
-
-        const minLength = Math.min(
-          studentAnswers.length,
-          correctAnswers.length
-        );
-
-        for (let i = 0; i < minLength; i++) {
-          if (studentAnswers[i].key.trim() === correctAnswers[i].key.trim()) {
-            isCorrect = true;
-            totalPoints += pointPerQuestion;
-          }
+          if (allCorrect && correctAns.length > 0) isCorrect = true;
         }
-      } else if (type === 'dropdown-list') {
-        let studentAnswers = [];
-        try {
-          studentAnswers = JSON.parse(answer.AnswerText);
-        } catch (e) {
-          console.error('Error parsing dropdown answer:', e);
+        else if (type === 'dropdown-list') {
+          const studentAns = JSON.parse(rawStudentAnswer);
+          const correctAns = correctContent.correctAnswer.filter(item => item.key !== '0');
+          correctAns.forEach((c) => {
+            const match = studentAns.find(sa => String(sa.key).trim().split('.')[0] === String(c.key).trim().split('.')[0]);
+            if (match && String(match.value).trim() === String(c.value).trim()) correctCount++;
+          });
         }
-        const correctAnswers = correctContent.correctAnswer.filter(
-          (item) => item.key !== '0'
-        );
+        else if (type === 'listening-questions-group') {
+          const studentAns = JSON.parse(rawStudentAnswer);
+          const correctList = correctContent.groupContent.listContent;
+          correctList.forEach((q) => {
+            const stu = studentAns.find(x => x.ID === q.ID);
+            if (stu && stu.answer.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase()) correctCount++;
+          });
+        }
 
-        const normalizeKey = (k) => {
-          return String(k).trim().split('.')[0];
-        };
-        correctAnswers.forEach((correct) => {
-          const correctKey = normalizeKey(correct.key);
-
-          const match = studentAnswers.find(
-            (sa) => normalizeKey(sa.key) === correctKey
-          );
-
-          if (
-            match &&
-            String(match.value).trim() === String(correct.value).trim()
-          ) {
-            totalPoints += pointPerQuestion;
-          }
-        });
-      } else if (type === 'listening-questions-group') {
-        const studentAnswers = JSON.parse(answer.AnswerText);
-        const correctList = correctContent.groupContent.listContent;
-
-        correctList.forEach((question) => {
-          const studentAnswer = studentAnswers.find(
-            (ans) => ans.ID === question.ID
-          );
-          if (
-            studentAnswer &&
-            studentAnswer.answer === question.correctAnswer
-          ) {
-            isCorrect = true;
-            totalPoints += pointPerQuestion;
-          }
-        });
+        if (isCorrect) correctCount++;
+      } catch (e) {
+        console.error('Grading error for question', questionId, e);
       }
 
-      // ================================
-      // LISTENING GROUP
-      // ================================
-      else if (type === 'listening-questions-group') {
-        const studentAnswers = JSON.parse(rawStudentAnswer);
-        const correctList = correctContent.groupContent.listContent;
-
-        logItem.studentAnswer = studentAnswers;
-        logItem.correctAnswer = correctList;
-
-        correctList.forEach((q) => {
-          const stu = studentAnswers.find((x) => x.ID === q.ID);
-
-          if (stu && stu.answer.trim() === q.correctAnswer.trim()) {
-            isCorrect = true;
-            totalPoints += pointPerQuestion;
-          }
-        });
-      }
-
-      // ================================
-      // Finalize tracking
-      // ================================
       logItem.result = isCorrect ? 'correct' : 'incorrect';
-      logItem.pointAdded = isCorrect ? pointPerQuestion : 0;
-
       logs.push(logItem);
     });
 
-    totalPoints = parseFloat(totalPoints.toFixed(1));
+    // Final point calculation: (Correct / Total) * 50
+    let totalPoints = (correctCount / totalQuestionsCount) * 50;
+    totalPoints = Math.min(50, parseFloat(totalPoints.toFixed(1)));
 
     await calculateTotalPoints(
       sessionParticipantId,
@@ -589,7 +556,7 @@ async function calculatePointForWritingAndSpeaking(req) {
     };
   }
 }
-async function getFullExamReview(sessionParticipantId) {
+async function getFullExamReview(sessionParticipantId, user) {
   try {
     // 1. Lấy thông tin Participant
     const sessionParticipant = await SessionParticipant.findByPk(
@@ -608,6 +575,8 @@ async function getFullExamReview(sessionParticipantId) {
               'startTime',
               'endTime',
               'examSet',
+              'status',
+              'isPublished'
             ],
             include: [{ model: Topic, attributes: ['ID', 'Name'] }],
           },
@@ -619,30 +588,62 @@ async function getFullExamReview(sessionParticipantId) {
       return { status: 404, message: 'Session participant not found' };
     }
 
+    if (user && user.role === 'student') {
+      const session = sessionParticipant.Session;
+      const now = new Date();
+      
+      if (sessionParticipant.UserID !== user.id) {
+        return { status: 403, message: 'Unauthorized access to this review.' };
+      }
+
+      if (
+        session.status !== 'COMPLETE' || 
+        !sessionParticipant.IsPublished || 
+        new Date(session.endTime) >= now
+      ) {
+        return { 
+          status: 403, 
+          message: 'Chưa thể xem lại bài làm lúc này. Kỳ thi chưa kết thúc hoặc điểm chưa được công bố.' 
+        };
+      }
+    }
+
     // 2. Lấy Topic kèm theo Sections và Parts
-    // [FIX] Thêm include Section để lấy dữ liệu đúng cấu trúc
     const topic = await Topic.findByPk(sessionParticipant.Session.examSet, {
+      attributes: ['ID', 'Name'],
       include: [
         {
           model: Section,
           as: 'Sections',
+          attributes: ['ID', 'Name', 'Description'],
           required: false,
           include: [
             {
               model: Part,
               as: 'Parts',
+              attributes: ['ID', 'Content', 'SubContent'],
               required: false,
               include: [
                 {
                   model: Question,
                   as: 'Questions',
+                  attributes: [
+                    'ID',
+                    'Type',
+                    'Content',
+                    'SubContent',
+                    'AudioKeys',
+                    'ImageKeys',
+                    'GroupContent',
+                    'AnswerContent',
+                  ],
                   required: false,
                 },
                 {
                   model: Skill,
                   as: 'Skill',
-                  required: false,
                   attributes: ['Name'],
+                  required: false,
                 },
               ],
             },
@@ -704,7 +705,6 @@ async function getFullExamReview(sessionParticipantId) {
       return upper.toLowerCase();
     };
 
-    // [FIX] Hàm parse JSON an toàn (Chống crash server)
     const safeParse = (str) => {
       if (typeof str === 'object' && str !== null) return str;
       try {
@@ -714,7 +714,6 @@ async function getFullExamReview(sessionParticipantId) {
       }
     };
 
-    // [FIX] Hàm kiểm tra đúng sai an toàn
     const checkCorrectness = (
       questionType,
       userAnswerText,
@@ -722,7 +721,6 @@ async function getFullExamReview(sessionParticipantId) {
     ) => {
       if (!userAnswerText) return false;
 
-      // Parse user answer an toàn
       let userAnsObj = userAnswerText;
       if (typeof userAnswerText === 'string') {
         userAnsObj = safeParse(userAnswerText);
@@ -784,14 +782,12 @@ async function getFullExamReview(sessionParticipantId) {
       }
     };
 
-    // [FIX] Helper xử lý danh sách parts để tái sử dụng
     const processParts = (partsList) => {
       if (!partsList || !Array.isArray(partsList)) return;
 
       partsList.forEach((part) => {
         if (part.Questions && part.Questions.length > 0) {
           part.Questions.forEach((question) => {
-            // Skip nếu question lỗi hoặc không có skill
             if (!part.Skill || !part.Skill.Name) return;
 
             const skillKey = getSkillKey(part.Skill.Name);
@@ -841,10 +837,6 @@ async function getFullExamReview(sessionParticipantId) {
       });
     };
 
-    // 5. Duyệt dữ liệu (Ưu tiên Sections trước)
-    let hasData = false;
-
-    // Case 1: Cấu trúc mới (Topic -> Sections -> Parts)
     if (topic.Sections && topic.Sections.length > 0) {
       topic.Sections.forEach((section) => {
         if (section.Parts && section.Parts.length > 0) {
@@ -853,18 +845,10 @@ async function getFullExamReview(sessionParticipantId) {
       });
     }
 
-    // Case 2: Cấu trúc cũ (Topic -> Parts trực tiếp)
-    // Chỉ chạy nếu Case 1 không có dữ liệu
-    // if (topic.Sections && topic.Sections.length > 0) {
-
-    //     processParts(topic.Sections?.[0]?.Parts);
-    // }
-
     const startTime = new Date(sessionParticipant.createdAt);
     const endTime = new Date(sessionParticipant.updatedAt);
     let durationMs = endTime - startTime;
 
-    // Đảm bảo không bị số âm (trong trường hợp edge case)
     if (durationMs < 0) durationMs = 0;
     const durationMinutes = Math.floor(durationMs / 60000);
 
@@ -885,7 +869,6 @@ async function getFullExamReview(sessionParticipantId) {
     };
   } catch (error) {
     console.error('Error in getFullExamReview:', error);
-    // Trả về lỗi 500 kèm message để dễ debug, thay vì crash server
     return { status: 500, message: `Server Error: ${error.message}` };
   }
 }

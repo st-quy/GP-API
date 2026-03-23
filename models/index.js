@@ -5,6 +5,14 @@ require('dotenv').config();
 const sequelize = new Sequelize(process.env.DATABASE_URL, {
   dialect: 'postgres',
   protocol: 'postgres',
+  // [OPTIMIZATION]: Connection Pooling for high concurrency
+  pool: {
+    max: 50,
+    min: 5,
+    acquire: 30000,
+    idle: 10000
+  },
+  logging: false,
   // dialectOptions: {
   //   ssl: {
   //     require: true,
