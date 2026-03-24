@@ -178,7 +178,6 @@ async function createQuestion(req) {
       AnswerContent,
       GroupID,
       Tags: normalizeTags(Tags),
-      GroupID,
     });
 
     return {
