@@ -245,8 +245,15 @@ async function updateSession(req) {
       };
     }
 
-    // Validate examSet if provided
-    if (examSet) {
+    // Validate examSet if provided (even if null/empty)
+    if (typeof examSet !== "undefined") {
+      // Reject null or empty values explicitly since Session.examSet is allowNull: false
+      if (examSet === null || examSet === "") {
+        return {
+          status: 400,
+          message: "Invalid exam set value",
+        };
+      }
       const checkExistTopic = await Topic.findByPk(examSet);
       if (!checkExistTopic) {
         return {
