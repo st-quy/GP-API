@@ -302,12 +302,18 @@ async function updateSession(req) {
     }
 
     const now = new Date();
+    const resolvedIsPublished =
+      isPublished !== undefined ? isPublished : session.isPublished;
     let newStatus;
     if (resolvedStartTime > now) {
       newStatus = "NOT_STARTED";
     } else if (resolvedEndTime > now) {
       newStatus = "ON_GOING";
     } else {
+      newStatus = "COMPLETE";
+    }
+
+    if (resolvedIsPublished === true) {
       newStatus = "COMPLETE";
     }
 
