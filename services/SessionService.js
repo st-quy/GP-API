@@ -216,7 +216,22 @@ async function updateSession(req) {
       };
     }
 
-    if (session.status === "ON_GOING") {
+    // Derive whether the session is currently ON_GOING from time and isPublished,
+    // instead of relying solely on the persisted session.status, which may be stale.
+    const now = new Date();
+    const effectiveStartTime = startTime ? new Date(startTime) : session.startTime;
+    const effectiveEndTime = endTime ? new Date(endTime) : session.endTime;
+    const effectiveIsPublished =
+      typeof isPublished === "boolean" ? isPublished : session.isPublished;
+
+    const isOngoingByTime =
+      effectiveIsPublished &&
+      effectiveStartTime &&
+      effectiveEndTime &&
+      now >= effectiveStartTime &&
+      now <= effectiveEndTime;
+
+    if (isOngoingByTime) {
       return {
         status: 403,
         message: "Cannot edit a session that is currently ON_GOING",
