@@ -330,30 +330,37 @@ async function calculatePoints(req) {
       ],
     });
 
-    // BUG_CM059: We need to know the TOTAL number of questions for this skill in the topic
-    // to calculate the score out of 50 correctly.
-    const parts = await Part.findAll({
+    // [OPTIMIZATION]: Use count query instead of fetching all Part objects
+    const totalQuestionsCount = await Question.count({
       include: [
-        { model: Skill, as: 'Skill', where: { Name: skillName.toUpperCase() }, required: true },
         {
-          model: Section,
-          as: 'Sections',
+          model: Part,
+          as: 'Part',
           required: true,
-          include: [{ model: Topic, as: 'Topics', where: { ID: sessionParticipant.Session.examSet }, required: true }]
+          include: [
+            {
+              model: Skill,
+              as: 'Skill',
+              where: { Name: skillName.toUpperCase() },
+              required: true,
+            },
+            {
+              model: Section,
+              as: 'Sections',
+              required: true,
+              include: [
+                {
+                  model: Topic,
+                  as: 'Topics',
+                  where: { ID: sessionParticipant.Session.examSet },
+                  required: true,
+                },
+              ],
+            },
+          ],
         },
-        { model: Question, as: 'Questions' }
-      ]
-    });
-
-    let totalQuestionsCount = 0;
-    parts.forEach(p => {
-      totalQuestionsCount += (p.Questions?.length || 0);
-    });
-
-    if (totalQuestionsCount === 0) {
-      // Fallback to constants if topic structure is missing questions
-      totalQuestionsCount = formattedSkillName.toLowerCase() === 'reading' ? 29 : 25;
-    }
+      ],
+    }) || (formattedSkillName.toLowerCase() === 'reading' ? 29 : 25);
 
     let correctCount = 0;
     const logs = [];
@@ -394,8 +401,6 @@ async function calculatePoints(req) {
         else if (type === 'matching') {
           const studentAns = JSON.parse(rawStudentAnswer);
           const correctAns = correctContent.correctAnswer;
-          
-          // All-or-Nothing check for matching
           const allMatched = correctAns.every((correct) => {
             return studentAns.some(
               (s) =>
@@ -408,8 +413,6 @@ async function calculatePoints(req) {
         else if (type === 'ordering') {
           const studentAns = JSON.parse(rawStudentAnswer).sort((a, b) => a.value - b.value);
           const correctAns = correctContent.correctAnswer;
-          
-          // All-or-Nothing check for ordering
           let allCorrect = studentAns.length === correctAns.length;
           if (allCorrect) {
             for (let i = 0; i < correctAns.length; i++) {
@@ -607,27 +610,40 @@ async function getFullExamReview(sessionParticipantId, user) {
 
     // 2. Lấy Topic kèm theo Sections và Parts
     const topic = await Topic.findByPk(sessionParticipant.Session.examSet, {
+      attributes: ['ID', 'Name'],
       include: [
         {
           model: Section,
           as: 'Sections',
+          attributes: ['ID', 'Name', 'Description'],
           required: false,
           include: [
             {
               model: Part,
               as: 'Parts',
+              attributes: ['ID', 'Content', 'SubContent'],
               required: false,
               include: [
                 {
                   model: Question,
                   as: 'Questions',
+                  attributes: [
+                    'ID',
+                    'Type',
+                    'Content',
+                    'SubContent',
+                    'AudioKeys',
+                    'ImageKeys',
+                    'GroupContent',
+                    'AnswerContent',
+                  ],
                   required: false,
                 },
                 {
                   model: Skill,
                   as: 'Skill',
-                  required: false,
                   attributes: ['Name'],
+                  required: false,
                 },
               ],
             },
