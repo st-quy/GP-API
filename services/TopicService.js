@@ -6,6 +6,7 @@ const {
   Part,
   Topic,
   Section,
+  User,
 } = require('../models');
 const { Op } = require('sequelize');
 const { TOPIC_STATUS } = require('../helpers/constants');
@@ -72,7 +73,7 @@ const getQuestionsByQuestionSetId = async (req) => {
 
 const createTopic = async (req) => {
   try {
-    const { Name, Status } = req.body;
+    const { Name, Status, Duration } = req.body;
     if (!Name) {
       return {
         status: 400,
@@ -84,9 +85,14 @@ const createTopic = async (req) => {
 
     let finalStatus = TOPIC_STATUS.DRAFT;
 
+    const userId = req.user?.userId || null;
+
     const newTopic = await Topic.create({
       Name,
       Status: validStatuses.includes(Status) ? Status : finalStatus,
+      Duration: Duration || null,
+      CreatedBy: userId,
+      UpdatedBy: userId,
     });
     return {
       status: 201,
@@ -132,6 +138,31 @@ const getAllTopics = async (req) => {
       offset,
       limit: pageSize,
       order: [['Name', 'ASC']],
+      include: [
+        {
+          model: User,
+          as: 'creator',
+          attributes: ['ID', 'firstName', 'lastName'],
+        },
+        {
+          model: User,
+          as: 'updater',
+          attributes: ['ID', 'firstName', 'lastName'],
+        },
+      ],
+    });
+
+    const data = rows.map((topic) => {
+      const plain = topic.get({ plain: true });
+      return {
+        ...plain,
+        createdBy: plain.creator
+          ? `${plain.creator.firstName} ${plain.creator.lastName}`
+          : null,
+        updatedBy: plain.updater
+          ? `${plain.updater.firstName} ${plain.updater.lastName}`
+          : null,
+      };
     });
 
     return {
@@ -141,7 +172,7 @@ const getAllTopics = async (req) => {
       pageSize,
       totalItems: count,
       totalPages: Math.ceil(count / pageSize),
-      data: rows,
+      data,
       statusCounts,
     };
   } catch (error) {
@@ -335,12 +366,17 @@ async function updateTopic(req, res) {
     const updatedTopicData = req.body;
     const topic = await Topic.findByPk(id);
     if (!topic) {
-      return { 
+      return {
         status: 404,
-        message: 'Topic not found' 
+        message: 'Topic not found'
       };
     }
-    
+
+    const userId = req.user?.userId || null;
+    if (userId) {
+      updatedTopicData.UpdatedBy = userId;
+    }
+
     await topic.update(updatedTopicData);
 
     return {
