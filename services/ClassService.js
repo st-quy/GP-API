@@ -146,8 +146,9 @@ async function getClassDetailById(req) {
   }
 }
 
-async function remove(classId) {
+async function remove(req) {
   try {
+    const { classId } = req.params;
     const classToDelete = await Class.findByPk(classId);
 
     if (!classToDelete) {
