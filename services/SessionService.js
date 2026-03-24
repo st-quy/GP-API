@@ -269,8 +269,31 @@ async function updateSession(req) {
     }
 
     // Validate and recalculate status when time fields change
-    const resolvedStartTime = startTime ? new Date(startTime) : session.startTime;
-    const resolvedEndTime = endTime ? new Date(endTime) : session.endTime;
+    let resolvedStartTime = session.startTime;
+    let resolvedEndTime = session.endTime;
+
+    if (startTime !== undefined) {
+      const parsedStart = new Date(startTime);
+      if (Number.isNaN(parsedStart.getTime())) {
+        return {
+          status: 400,
+          message: "Invalid start time",
+        };
+      }
+      resolvedStartTime = parsedStart;
+    }
+
+    if (endTime !== undefined) {
+      const parsedEnd = new Date(endTime);
+      if (Number.isNaN(parsedEnd.getTime())) {
+        return {
+          status: 400,
+          message: "Invalid end time",
+        };
+      }
+      resolvedEndTime = parsedEnd;
+    }
+
     if (resolvedStartTime >= resolvedEndTime) {
       return {
         status: 400,
