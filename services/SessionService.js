@@ -5,7 +5,43 @@ const { removeMinIOAudio } = require("./StudentAnswerService");
 
 async function getAllSessions(req) {
   try {
-    const sessions = await Session.findAll({
+    const {
+      search,
+      status,
+      classId,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 10,
+    } = req.query;
+
+    const whereClause = {};
+
+    if (search) {
+      whereClause.sessionName = { [Op.iLike]: `%${search}%` };
+    }
+
+    if (status) {
+      whereClause.status = status;
+    }
+
+    if (classId) {
+      whereClause.ClassID = classId;
+    }
+
+    if (startDate && endDate) {
+      whereClause.startTime = { [Op.gte]: new Date(startDate) };
+      whereClause.endTime = { [Op.lte]: new Date(endDate) };
+    } else if (startDate) {
+      whereClause.startTime = { [Op.gte]: new Date(startDate) };
+    } else if (endDate) {
+      whereClause.endTime = { [Op.lte]: new Date(endDate) };
+    }
+
+    const offset = (page - 1) * limit;
+
+    const { rows, count } = await Session.findAndCountAll({
+      where: whereClause,
       include: [
         {
           model: Class,
@@ -16,10 +52,17 @@ async function getAllSessions(req) {
           as: "Topic",
         },
       ],
+      limit: Number(limit),
+      offset: Number(offset),
+      order: [["createdAt", "DESC"]],
     });
+
     return {
       status: 200,
-      data: sessions,
+      data: rows,
+      total: count,
+      currentPage: Number(page),
+      totalPages: Math.ceil(count / limit),
     };
   } catch (error) {
     throw new Error(`Error fetching all sessions: ${error.message}`);
