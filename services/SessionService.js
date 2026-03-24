@@ -238,7 +238,15 @@ async function updateSession(req) {
       };
     }
 
-    if (session.status === "ON_GOING") {
+    const now = new Date();
+    const isOngoingByTime =
+      session.isPublished &&
+      session.startTime &&
+      session.endTime &&
+      now >= session.startTime &&
+      now <= session.endTime;
+
+    if (session.status === "ON_GOING" || isOngoingByTime) {
       return {
         status: 403,
         message: "Cannot edit a session that is currently ON_GOING",
