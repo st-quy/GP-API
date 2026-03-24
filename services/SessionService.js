@@ -199,6 +199,15 @@ async function updateSession(req) {
       minioAudioRemoved
     } = req.body;
 
+    // Prevent clients from mutating system-managed fields
+    if (typeof isPublished !== "undefined" || typeof minioAudioRemoved !== "undefined") {
+      return {
+        status: 400,
+        message:
+          "The fields 'isPublished' and 'minioAudioRemoved' are system-managed and cannot be updated via this endpoint",
+      };
+    }
+
     const session = await Session.findByPk(sessionId);
     if (!session) {
       return {
