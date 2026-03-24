@@ -1,6 +1,6 @@
 const { Sequelize, Op } = require("sequelize");
 const cron = require("node-cron");
-const { Session, SessionParticipant, Class, Topic } = require("../models");
+const { Session, SessionParticipant, Class, Topic, sequelize } = require("../models");
 const { removeMinIOAudio } = require("./StudentAnswerService");
 
 async function getAllSessions(req) {
@@ -85,6 +85,32 @@ async function createSession(req) {
       return {
         status: 400,
         message: "Start time must be before end time",
+      };
+    }
+
+    if (new Date(startTime).getTime() === new Date(endTime).getTime()) {
+      return {
+        status: 400,
+        message: "Start time and end time cannot be the same",
+      };
+    }
+
+    // Normalize: Trim and collapse multiple spaces into one
+    const normalizedName = sessionName.trim().replace(/\s+/g, ' ');
+
+    // Check duplicate name (Case-insensitive)
+    const existingName = await Session.findOne({
+      where: sequelize.where(
+        sequelize.fn('LOWER', sequelize.col('sessionName')),
+        '=',
+        normalizedName.toLowerCase()
+      ),
+    });
+
+    if (existingName) {
+      return {
+        status: 400,
+        message: "Session name already exists",
       };
     }
 
@@ -177,7 +203,7 @@ async function updateSession(req) {
     if (!session) {
       return {
         status: 404,
-        message: "Session not found",
+        message: "Session not found or no changes made",
       };
     }
 
@@ -278,7 +304,7 @@ async function updateSession(req) {
 
     return {
       status: 200,
-      data: session,
+      data: updatedSession,
     };
   } catch (error) {
     throw new Error(`Error updating session: ${error.message}`);
