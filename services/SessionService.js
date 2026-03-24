@@ -1,6 +1,6 @@
 const { Sequelize, Op } = require("sequelize");
 const cron = require("node-cron");
-const { Session, SessionParticipant, Class, Topic } = require("../models");
+const { Session, SessionParticipant, Class, Topic, sequelize } = require("../models");
 const { removeMinIOAudio } = require("./StudentAnswerService");
 
 async function getAllSessions(req) {
@@ -234,7 +234,7 @@ async function updateSession(req) {
     if (!session) {
       return {
         status: 404,
-        message: "Session not found",
+        message: "Session not found or no changes made",
       };
     }
 
@@ -335,7 +335,7 @@ async function updateSession(req) {
 
     return {
       status: 200,
-      data: session,
+      data: updatedSession,
     };
   } catch (error) {
     throw new Error(`Error updating session: ${error.message}`);
