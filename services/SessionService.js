@@ -272,7 +272,13 @@ async function updateSession(req) {
     }
 
     // Validate ClassID if provided
-    if (ClassID) {
+    if (ClassID !== undefined) {
+      if (ClassID === null || ClassID === "") {
+        return {
+          status: 400,
+          message: "ClassID cannot be null or empty",
+        };
+      }
       const checkExistClass = await Class.findByPk(ClassID);
       if (!checkExistClass) {
         return {
@@ -296,7 +302,7 @@ async function updateSession(req) {
     }
 
     // Check unique sessionName within the same class (excluding current session)
-    const resolvedClassID = ClassID || session.ClassID;
+    const resolvedClassID = ClassID !== undefined ? ClassID : session.ClassID;
     const resolvedSessionName = sessionName || session.sessionName;
     if (resolvedClassID !== session.ClassID || resolvedSessionName !== session.sessionName) {
       const duplicate = await Session.findOne({
