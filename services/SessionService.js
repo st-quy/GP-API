@@ -325,12 +325,21 @@ async function updateSession(req) {
     }
 
     const now = new Date();
+    // Determine the effective isPublished value for this update
+    const resolvedIsPublished =
+      typeof isPublished === "boolean" ? isPublished : session.isPublished;
+
     let newStatus;
     if (resolvedStartTime > now) {
       newStatus = "NOT_STARTED";
     } else if (resolvedEndTime > now) {
       newStatus = "ON_GOING";
     } else {
+      newStatus = "COMPLETE";
+    }
+
+    // Enforce invariant: published sessions must be COMPLETE
+    if (resolvedIsPublished) {
       newStatus = "COMPLETE";
     }
 
