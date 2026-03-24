@@ -77,10 +77,13 @@ async function getAllQuestions(req) {
       whereQuestion.Type = type;
     }
 
-    const parsedTags = parseTagsQuery(tags);
-    if (parsedTags.length > 0) {
-      whereQuestion.Tags = { [Op.overlap]: parsedTags };
-    }
+    // Tag-based filtering is currently disabled because the Question model/DB
+    // schema does not yet define a Tags column. Once Tags is added to the
+    // model and migrated, this can be re-enabled.
+    // const parsedTags = parseTagsQuery(tags);
+    // if (parsedTags.length > 0) {
+    //   whereQuestion.Tags = { [Op.overlap]: parsedTags };
+    // }
 
     // --------------------------------------------------
     // PART + SKILL (Skill belongsTo Part)
