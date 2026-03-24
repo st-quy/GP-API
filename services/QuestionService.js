@@ -1957,28 +1957,32 @@ async function updateReadingGroup(sectionId, payload) {
       });
 
       if (oldQ) {
-        await oldQ.update(
-          {
-            Type: p.Type,
-            Content: p.Content,
-            AnswerContent: p.AnswerContent,
-            Tags: normalizeTags(p.Tags || p.tags),
-          },
-          { transaction: t }
-        );
+        const updatePayload = {
+          Type: p.Type,
+          Content: p.Content,
+          AnswerContent: p.AnswerContent,
+        };
+
+        if ('Tags' in p || 'tags' in p) {
+          updatePayload.Tags = normalizeTags(p.Tags || p.tags);
+        }
+
+        await oldQ.update(updatePayload, { transaction: t });
       } else {
-        await Question.create(
-          {
-            ID: uuidv4(),
-            PartID: partRow.ID,
-            Type: p.Type,
-            Sequence: 1,
-            Content: p.Content,
-            AnswerContent: p.AnswerContent,
-            Tags: normalizeTags(p.Tags || p.tags),
-          },
-          { transaction: t }
-        );
+        const createPayload = {
+          ID: uuidv4(),
+          PartID: partRow.ID,
+          Type: p.Type,
+          Sequence: 1,
+          Content: p.Content,
+          AnswerContent: p.AnswerContent,
+        };
+
+        if ('Tags' in p || 'tags' in p) {
+          createPayload.Tags = normalizeTags(p.Tags || p.tags);
+        }
+
+        await Question.create(createPayload, { transaction: t });
       }
 
       finalParts.push(partRow);
