@@ -324,9 +324,9 @@ async function createQuestionGroup(req) {
   }
 }
 
-async function createSpeakingGroup(req, res) {
+async function createSpeakingGroup(req) {
   try {
-    const { SkillName, SectionName, parts } = req.body;
+    const { SkillName, SectionName, Description, parts } = req.body;
     const userId = req.user?.userId;
 
     if (!SkillName || !parts || !SectionName) {
@@ -346,24 +346,17 @@ async function createSpeakingGroup(req, res) {
 
     const result = await sequelize.transaction(async (t) => {
       /* =====================================================
-         1) CREATE / GET SECTION (INSIDE TRANSACTION)
+         1) CREATE SECTION (INSIDE TRANSACTION)
       ===================================================== */
-      let section = await Section.findOne(
-        { where: { Name: SectionName } },
+      const section = await Section.create(
+        {
+          ID: uuidv4(),
+          SkillID: skill.ID,
+          Name: SectionName,
+          Description: Description?.trim() || null,
+        },
         { transaction: t }
       );
-
-      if (!section) {
-        section = await Section.create(
-          {
-            ID: uuidv4(),
-            SkillID: skill.ID,
-            Name: SectionName,
-            Description: null,
-          },
-          { transaction: t }
-        );
-      }
 
       /* =====================================================
          2) CREATE / UPDATE PARTS
@@ -508,9 +501,9 @@ async function createSpeakingGroup(req, res) {
   }
 }
 
-async function createReadingGroup(req, res) {
+async function createReadingGroup(req) {
   try {
-    const { SkillName, SectionName, parts } = req.body;
+    const { SkillName, SectionName, Description, parts } = req.body;
     const userId = req.user?.userId;
 
     if (!SkillName || !parts || !SectionName) {
@@ -532,20 +525,14 @@ async function createReadingGroup(req, res) {
     // parts.forEach((p) => validatePartStructure(p));
 
     // -----------------------------------------
-    // 1) FIND OR CREATE SECTION
+    // 1) CREATE SECTION
     // -----------------------------------------
-    let section = await Section.findOne({
-      where: { Name: SectionName },
+    const section = await Section.create({
+      ID: uuidv4(),
+      SkillID: skill.ID,
+      Name: SectionName,
+      Description: Description?.trim() || null,
     });
-
-    if (!section) {
-      section = await Section.create({
-        ID: uuidv4(),
-        SkillID: skill.ID,
-        Name: SectionName,
-        Description: null,
-      });
-    }
 
     // 2) TRANSACTION
     const result = await sequelize.transaction(async (t) => {
@@ -596,14 +583,13 @@ async function createReadingGroup(req, res) {
         }
 
         // =====================
-        // ALWAYS REMOVE OLD QUESTIONS
+        // 3) UPSERT QUESTION FOR THIS PART
         // =====================
-        await Question.destroy(
-          {
-            where: { PartID: partRow.ID },
-          },
-          { transaction: t }
-        );
+        // Try to find existing question first to preserve ID and reduce churn
+        const existingQuestion = await Question.findOne({
+          where: { PartID: partRow.ID },
+          transaction: t,
+        });
 
         // =====================
         // 3) CREATE QUESTION FOR THIS PART
@@ -665,15 +651,15 @@ async function createReadingGroup(req, res) {
     };
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ message: error.message });
+    throw error;
   }
 }
 
-async function createWritingGroup(req, res) {
+async function createWritingGroup(req) {
   const t = await sequelize.transaction();
 
   try {
-    const { SectionName, parts } = req.body;
+    const { SectionName, Description, parts } = req.body;
     const userId = req.user?.userId;
 
     if (!SectionName || !parts) {
@@ -694,26 +680,19 @@ async function createWritingGroup(req, res) {
     }
 
     // ================================================
-    // 1) CREATE SECTION if not exists
+    // 1) CREATE SECTION
     // ================================================
-    let section = await Section.findOne(
-      { where: { Name: SectionName } },
+    const section = await Section.create(
+      {
+        ID: uuidv4(),
+        SkillID: skill.ID,
+        Name: SectionName,
+        Description: Description?.trim() || null,
+        CreatedBy: userId,
+        UpdatedBy: userId,
+      },
       { transaction: t }
     );
-
-    if (!section) {
-      section = await Section.create(
-        {
-          ID: uuidv4(),
-          SkillID: skill.ID,
-          Name: SectionName,
-          Description: null,
-          CreatedBy: userId,
-          UpdatedBy: userId,
-        },
-        { transaction: t }
-      );
-    }
 
     // ================================================
     // 2) ALWAYS CREATE 4 PARTS (no update)
@@ -750,19 +729,6 @@ async function createWritingGroup(req, res) {
     }
 
     const partIds = Object.values(createdParts).map((x) => x.ID);
-
-    // ================================================
-    // 3) DELETE OLD QUESTIONS
-    // ================================================
-    await Question.destroy(
-      {
-        where: {
-          PartID: partIds,
-          Type: 'writing',
-        },
-      },
-      { transaction: t }
-    );
 
     // ================================================
     // 4) CREATE QUESTIONS FOR 4 PARTS
@@ -920,9 +886,9 @@ async function createWritingGroup(req, res) {
   }
 }
 
-async function createListeningGroup(req, res) {
+async function createListeningGroup(req) {
   try {
-    const { SkillName, SectionName, parts } = req.body;
+    const { SkillName, SectionName, Description, parts } = req.body;
     const userId = req.user?.userId;
 
     if (!SkillName || !SectionName || !parts) {
@@ -949,26 +915,19 @@ async function createListeningGroup(req, res) {
     // =====================================================
     const result = await sequelize.transaction(async (t) => {
       // =====================================================
-      // 1) Create / Update Section
+      // 1) Create Section
       // =====================================================
-      let section = await Section.findOne(
-        { where: { Name: SectionName } },
+      const section = await Section.create(
+        {
+          ID: uuidv4(),
+          SkillID: skill.ID,
+          Name: SectionName,
+          Description: Description?.trim() || null,
+          CreatedBy: userId,
+          UpdatedBy: userId,
+        },
         { transaction: t }
       );
-
-      if (!section) {
-        section = await Section.create(
-          {
-            ID: uuidv4(),
-            SkillID: skill.ID,
-            Name: SectionName,
-            Description: null,
-            CreatedBy: userId,
-            UpdatedBy: userId,
-          },
-          { transaction: t }
-        );
-      }
 
       // =====================================================
       // 2) Create / Update 4 PARTS
@@ -1118,9 +1077,9 @@ async function createListeningGroup(req, res) {
   }
 }
 
-async function createGrammarAndVocabGroup(req, res) {
+async function createGrammarAndVocabGroup(req) {
   try {
-    const { SkillName, SectionName, parts } = req.body;
+    const { SkillName, SectionName, Description, parts } = req.body;
     const userId = req.user?.userId;
 
     if (!SkillName || !SectionName || !parts) {
@@ -1147,26 +1106,19 @@ async function createGrammarAndVocabGroup(req, res) {
     // =======================================
     const result = await sequelize.transaction(async (t) => {
       // =======================================
-      // 1) CREATE / FIND SECTION
+      // 1) CREATE SECTION
       // =======================================
-      let section = await Section.findOne(
-        { where: { Name: SectionName } },
+      const section = await Section.create(
+        {
+          ID: uuidv4(),
+          SkillID: skill.ID,
+          Name: SectionName,
+          Description: Description?.trim() || null,
+          CreatedBy: userId,
+          UpdatedBy: userId,
+        },
         { transaction: t }
       );
-
-      if (!section) {
-        section = await Section.create(
-          {
-            ID: uuidv4(),
-            SkillID: skill.ID,
-            Name: SectionName,
-            Description: null,
-            CreatedBy: userId,
-            UpdatedBy: userId,
-          },
-          { transaction: t }
-        );
-      }
 
       // =======================================
       // 2) PREPARE PART LIST
@@ -1431,7 +1383,7 @@ async function getQuestionsByQuestionSetID(req) {
       Sequence: item.Sequence,
     }));
 
-    const orderedQuestions = _.sortBy(questions, ['Sequence']);
+    const orderedQuestions = questions.sort((a, b) => (a.Sequence || 0) - (b.Sequence || 0));
 
     return {
       status: 200,
@@ -1552,6 +1504,7 @@ function extractWordLimit(text) {
 async function getQuestionGroupDetail(req) {
   try {
     const { skillName, sectionId } = req.query;
+    console.info(`[GetDetail] Fetching detail for Skill: ${skillName}, Section: ${sectionId}`);
 
     if (!skillName || !sectionId) {
       return Response.badRequest('skillName and sectionId are required');
@@ -1577,13 +1530,19 @@ async function getQuestionGroupDetail(req) {
       ],
     });
 
-    if (!section) return Response.notFound('Section not found');
+    if (!section) {
+      console.warn(`[GetDetail] Section ${sectionId} not found`);
+      return Response.notFound('Section not found');
+    }
 
-    const sortedParts = section.Parts.sort((a, b) => a.Sequence - b.Sequence);
+    console.info(`[GetDetail] Found section: ${section.Name} with ${section.Parts?.length || 0} parts`);
+
+    const sortedParts = (section.Parts || []).sort((a, b) => (a.Sequence || 0) - (b.Sequence || 0));
 
     const payload = {
       SectionID: section.ID,
       SectionName: section.Name,
+      Description: section.Description || '',
     };
 
     // ================================
@@ -1592,10 +1551,11 @@ async function getQuestionGroupDetail(req) {
     if (skillLower === 'speaking') {
       sortedParts.forEach((p, idx) => {
         const firstQ = p.Questions?.[0];
+        const partSequence = p.SectionPart?.Sequence || p.Sequence || (idx + 1);
         payload[`part${idx + 1}`] = {
           id: p.ID,
           name: p.Content,
-          sequence: p.SectionPart.Sequence,
+          sequence: partSequence,
           image: firstQ?.ImageKeys?.[0] || null,
           questions: p.Questions,
         };
@@ -1715,13 +1675,13 @@ async function updateSpeakingGroup(sectionId, payload) {
   const t = await sequelize.transaction();
 
   try {
-    const { SectionName, parts } = payload;
+    const { SectionName, Description, parts, userId } = payload;
 
     /** =============================
      * 1. Update Section
      * ============================= */
     await Section.update(
-      { Name: SectionName },
+      { Name: SectionName, Description: Description?.trim() || null },
       { where: { ID: sectionId }, transaction: t }
     );
 
@@ -1748,81 +1708,128 @@ async function updateSpeakingGroup(sectionId, payload) {
       return map;
     }, {});
 
+    // Map by Sequence as a fallback (critical for when FE loses IDs)
+    const existingPartSequenceMap = existingParts.reduce((map, p) => {
+      map[p.Sequence] = p;
+      return map;
+    }, {});
+
     /** =============================
      * 3. LOOP các Part FE gửi lên
      * ============================= */
+    console.info(`[Speaking Update] Processing ${Object.keys(parts).length} parts for Section ${sectionId}`);
+    
     for (const key of Object.keys(parts)) {
       const incoming = parts[key];
-      const partId = incoming.id;
+      const incomingId = incoming.id;
+      const incomingSequence = incoming.sequence;
+      
+      let partRow = existingPartMap[incomingId] || existingPartSequenceMap[incomingSequence];
+      let partId;
 
-      if (!existingPartMap[partId]) {
-        throw new Error(`Part ${key} không tồn tại.`);
+      /** =============================
+       * 3.1 Upsert Part
+       * ============================= */
+      if (partRow) {
+        // UPDATE existing part
+        await partRow.update(
+          {
+            Content: incoming.name,
+            Sequence: incomingSequence,
+            UpdatedBy: userId,
+          },
+          { transaction: t }
+        );
+        partId = partRow.ID;
+        console.info(`[Speaking Update]   -> Updated Part: ${key} (ID: ${partId})`);
+      } else {
+        // CREATE new part
+        partRow = await Part.create(
+          {
+            ID: uuidv4(),
+            SkillID: section.SkillID,
+            Content: incoming.name,
+            Sequence: incomingSequence,
+            CreatedBy: userId,
+            UpdatedBy: userId,
+          },
+          { transaction: t }
+        );
+        partId = partRow.ID;
+
+        // Link to Section
+        await SectionPart.create(
+          {
+            ID: uuidv4(),
+            SectionID: sectionId,
+            PartID: partId,
+          },
+          { transaction: t }
+        );
+        console.info(`[Speaking Update]   -> Created NEW Part: ${key} (ID: ${partId})`);
       }
 
-      /** =============================
-       * 3.1 Update Part
-       * ============================= */
-      await Part.update(
-        {
-          Content: incoming.name,
-          Sequence: incoming.sequence,
-        },
-        { where: { ID: partId }, transaction: t }
-      );
+      // Map existing questions for this part by Sequence
+      const oldQuestions = partRow.Questions || [];
+      const existingQuestionSequenceMap = oldQuestions.reduce((map, q) => {
+        map[q.Sequence] = q;
+        return map;
+      }, {});
 
-      const oldQuestions = existingPartMap[partId].Questions || [];
-
-      const oldIds = oldQuestions.map((q) => q.ID);
       const newItems = incoming.questions || [];
-      const newIds = newItems.filter((q) => q.id).map((q) => q.id);
-
-      /** =============================
-       * 3.2 Delete Questions bị xóa ở FE
-       * ============================= */
-      const removedIds = oldIds.filter((id) => !newIds.includes(id));
       const imageKeys = incoming.image ? [incoming.image] : [];
 
-      if (removedIds.length > 0) {
-        await Question.destroy({
-          where: { ID: removedIds },
-          transaction: t,
-        });
-      }
-
       /** =============================
-       * 3.3 Update hoặc Create Question mới
+       * 3.2 Upsert Questions by Sequence
        * ============================= */
+      console.info(`[Speaking Update]     -> Upserting ${newItems.length} questions for part ${partId}`);
+      
+      const activeQuestionIds = [];
+
       for (const q of newItems) {
+        const qSequence = q.sequence || 1;
+        const qContent = q.content || q.value || '';
+        
+        // Find by ID or Fallback to Sequence
+        let questionRow = oldQuestions.find(oldQ => oldQ.ID === q.id) || existingQuestionSequenceMap[qSequence];
+
         const baseData = {
           Type: q.type || 'speaking',
-          Sequence: q.sequence || 1,
-          Content: q.content || '',
+          Sequence: qSequence,
+          Content: qContent,
           ImageKeys: imageKeys,
           Tags: normalizeTags(q.Tags || q.tags),
         };
 
-        if (q.id) {
-          /** ------------------------------
-           * Update Question có sẵn
-           * ------------------------------ */
-          await Question.update(baseData, {
-            where: { ID: q.id },
-            transaction: t,
-          });
+        if (questionRow) {
+          console.info(`[Speaking Update]       -> Updating question (Sequence: ${qSequence})`);
+          await questionRow.update(baseData, { transaction: t });
+          activeQuestionIds.push(questionRow.ID);
         } else {
-          /** ------------------------------
-           * Create mới Question + gán PartID
-           * ------------------------------ */
-          await Question.create(
+          console.info(`[Speaking Update]       -> Creating new question (Sequence: ${qSequence})`);
+          const newQ = await Question.create(
             {
               ID: uuidv4(),
               PartID: partId,
+              CreatedBy: userId,
               ...baseData,
             },
             { transaction: t }
           );
+          activeQuestionIds.push(newQ.ID);
         }
       }
+
+      /** =============================
+       * 3.3 Cleanup removed questions
+       * ============================= */
+      await Question.destroy({
+        where: {
+          PartID: partId,
+          ID: { [Op.notIn]: activeQuestionIds }
+        },
+        transaction: t
+      });
     }
 
     await t.commit();
@@ -1832,11 +1839,8 @@ async function updateSpeakingGroup(sectionId, payload) {
     };
   } catch (error) {
     await t.rollback();
-    console.error(error);
-    return {
-      status: 500,
-      message: error.message,
-    };
+    console.error('[Speaking Update Error]', error);
+    throw error;
   }
 }
 
@@ -1844,7 +1848,7 @@ async function updateReadingGroup(sectionId, payload) {
   const t = await sequelize.transaction();
 
   try {
-    const { SectionName, parts } = payload;
+    const { SectionName, Description, parts, userId } = payload;
 
     if (!SectionName || !Array.isArray(parts)) {
       throw new Error('SectionName and parts are required');
@@ -1852,7 +1856,7 @@ async function updateReadingGroup(sectionId, payload) {
 
     // 1) Update SECTION
     await Section.update(
-      { Name: SectionName },
+      { Name: SectionName, Description: Description?.trim() || null },
       { where: { ID: sectionId }, transaction: t }
     );
 
@@ -2014,8 +2018,7 @@ async function updateWritingGroup(sectionId, payload) {
   const t = await sequelize.transaction();
 
   try {
-    const { SectionName, parts } = payload;
-    const userId = payload.userId;
+    const { SectionName, Description, parts, userId } = payload;
 
     if (!SectionName || !parts) {
       throw new Error('SectionName and parts are required');
@@ -2025,7 +2028,7 @@ async function updateWritingGroup(sectionId, payload) {
     // 1) UPDATE SECTION
     // ================================================
     await Section.update(
-      { Name: SectionName },
+      { Name: SectionName, Description: Description?.trim() || null },
       { where: { ID: sectionId }, transaction: t }
     );
 
@@ -2074,19 +2077,6 @@ async function updateWritingGroup(sectionId, payload) {
 
       updatedParts[key] = dbPart;
     }
-
-    // ================================================
-    // 3) DELETE ALL OLD QUESTIONS for these 4 parts
-    // ================================================
-    await Question.destroy(
-      {
-        where: {
-          PartID: Object.values(updatedParts).map((p) => p.ID),
-          Type: 'writing',
-        },
-      },
-      { transaction: t }
-    );
 
     // ================================================
     // 4) RE-CREATE NEW QUESTIONS
@@ -2233,8 +2223,7 @@ async function updateListeningGroup(sectionId, payload) {
   const t = await sequelize.transaction();
 
   try {
-    const { SkillName, SectionName, parts } = payload;
-    const userId = payload.userId;
+    const { SkillName, SectionName, Description, parts, userId } = payload;
 
     if (!SkillName || !SectionName || !parts) {
       throw new Error('SkillName, SectionName and parts{} are required');
@@ -2267,7 +2256,11 @@ async function updateListeningGroup(sectionId, payload) {
     // 3) UPDATE SECTION
     // =====================================================
     await section.update(
-      { Name: SectionName, UpdatedBy: userId },
+      {
+        Name: SectionName,
+        Description: Description?.trim() || null,
+        UpdatedBy: userId,
+      },
       { transaction: t }
     );
 
@@ -2404,8 +2397,7 @@ async function updateGrammarAndVocabGroup(sectionId, payload) {
   const t = await sequelize.transaction();
 
   try {
-    const { SkillName, SectionName, parts } = payload;
-    const userId = payload.userId;
+    const { SkillName, SectionName, Description, parts, userId } = payload;
 
     if (!SkillName || !SectionName || !parts) {
       throw new Error('SkillName, SectionName and parts{} are required');
@@ -2444,6 +2436,7 @@ async function updateGrammarAndVocabGroup(sectionId, payload) {
     await section.update(
       {
         Name: SectionName,
+        Description: Description?.trim() || null,
         UpdatedBy: userId,
       },
       { transaction: t }
