@@ -283,7 +283,7 @@ async function updateSession(req) {
     // Check unique sessionName within the same class (excluding current session)
     const resolvedClassID = ClassID || session.ClassID;
     const resolvedSessionName = sessionName || session.sessionName;
-    if (sessionName && sessionName !== session.sessionName) {
+    if (resolvedClassID !== session.ClassID || resolvedSessionName !== session.sessionName) {
       const duplicate = await Session.findOne({
         where: {
           sessionName: resolvedSessionName,
