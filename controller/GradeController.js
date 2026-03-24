@@ -38,9 +38,10 @@ const calculatePointForWritingAndSpeaking = async (req, res) => {
 const getFullExamReview = async (req, res) => {
   try {
     const { sessionParticipantId } = req.params;
+    const user = req.user;
     
     // Gọi service để lấy dữ liệu review chi tiết
-    const result = await GradeService.getFullExamReview(sessionParticipantId, req.user);
+    const result = await GradeService.getFullExamReview(sessionParticipantId, user);
 
     return res.status(result.status).json(result);
   } catch (error) {
