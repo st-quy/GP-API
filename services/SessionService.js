@@ -238,8 +238,16 @@ async function updateSession(req) {
       };
     }
 
-    // Validate examSet if provided
-    if (examSet) {
+    // Validate examSet if provided (treat undefined as "not provided")
+    if (examSet !== undefined) {
+      // Explicitly reject null or empty values for non-nullable column
+      if (examSet === null || examSet === "") {
+        return {
+          status: 400,
+          message: "examSet cannot be null or empty",
+        };
+      }
+
       const checkExistTopic = await Topic.findByPk(examSet);
       if (!checkExistTopic) {
         return {
@@ -249,8 +257,16 @@ async function updateSession(req) {
       }
     }
 
-    // Validate ClassID if provided
-    if (ClassID) {
+    // Validate ClassID if provided (treat undefined as "not provided")
+    if (ClassID !== undefined) {
+      // Explicitly reject null or empty values for non-nullable column
+      if (ClassID === null || ClassID === "") {
+        return {
+          status: 400,
+          message: "ClassID cannot be null or empty",
+        };
+      }
+
       const checkExistClass = await Class.findByPk(ClassID);
       if (!checkExistClass) {
         return {
@@ -274,7 +290,8 @@ async function updateSession(req) {
     }
 
     // Check unique sessionName within the same class (excluding current session)
-    const resolvedClassID = ClassID || session.ClassID;
+    const resolvedClassID =
+      ClassID !== undefined ? ClassID : session.ClassID;
     const resolvedSessionName = sessionName || session.sessionName;
     if (sessionName && sessionName !== session.sessionName) {
       const duplicate = await Session.findOne({
