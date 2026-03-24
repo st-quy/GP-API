@@ -1,61 +1,57 @@
-const { Class, sequelize, User, Role } = require('../models');
+const { Class, sequelize, User, Role, Session } = require('../models');
 const sequelizePaginate = require('sequelize-paginate');
 const { Op, Sequelize } = require('sequelize');
 
 async function findAll(req) {
-  sequelizePaginate.paginate(Class);
-  const { page = 1, limit, teacherId, searchName } = req.query;
-  const parsedPage = parseInt(page, 10);
-  const parsedLimit = limit ? parseInt(limit, 10) : null;
   try {
+    sequelizePaginate.paginate(Class);
+    const { page = 1, limit = 10, teacherId, searchName } = req.query;
+    
+    const parsedPage = parseInt(page, 10) || 1;
+    const parsedLimit = parseInt(limit, 10) || 10;
+
     let whereCondition = {};
     if (teacherId) {
       whereCondition.UserID = teacherId;
     }
     if (searchName) {
       whereCondition.className = {
-        [Op.like]: `%${searchName}%`,
+        [Op.iLike]: `%${searchName}%`,
       };
     }
 
     const options = {
       page: parsedPage,
-      paginate: parsedLimit || undefined,
+      paginate: parsedLimit,
       where: whereCondition,
-      include: [
-        {
-          association: 'Sessions',
-        },
-      ],
-      attributes: {
-        include: [
-          [
-            sequelize.literal(
-              '(SELECT COUNT(*) FROM "Sessions" WHERE "Sessions"."ClassID" = "Classes"."ID")'
-            ),
-            'numberOfSessions',
-          ],
+      attributes: [
+        'ID',
+        'className',
+        'createdAt',
+        'updatedAt',
+        'UserID',
+        [
+          sequelize.literal(
+            '(SELECT COUNT(*)::int FROM "Sessions" WHERE "Sessions"."ClassID" = "Classes"."ID")'
+          ),
+          'numberOfSessions',
         ],
-      },
+      ],
       order: [['createdAt', 'DESC']],
     };
 
     const result = await Class.paginate(options);
-    const totalCount = await Class.count({ where: whereCondition });
 
     return {
       status: 200,
       message: 'Classes fetched successfully',
       data: result.docs,
-      pagination: {
-        currentPage: parseInt(req.query.page) || 1,
-        pageSize: parseInt(req.query.limit) || 10,
-        itemsOnPage: result.docs.length,
-        totalPages: result.pages,
-        totalItems: totalCount,
-      },
+      total: result.total,
+      page: result.page,
+      pages: result.pages,
     };
   } catch (error) {
+    console.error('Error fetching classes:', error);
     throw new Error(`Error fetching classes: ${error.message}`);
   }
 }
@@ -65,54 +61,49 @@ async function createClass(req) {
     const { className, userId } = req.body;
 
     if (!className || !userId) {
-      throw new Error('Class name and user ID are required');
+      throw new Error('Missing required fields: className or userId');
     }
 
-    // 1. Check class name trùng
-    const existingClass = await Class.findOne({
-      where: { className },
-    });
-
-    if (existingClass) {
-      throw new Error('Class name already exists');
-    }
-
-    // 2. Tìm user + roles
-    const user = await User.findByPk(userId, {
-      include: [
-        {
-          model: Role,
-          attributes: ['Name'],
-          through: { attributes: [] }, // ẩn bảng UserRole
-        },
-      ],
-    });
-
-    if (!user) {
-      throw new Error('User not found');
-    }
-
-    // 3. Check user có role "teacher" không
-    const roles = (user.Roles || []).map((r) => r.Name);
-    const hasTeacherRole = roles.includes('teacher');
-
-    if (!hasTeacherRole) {
-      throw new Error('Only teachers can create classes');
-    }
-
-    // 4. Tạo class
     const newClass = await Class.create({
       className,
       UserID: userId,
     });
 
     return {
-      status: 200,
+      status: 201,
       message: 'Class created successfully',
       data: newClass,
     };
   } catch (error) {
     throw new Error(`Error creating class: ${error.message}`);
+  }
+}
+
+async function updateClass(req) {
+  try {
+    const { classId } = req.params;
+    const { className } = req.body;
+
+    if (!className) {
+      throw new Error('Missing required fields: className');
+    }
+
+    const classToUpdate = await Class.findByPk(classId);
+
+    if (!classToUpdate) {
+      throw new Error(`Class with id ${classId} not found`);
+    }
+
+    classToUpdate.className = className;
+    await classToUpdate.save();
+
+    return {
+      status: 200,
+      message: 'Class updated successfully',
+      data: classToUpdate,
+    };
+  } catch (error) {
+    throw new Error(`Error updating class: ${error.message}`);
   }
 }
 
@@ -155,44 +146,27 @@ async function getClassDetailById(req) {
   }
 }
 
-async function updateClass(req) {
-  try {
-    const { className } = req.body;
-    const { classId } = req.params;
-
-    if (!className) {
-      throw new Error('Class name is required');
-    }
-
-    const [updatedRows] = await Class.update(
-      { className },
-      {
-        where: { ID: classId },
-      }
-    );
-    if (updatedRows === 0) {
-      throw new Error(`Class with id ${classId} not found or no changes made`);
-    }
-    return {
-      status: 200,
-      message: 'Class updated successfully',
-      data: updatedRows,
-    };
-  } catch (error) {
-    throw new Error(`Error updating class: ${error.message}`);
-  }
-}
-
 async function remove(req) {
   try {
     const { classId } = req.params;
-    const deletedRows = await Class.destroy({ where: { ID: classId } });
-    if (deletedRows === 0) {
+    const classToDelete = await Class.findByPk(classId);
+
+    if (!classToDelete) {
       throw new Error(`Class with id ${classId} not found`);
     }
+
+    // [STABILITY]: Check for existing sessions before deletion
+    const sessionCount = await Session.count({ where: { ClassID: classId } });
+    
+    if (sessionCount > 0) {
+      throw new Error("Can't delete this class because it has sessions");
+    }
+
+    await classToDelete.destroy();
+
     return `Class with id ${classId} deleted successfully`;
   } catch (error) {
-    throw new Error(`Error deleting class: ${error.message}`);
+    throw new Error(error.message);
   }
 }
 
