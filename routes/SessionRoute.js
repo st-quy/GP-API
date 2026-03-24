@@ -224,6 +224,9 @@ router.post("/", createSession);
  *                 format: uuid
  *               isPublished:
  *                 type: boolean
+ *               minioAudioRemoved:
+ *                 type: boolean
+ *                 description: Indicates whether the session's MinIO audio assets have been removed
  *     responses:
  *       200:
  *         description: Session updated successfully
