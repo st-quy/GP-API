@@ -107,8 +107,16 @@ async function getSessionByClass(req) {
 
 async function createSession(req) {
   try {
-    const { sessionName, sessionKey, startTime, endTime, examSet, ClassID } =
-      req.body;
+    const {
+      sessionName,
+      sessionKey,
+      startTime,
+      endTime,
+      examSet,
+      ClassID,
+      duration,
+      instructions,
+    } = req.body;
     if (
       !sessionName ||
       !sessionKey ||
@@ -124,37 +132,58 @@ async function createSession(req) {
       };
     }
 
-    if (startTime > endTime) {
+    const parsedStartTime = new Date(startTime);
+    const parsedEndTime = new Date(endTime);
+
+    if (
+      Number.isNaN(parsedStartTime.getTime()) ||
+      Number.isNaN(parsedEndTime.getTime())
+    ) {
+      return {
+        status: 400,
+        message: "startTime and endTime must be valid dates",
+      };
+    }
+
+    if (parsedStartTime >= parsedEndTime) {
       return {
         status: 400,
         message: "Start time must be before end time",
       };
     }
 
-    if (new Date(startTime).getTime() === new Date(endTime).getTime()) {
-      return {
-        status: 400,
-        message: "Start time and end time cannot be the same",
-      };
+    let normalizedDuration = null;
+    if (duration !== undefined && duration !== null && duration !== "") {
+      const parsedDuration = Number(duration);
+
+      if (!Number.isInteger(parsedDuration) || parsedDuration <= 0) {
+        return {
+          status: 400,
+          message: "duration must be a positive integer",
+        };
+      }
+
+      normalizedDuration = parsedDuration;
     }
 
-    // Normalize: Trim and collapse multiple spaces into one
-    const normalizedName = sessionName.trim().replace(/\s+/g, ' ');
+    let normalizedInstructions = null;
+    if (instructions !== undefined && instructions !== null) {
+      if (typeof instructions !== "string") {
+        return {
+          status: 400,
+          message: "instructions must be a string",
+        };
+      }
 
-    // Check duplicate name (Case-insensitive)
-    const existingName = await Session.findOne({
-      where: sequelize.where(
-        sequelize.fn('LOWER', sequelize.col('sessionName')),
-        '=',
-        normalizedName.toLowerCase()
-      ),
-    });
+      const trimmedInstructions = instructions.trim();
+      if (!trimmedInstructions) {
+        return {
+          status: 400,
+          message: "instructions cannot be empty",
+        };
+      }
 
-    if (existingName) {
-      return {
-        status: 400,
-        message: "Session name already exists",
-      };
+      normalizedInstructions = trimmedInstructions;
     }
 
     const checkExistTopic = await Topic.findByPk(examSet);
@@ -202,9 +231,9 @@ async function createSession(req) {
 
     let status;
     const now = new Date();
-    if (new Date(startTime) > now) {
+    if (parsedStartTime > now) {
       status = "NOT_STARTED";
-    } else if (new Date(endTime) > now) {
+    } else if (parsedEndTime > now) {
       status = "ON_GOING";
     } else {
       status = "COMPLETE";
@@ -213,8 +242,10 @@ async function createSession(req) {
     const newSession = await Session.create({
       sessionName,
       sessionKey,
-      startTime,
-      endTime,
+      startTime: parsedStartTime,
+      endTime: parsedEndTime,
+      duration: normalizedDuration,
+      instructions: normalizedInstructions,
       examSet,
       ClassID,
       status,
@@ -231,66 +262,164 @@ async function createSession(req) {
 async function updateSession(req) {
   try {
     const { sessionId } = req.params;
-    const { sessionName, sessionKey, startTime, endTime, examSet } = req.body;
+    const {
+      sessionName,
+      sessionKey,
+      startTime,
+      endTime,
+      examSet,
+      ClassID,
+      isPublished,
+      minioAudioRemoved
+    } = req.body;
 
-    if (startTime && endTime && new Date(startTime).getTime() === new Date(endTime).getTime()) {
-      return {
-        status: 400,
-        message: "Start time and end time cannot be the same",
-      };
-    }
-
-    // Normalize: Trim and collapse multiple spaces into one
-    const normalizedName = sessionName.trim().replace(/\s+/g, ' ');
-
-    // Check duplicate name (Case-insensitive)
-    const existingName = await Session.findOne({
-      where: {
-        [Op.and]: [
-          sequelize.where(
-            sequelize.fn('LOWER', sequelize.col('sessionName')),
-            '=',
-            normalizedName.toLowerCase()
-          ),
-          { ID: { [Op.ne]: sessionId } }
-        ]
-      },
-    });
-
-    if (existingName) {
-      return {
-        status: 400,
-        message: "Session name already exists",
-      };
-    }
-
-    let updateData = { sessionName: normalizedName, sessionKey, startTime, endTime, examSet };
-
-    // Recalculate status if times are provided
-    if (startTime && endTime) {
-      const now = new Date();
-      if (new Date(startTime) > now) {
-        updateData.status = "NOT_STARTED";
-      } else if (new Date(endTime) > now) {
-        updateData.status = "ON_GOING";
-      } else {
-        updateData.status = "COMPLETE";
-      }
-    }
-
-    const [updatedRows] = await Session.update(
-      updateData,
-      { where: { ID: sessionId } }
-    );
-    
-    if (updatedRows === 0) {
+    const session = await Session.findByPk(sessionId);
+    if (!session) {
       return {
         status: 404,
         message: "Session not found or no changes made",
       };
     }
 
-    const updatedSession = await Session.findByPk(sessionId);
+    const now = new Date();
+    const isOngoingByTime =
+      session.isPublished &&
+      session.startTime &&
+      session.endTime &&
+      now >= session.startTime &&
+      now <= session.endTime;
+
+    if (session.status === "ON_GOING" || isOngoingByTime) {
+      return {
+        status: 403,
+        message: "Cannot edit a session that is currently ON_GOING",
+      };
+    }
+
+    // Validate examSet if provided (even if null/empty)
+    if (typeof examSet !== "undefined") {
+      // Reject null or empty values explicitly since Session.examSet is allowNull: false
+      if (examSet === null || examSet === "") {
+        return {
+          status: 400,
+          message: "Invalid exam set value",
+        };
+      }
+      const checkExistTopic = await Topic.findByPk(examSet);
+      if (!checkExistTopic) {
+        return {
+          status: 400,
+          message: "Topic (exam set) not found",
+        };
+      }
+    }
+
+    // Validate ClassID if provided
+    if (ClassID !== undefined) {
+      if (ClassID === null || ClassID === "") {
+        return {
+          status: 400,
+          message: "ClassID cannot be null or empty",
+        };
+      }
+      const checkExistClass = await Class.findByPk(ClassID);
+      if (!checkExistClass) {
+        return {
+          status: 400,
+          message: "Class not found",
+        };
+      }
+    }
+
+    // Check unique sessionKey (excluding current session)
+    if (sessionKey && sessionKey !== session.sessionKey) {
+      const duplicate = await Session.findOne({
+        where: { sessionKey, ID: { [Op.ne]: sessionId } },
+      });
+      if (duplicate) {
+        return {
+          status: 400,
+          message: `Session with key ${sessionKey} already exists`,
+        };
+      }
+    }
+
+    // Check unique sessionName within the same class (excluding current session)
+    const resolvedClassID = ClassID !== undefined ? ClassID : session.ClassID;
+    const resolvedSessionName = sessionName || session.sessionName;
+    if (resolvedClassID !== session.ClassID || resolvedSessionName !== session.sessionName) {
+      const duplicate = await Session.findOne({
+        where: {
+          sessionName: resolvedSessionName,
+          ClassID: resolvedClassID,
+          ID: { [Op.ne]: sessionId },
+        },
+      });
+      if (duplicate) {
+        return {
+          status: 400,
+          message: `Session with name ${resolvedSessionName} already exists in this class`,
+        };
+      }
+    }
+
+    // Validate and recalculate status when time fields change
+    const resolvedStartTime = startTime ? new Date(startTime) : session.startTime;
+    const resolvedEndTime = endTime ? new Date(endTime) : session.endTime;
+
+    // Ensure provided time values are valid dates
+    if (startTime && isNaN(resolvedStartTime.getTime())) {
+      return {
+        status: 400,
+        message: "Invalid start time",
+      };
+    }
+    if (endTime && isNaN(resolvedEndTime.getTime())) {
+      return {
+        status: 400,
+        message: "Invalid end time",
+      };
+    }
+
+    if (resolvedStartTime >= resolvedEndTime) {
+      return {
+        status: 400,
+        message: "Start time must be before end time",
+      };
+    }
+
+    const now = new Date();
+    // Determine the effective isPublished value for this update
+    const resolvedIsPublished =
+      typeof isPublished === "boolean" ? isPublished : session.isPublished;
+
+    let newStatus;
+    if (resolvedStartTime > now) {
+      newStatus = "NOT_STARTED";
+    } else if (resolvedEndTime > now) {
+      newStatus = "ON_GOING";
+    } else {
+      newStatus = "COMPLETE";
+    }
+
+    // Enforce invariant: published sessions must be COMPLETE
+    if (resolvedIsPublished) {
+      newStatus = "COMPLETE";
+    }
+
+    const updateFields = {
+      ...(sessionName !== undefined && { sessionName }),
+      ...(sessionKey !== undefined && { sessionKey }),
+      ...(startTime !== undefined && { startTime: resolvedStartTime }),
+      ...(endTime !== undefined && { endTime: resolvedEndTime }),
+      ...(examSet !== undefined && { examSet }),
+      ...(ClassID !== undefined && { ClassID }),
+      ...(isPublished !== undefined && { isPublished }),
+      ...(minioAudioRemoved !== undefined && { minioAudioRemoved }),
+      status: newStatus,
+    };
+
+    await session.update(updateFields);
 
     return {
       status: 200,
