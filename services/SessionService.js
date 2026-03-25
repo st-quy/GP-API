@@ -281,7 +281,7 @@ async function updateSession(req) {
       };
     }
 
-    const now = new Date();
+    let now = new Date();
     const isOngoingByTime =
       session.isPublished &&
       session.startTime &&
@@ -388,7 +388,7 @@ async function updateSession(req) {
       };
     }
 
-    const now = new Date();
+    now = new Date();
     // Determine the effective isPublished value for this update
     const resolvedIsPublished =
       typeof isPublished === "boolean" ? isPublished : session.isPublished;
