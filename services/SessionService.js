@@ -5,7 +5,43 @@ const { removeMinIOAudio } = require("./StudentAnswerService");
 
 async function getAllSessions(req) {
   try {
-    const sessions = await Session.findAll({
+    const {
+      search,
+      status,
+      classId,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 10,
+    } = req.query;
+
+    const whereClause = {};
+
+    if (search) {
+      whereClause.sessionName = { [Op.iLike]: `%${search}%` };
+    }
+
+    if (status) {
+      whereClause.status = status;
+    }
+
+    if (classId) {
+      whereClause.ClassID = classId;
+    }
+
+    if (startDate && endDate) {
+      whereClause.startTime = { [Op.gte]: new Date(startDate) };
+      whereClause.endTime = { [Op.lte]: new Date(endDate) };
+    } else if (startDate) {
+      whereClause.startTime = { [Op.gte]: new Date(startDate) };
+    } else if (endDate) {
+      whereClause.endTime = { [Op.lte]: new Date(endDate) };
+    }
+
+    const offset = (page - 1) * limit;
+
+    const { rows, count } = await Session.findAndCountAll({
+      where: whereClause,
       include: [
         {
           model: Class,
@@ -16,10 +52,17 @@ async function getAllSessions(req) {
           as: "Topic",
         },
       ],
+      limit: Number(limit),
+      offset: Number(offset),
+      order: [["createdAt", "DESC"]],
     });
+
     return {
       status: 200,
-      data: sessions,
+      data: rows,
+      total: count,
+      currentPage: Number(page),
+      totalPages: Math.ceil(count / limit),
     };
   } catch (error) {
     throw new Error(`Error fetching all sessions: ${error.message}`);
@@ -64,8 +107,16 @@ async function getSessionByClass(req) {
 
 async function createSession(req) {
   try {
-    const { sessionName, sessionKey, startTime, endTime, examSet, ClassID } =
-      req.body;
+    const {
+      sessionName,
+      sessionKey,
+      startTime,
+      endTime,
+      examSet,
+      ClassID,
+      duration,
+      instructions,
+    } = req.body;
     if (
       !sessionName ||
       !sessionKey ||
@@ -81,37 +132,58 @@ async function createSession(req) {
       };
     }
 
-    if (startTime > endTime) {
+    const parsedStartTime = new Date(startTime);
+    const parsedEndTime = new Date(endTime);
+
+    if (
+      Number.isNaN(parsedStartTime.getTime()) ||
+      Number.isNaN(parsedEndTime.getTime())
+    ) {
+      return {
+        status: 400,
+        message: "startTime and endTime must be valid dates",
+      };
+    }
+
+    if (parsedStartTime >= parsedEndTime) {
       return {
         status: 400,
         message: "Start time must be before end time",
       };
     }
 
-    if (new Date(startTime).getTime() === new Date(endTime).getTime()) {
-      return {
-        status: 400,
-        message: "Start time and end time cannot be the same",
-      };
+    let normalizedDuration = null;
+    if (duration !== undefined && duration !== null && duration !== "") {
+      const parsedDuration = Number(duration);
+
+      if (!Number.isInteger(parsedDuration) || parsedDuration <= 0) {
+        return {
+          status: 400,
+          message: "duration must be a positive integer",
+        };
+      }
+
+      normalizedDuration = parsedDuration;
     }
 
-    // Normalize: Trim and collapse multiple spaces into one
-    const normalizedName = sessionName.trim().replace(/\s+/g, ' ');
+    let normalizedInstructions = null;
+    if (instructions !== undefined && instructions !== null) {
+      if (typeof instructions !== "string") {
+        return {
+          status: 400,
+          message: "instructions must be a string",
+        };
+      }
 
-    // Check duplicate name (Case-insensitive)
-    const existingName = await Session.findOne({
-      where: sequelize.where(
-        sequelize.fn('LOWER', sequelize.col('sessionName')),
-        '=',
-        normalizedName.toLowerCase()
-      ),
-    });
+      const trimmedInstructions = instructions.trim();
+      if (!trimmedInstructions) {
+        return {
+          status: 400,
+          message: "instructions cannot be empty",
+        };
+      }
 
-    if (existingName) {
-      return {
-        status: 400,
-        message: "Session name already exists",
-      };
+      normalizedInstructions = trimmedInstructions;
     }
 
     const checkExistTopic = await Topic.findByPk(examSet);
@@ -159,9 +231,9 @@ async function createSession(req) {
 
     let status;
     const now = new Date();
-    if (new Date(startTime) > now) {
+    if (parsedStartTime > now) {
       status = "NOT_STARTED";
-    } else if (new Date(endTime) > now) {
+    } else if (parsedEndTime > now) {
       status = "ON_GOING";
     } else {
       status = "COMPLETE";
@@ -170,8 +242,10 @@ async function createSession(req) {
     const newSession = await Session.create({
       sessionName,
       sessionKey,
-      startTime,
-      endTime,
+      startTime: parsedStartTime,
+      endTime: parsedEndTime,
+      duration: normalizedDuration,
+      instructions: normalizedInstructions,
       examSet,
       ClassID,
       status,
