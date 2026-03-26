@@ -278,6 +278,15 @@ async function updateSession(req) {
       minioAudioRemoved
     } = req.body;
 
+    // Prevent clients from mutating system-managed fields
+    if (typeof isPublished !== "undefined" || typeof minioAudioRemoved !== "undefined") {
+      return {
+        status: 400,
+        message:
+          "The fields 'isPublished' and 'minioAudioRemoved' are system-managed and cannot be updated via this endpoint",
+      };
+    }
+
     const session = await Session.findByPk(sessionId);
     if (!session) {
       return {
@@ -286,30 +295,38 @@ async function updateSession(req) {
       };
     }
 
-    let now = new Date();
-    const isOngoingByTime =
-      session.isPublished &&
-      session.startTime &&
-      session.endTime &&
-      now >= session.startTime &&
-      now <= session.endTime;
+    // Derive whether the session is currently ON_GOING from time and isPublished,
+    // instead of relying solely on the persisted session.status, which may be stale.
+    const now = new Date();
+    const effectiveStartTime = startTime ? new Date(startTime) : session.startTime;
+    const effectiveEndTime = endTime ? new Date(endTime) : session.endTime;
+    const effectiveIsPublished =
+      typeof isPublished === "boolean" ? isPublished : session.isPublished;
 
-    if (session.status === "ON_GOING" || isOngoingByTime) {
+    const isOngoingByTime =
+      effectiveIsPublished &&
+      effectiveStartTime &&
+      effectiveEndTime &&
+      now >= effectiveStartTime &&
+      now <= effectiveEndTime;
+
+    if (isOngoingByTime) {
       return {
         status: 403,
         message: "Cannot edit a session that is currently ON_GOING",
       };
     }
 
-    // Validate examSet if provided (even if null/empty)
-    if (typeof examSet !== "undefined") {
-      // Reject null or empty values explicitly since Session.examSet is allowNull: false
+    // Validate examSet if provided (treat undefined as "not provided")
+    if (examSet !== undefined) {
+      // Explicitly reject null or empty values for non-nullable column
       if (examSet === null || examSet === "") {
         return {
           status: 400,
-          message: "Invalid exam set value",
+          message: "examSet cannot be null or empty",
         };
       }
+
       const checkExistTopic = await Topic.findByPk(examSet);
       if (!checkExistTopic) {
         return {
@@ -319,14 +336,16 @@ async function updateSession(req) {
       }
     }
 
-    // Validate ClassID if provided
+    // Validate ClassID if provided (treat undefined as "not provided")
     if (ClassID !== undefined) {
+      // Explicitly reject null or empty values for non-nullable column
       if (ClassID === null || ClassID === "") {
         return {
           status: 400,
           message: "ClassID cannot be null or empty",
         };
       }
+
       const checkExistClass = await Class.findByPk(ClassID);
       if (!checkExistClass) {
         return {
@@ -350,9 +369,12 @@ async function updateSession(req) {
     }
 
     // Check unique sessionName within the same class (excluding current session)
-    const resolvedClassID = ClassID !== undefined ? ClassID : session.ClassID;
+    const resolvedClassID =
+      ClassID !== undefined ? ClassID : session.ClassID;
     const resolvedSessionName = sessionName || session.sessionName;
-    if (resolvedClassID !== session.ClassID || resolvedSessionName !== session.sessionName) {
+    const sessionNameChanged = sessionName && sessionName !== session.sessionName;
+    const classIdChanged = ClassID && ClassID !== session.ClassID;
+    if (sessionNameChanged || classIdChanged) {
       const duplicate = await Session.findOne({
         where: {
           sessionName: resolvedSessionName,
@@ -369,21 +391,29 @@ async function updateSession(req) {
     }
 
     // Validate and recalculate status when time fields change
-    const resolvedStartTime = startTime ? new Date(startTime) : session.startTime;
-    const resolvedEndTime = endTime ? new Date(endTime) : session.endTime;
+    let resolvedStartTime = session.startTime;
+    let resolvedEndTime = session.endTime;
 
-    // Ensure provided time values are valid dates
-    if (startTime && isNaN(resolvedStartTime.getTime())) {
-      return {
-        status: 400,
-        message: "Invalid start time",
-      };
+    if (startTime !== undefined) {
+      const parsedStart = new Date(startTime);
+      if (Number.isNaN(parsedStart.getTime())) {
+        return {
+          status: 400,
+          message: "Invalid start time",
+        };
+      }
+      resolvedStartTime = parsedStart;
     }
-    if (endTime && isNaN(resolvedEndTime.getTime())) {
-      return {
-        status: 400,
-        message: "Invalid end time",
-      };
+
+    if (endTime !== undefined) {
+      const parsedEnd = new Date(endTime);
+      if (Number.isNaN(parsedEnd.getTime())) {
+        return {
+          status: 400,
+          message: "Invalid end time",
+        };
+      }
+      resolvedEndTime = parsedEnd;
     }
 
     if (resolvedStartTime >= resolvedEndTime) {
@@ -393,11 +423,9 @@ async function updateSession(req) {
       };
     }
 
-    now = new Date();
-    // Determine the effective isPublished value for this update
+    const now = new Date();
     const resolvedIsPublished =
-      typeof isPublished === "boolean" ? isPublished : session.isPublished;
-
+      isPublished !== undefined ? isPublished : session.isPublished;
     let newStatus;
     if (resolvedStartTime > now) {
       newStatus = "NOT_STARTED";
@@ -407,16 +435,15 @@ async function updateSession(req) {
       newStatus = "COMPLETE";
     }
 
-    // Enforce invariant: published sessions must be COMPLETE
-    if (resolvedIsPublished) {
+    if (resolvedIsPublished === true) {
       newStatus = "COMPLETE";
     }
 
     const updateFields = {
       ...(sessionName !== undefined && { sessionName }),
       ...(sessionKey !== undefined && { sessionKey }),
-      ...(startTime !== undefined && { startTime: resolvedStartTime }),
-      ...(endTime !== undefined && { endTime: resolvedEndTime }),
+      ...(startTime !== undefined && { startTime }),
+      ...(endTime !== undefined && { endTime }),
       ...(examSet !== undefined && { examSet }),
       ...(ClassID !== undefined && { ClassID }),
       ...(isPublished !== undefined && { isPublished }),
