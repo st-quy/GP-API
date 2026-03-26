@@ -27,7 +27,7 @@ const createClass = async (req, res) => {
 
     return res.status(newClass.status).json(newClass);
   } catch (error) {
-    res.status(500).json({ message: error.message || "Internal server error" });
+    return res.status(400).json({ message: error.message || "Internal server error" });
   }
 };
 
@@ -41,8 +41,7 @@ const updateClass = async (req, res) => {
 
     return res.status(updatedClass.status).json(updatedClass);
   } catch (error) {
-    console.error("Error updating class:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(400).json({ message: error.message || "Internal server error" });
   }
 };
 

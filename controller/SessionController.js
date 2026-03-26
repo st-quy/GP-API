@@ -94,6 +94,33 @@ async function generateSessionKey(req, res) {
   }
 }
 
+async function batchUpdateStatus(req, res) {
+  try {
+    const result = await SessionsService.batchUpdateStatus(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+async function batchClone(req, res) {
+  try {
+    const result = await SessionsService.batchClone(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+async function batchExportReport(req, res) {
+  try {
+    const result = await SessionsService.batchExportReport(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
 module.exports = {
   getAllSessions,
   getAllSessionsByClass,
@@ -103,4 +130,7 @@ module.exports = {
   getSessionDetailById,
   removeSession,
   generateSessionKey,
+  batchUpdateStatus,
+  batchClone,
+  batchExportReport,
 };

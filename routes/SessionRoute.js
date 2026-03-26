@@ -10,6 +10,9 @@ const {
   removeSession,
   generateSessionKey,
   getAllSessions,
+  batchUpdateStatus,
+  batchClone,
+  batchExportReport,
 } = require("../controller/SessionController");
 /**
  * @swagger
@@ -282,6 +285,100 @@ router.put("/:sessionId", updateSession);
  *       500:
  *         description: Internal server error
  */
+/**
+ * @swagger
+ * /sessions/batch/status:
+ *   patch:
+ *     summary: Batch update status for multiple sessions
+ *     tags: [Session]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - sessionIds
+ *               - status
+ *             properties:
+ *               sessionIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: uuid
+ *               status:
+ *                 type: string
+ *                 enum: [NOT_STARTED, ON_GOING, COMPLETE]
+ *     responses:
+ *       200:
+ *         description: All sessions updated successfully
+ *       207:
+ *         description: Partial success - some sessions failed to update
+ *       400:
+ *         description: All sessions failed to update or invalid input
+ */
+router.patch("/batch/status", batchUpdateStatus);
+
+/**
+ * @swagger
+ * /sessions/batch/clone:
+ *   post:
+ *     summary: Batch clone multiple sessions
+ *     tags: [Session]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - sessionIds
+ *             properties:
+ *               sessionIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: uuid
+ *     responses:
+ *       201:
+ *         description: All sessions cloned successfully
+ *       207:
+ *         description: Partial success - some sessions failed to clone
+ *       400:
+ *         description: All sessions failed to clone or invalid input
+ */
+router.post("/batch/clone", batchClone);
+
+/**
+ * @swagger
+ * /sessions/batch/export-report:
+ *   post:
+ *     summary: Batch export reports for multiple sessions
+ *     tags: [Session]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - sessionIds
+ *             properties:
+ *               sessionIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: uuid
+ *     responses:
+ *       200:
+ *         description: All reports generated successfully
+ *       207:
+ *         description: Partial success - some reports failed to generate
+ *       400:
+ *         description: All reports failed to generate or invalid input
+ */
+router.post("/batch/export-report", batchExportReport);
+
 router.get("/:sessionId", getSessionDetailById);
 
 /**

@@ -73,7 +73,7 @@ const getQuestionsByQuestionSetId = async (req) => {
 
 const createTopic = async (req) => {
   try {
-    const { Name, Status, Duration } = req.body;
+    const { Name, Status, ShuffleQuestions, ShuffleAnswers, Duration } = req.body;
     if (!Name) {
       return {
         status: 400,
@@ -93,6 +93,8 @@ const createTopic = async (req) => {
       Duration: Duration || null,
       CreatedBy: userId,
       UpdatedBy: userId,
+      ShuffleQuestions: ShuffleQuestions || false,
+      ShuffleAnswers: ShuffleAnswers || false,
     });
     return {
       status: 201,
@@ -124,7 +126,7 @@ const getAllTopics = async (req) => {
       whereClause.Status = status;
     }
 
-     const allTopics = await Topic.findAll({ attributes: ["Status"] });
+    const allTopics = await Topic.findAll({ attributes: ["Status"] });
 
     const statusCounts = {
       submited: allTopics.filter(t => t.Status === "submited").length,
@@ -196,7 +198,7 @@ const getTopicWithRelations = async (req, res) => {
         {
           model: Section,
           as: 'Sections',
-          through: { attributes: [] },
+          through: { attributes: ['ScoreConfig'] },
 
           include: [
             {
@@ -360,7 +362,7 @@ async function deleteTopic(req) {
   }
 };
 
-async function updateTopic(req, res) {
+async function updateTopic(req) {
   try {
     const { id } = req.params;
     const updatedTopicData = req.body;
@@ -385,8 +387,10 @@ async function updateTopic(req, res) {
       data: topic,
     };
   } catch (error) {
-
-    return res.status(500).json({ message: 'Internal server error' });
+    return {
+      status: 500,
+      message: `Internal server error: ${error.message}`,
+    };
   }
 }
 

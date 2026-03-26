@@ -139,6 +139,7 @@ async function getQuestionGroupDetail(req, res) {
 async function updateQuestionGroup(req, res) {
   try {
     const payload = req.body;
+    payload.userId = req.user?.userId;
 
     const { SkillName } = payload;
     const { sectionId } = req.params;
