@@ -55,6 +55,15 @@ async function removeSession(req, res) {
   }
 }
 
+async function archiveSession(req, res) {
+  try {
+    const result = await SessionsService.archiveSession(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
 async function updateSessionStatus(req, res) {
   try {
     const result = await SessionsService.updateSessionStatus(req);
@@ -129,6 +138,7 @@ module.exports = {
   updateSessionStatus,
   getSessionDetailById,
   removeSession,
+  archiveSession,
   generateSessionKey,
   batchUpdateStatus,
   batchClone,

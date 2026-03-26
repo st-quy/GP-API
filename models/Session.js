@@ -1,3 +1,5 @@
+const { SESSION_STATUS } = require('../helpers/constants');
+
 module.exports = (sequelize, DataTypes) => {
   const Session = sequelize.define("Session", {
     ID: {
@@ -39,8 +41,8 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
     },
     status: {
-      type: DataTypes.ENUM("NOT_STARTED", "ON_GOING", "COMPLETE", "DRAFT", "PUBLISHED", "ARCHIVED", "DELETED"),
-      defaultValue: "NOT_STARTED",
+      type: DataTypes.ENUM(Object.values(SESSION_STATUS)),
+      defaultValue: SESSION_STATUS.NOT_STARTED,
     },
     ClassID: {
       type: DataTypes.UUID,

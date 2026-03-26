@@ -8,6 +8,7 @@ const {
   updateSessionStatus,
   getSessionDetailById,
   removeSession,
+  archiveSession,
   generateSessionKey,
   getAllSessions,
   batchUpdateStatus,
@@ -100,7 +101,7 @@ router.get("/all", getAllSessions);
  *               properties:
  *                 sessionKey:
  *                   type: string
- *       500:
+       500:
  *         description: Internal server error
  */
 router.get("/generate-key", generateSessionKey);
@@ -262,31 +263,6 @@ router.put("/:sessionId", updateSession);
 
 /**
  * @swagger
- * /sessions/{sessionId}:
- *   get:
- *     summary: Get session details by sessionId
- *     tags: [Session]
- *     parameters:
- *       - in: path
- *         name: sessionId
- *         schema:
- *           type: string
- *         required: true
- *         description: The ID of the class
- *     responses:
- *       200:
- *         description: Session details
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Session'
- *       404:
- *         description: Session not found
- *       500:
- *         description: Internal server error
- */
-/**
- * @swagger
  * /sessions/batch/status:
  *   patch:
  *     summary: Batch update status for multiple sessions
@@ -403,5 +379,28 @@ router.get("/:sessionId", getSessionDetailById);
  *         description: Internal server error
  */
 router.delete("/:sessionId", removeSession);
+
+/**
+ * @swagger
+ * /sessions/{sessionId}/archive:
+ *   patch:
+ *     summary: Archive a session by session ID
+ *     tags: [Session]
+ *     parameters:
+ *       - in: path
+ *         name: sessionId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: The ID of the session
+ *     responses:
+ *       200:
+ *         description: Session archived or deleted successfully
+ *       404:
+ *         description: Session not found
+ *       500:
+ *         description: Internal server error
+ */
+router.patch("/:sessionId/archive", archiveSession);
 
 module.exports = router;
