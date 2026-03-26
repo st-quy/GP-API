@@ -331,7 +331,7 @@ async function deleteTopic(req) {
   }
 };
 
-async function updateTopic(req, res) {
+async function updateTopic(req) {
   try {
     const { id } = req.params;
     const updatedTopicData = req.body;
@@ -351,8 +351,10 @@ async function updateTopic(req, res) {
       data: topic,
     };
   } catch (error) {
-
-    return res.status(500).json({ message: 'Internal server error' });
+    return {
+      status: 500,
+      message: `Internal server error: ${error.message}`,
+    };
   }
 }
 
