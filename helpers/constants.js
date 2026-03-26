@@ -1,14 +1,26 @@
 module.exports = {
-  SESSION_REQUEST_STATUS: {
-    PENDING: 'pending',
-    APPROVED: 'approved',
-    REJECTED: 'rejected',
-  },
   SESSION_STATUS: {
     NOT_STARTED: 'NOT_STARTED',
     ON_GOING: 'ON_GOING',
     COMPLETE: 'COMPLETE',
+    DRAFT: 'DRAFT',
+    PUBLISHED: 'PUBLISHED',
     ARCHIVED: 'ARCHIVED',
+    DELETED: 'DELETED',
+  },
+  SESSION_STATUS_TRANSITIONS: {
+    DRAFT: ['PUBLISHED', 'DELETED'],
+    NOT_STARTED: ['ON_GOING', 'DRAFT', 'DELETED'],
+    ON_GOING: ['COMPLETE', 'DELETED'],
+    COMPLETE: ['PUBLISHED', 'ARCHIVED', 'DELETED'],
+    PUBLISHED: ['ARCHIVED', 'DELETED'],
+    ARCHIVED: ['PUBLISHED', 'DELETED'],
+    DELETED: [],
+  },
+  SESSION_REQUEST_STATUS: {
+    PENDING: 'pending',
+    APPROVED: 'approved',
+    REJECTED: 'rejected',
   },
   TOPIC_STATUS: {
     APPROVED: 'approved',

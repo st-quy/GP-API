@@ -211,10 +211,39 @@ async function updateUser(userId, data) {
       throw new Error('User not found');
     }
 
+    // Trim string fields
+    if (data.firstName) data.firstName = data.firstName.trim();
+    if (data.lastName) data.lastName = data.lastName.trim();
+    if (data.email) data.email = data.email.trim();
+    if (data.address) data.address = data.address.trim();
+    if (data.phone) data.phone = data.phone.trim();
+
+    // Validate maxLength
+    if (data.firstName && data.firstName.length > 50) {
+      throw new Error('First name must not exceed 50 characters');
+    }
+    if (data.lastName && data.lastName.length > 50) {
+      throw new Error('Last name must not exceed 50 characters');
+    }
+    if (data.email && data.email.length > 100) {
+      throw new Error('Email must not exceed 100 characters');
+    }
+    if (data.address && data.address.length > 200) {
+      throw new Error('Address must not exceed 200 characters');
+    }
+
+    // Validate not only spaces
+    if (data.firstName !== undefined && data.firstName.length === 0) {
+      throw new Error('First name is required');
+    }
+    if (data.lastName !== undefined && data.lastName.length === 0) {
+      throw new Error('Last name is required');
+    }
+
     if (data.phone) {
-      const phoneRegex = /^\d{10}$/;
+      const phoneRegex = /^\d{9,20}$/;
       if (!phoneRegex.test(data.phone)) {
-        throw new Error(`Invalid phone format: ${data.phone}`);
+        throw new Error(`Invalid phone format: ${data.phone}. Phone must contain 9-20 digits only.`);
       }
 
       const existingPhone = await User.findOne({
@@ -263,8 +292,12 @@ async function changePassword(userId, oldPassword, newPassword) {
 }
 
 async function sendResetPasswordEmail(email, host) {
+  const isEthereal = process.env.EMAIL_USER.endsWith('@ethereal.email');
+  
   const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: isEthereal ? 'smtp.ethereal.email' : 'smtp.gmail.com',
+    port: isEthereal ? 587 : 465,
+    secure: !isEthereal, // true cho 465, false cho 587
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
@@ -298,23 +331,35 @@ async function sendResetPasswordEmail(email, host) {
     //     </div>
     //   `,
     // };
-    const defaultPassword = process.env.DEFAULT_PASSWORD;
+    // 1. Tạo Token bảo mật (Hết hạn sau 15 phút)
+    const resetToken = jwt.sign({ userId: user.ID }, process.env.JWT_SECRET, {
+      expiresIn: '15m',
+    });
 
-    user.password = await bcrypt.hash(defaultPassword, 10);
-    await user.save();
+    // 2. Tạo Link dẫn về trang reset mật khẩu của Frontend (Đảm bảo có dấu ?)
+    const resetLink = `${host}/reset-password?token=${resetToken}`;
+    console.log('==========================================');
+    console.log('>>> TEST LINK RESET PASSWORD:', resetLink);
+    console.log('==========================================');
 
+    // 3. Gửi Mail với nội dung "Forgot Password?"
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: user.email,
-      subject: '🔐 Your Password Has Been Reset',
+      subject: '❓ Forgot your password?',
       html: `
-    <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ddd;">
-      <h2 style="color: #333;">🔐 Password Reset Successful</h2>
+    <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px; max-width: 500px; margin: auto;">
+      <h2 style="color: #003087;">Forgot password?</h2>
       <p>Hello <strong>${user.firstName} ${user.lastName}</strong>,</p>
-      <p>You have requested to reset your password. Here is your new password:</p>
-      <p style="font-size: 16px; font-weight: bold; color: #000;">${defaultPassword}</p>
-      <p style="color: #777; font-size: 12px;">For your security, please change this password after logging in.</p>
-      <p style="color: #aaa; font-size: 12px;">If you did not request this change, please ignore this email or contact support immediately.</p>
+      <p>No worries! You can reset your GreenPrep password by clicking the button below:</p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${resetLink}" style="display: inline-block; padding: 12px 25px; background-color: #003087; color: #fff; text-decoration: none; border-radius: 5px; font-weight: bold;">
+          Reset Password
+        </a>
+      </div>
+      <p style="color: #777; font-size: 12px; border-top: 1px solid #eee; padding-top: 15px;">
+        If you didn't request a password reset, you can safely ignore this email. This link will expire in 15 minutes.
+      </p>
     </div>
   `,
     };

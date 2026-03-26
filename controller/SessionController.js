@@ -64,6 +64,15 @@ async function archiveSession(req, res) {
   }
 }
 
+async function updateSessionStatus(req, res) {
+  try {
+    const result = await SessionsService.updateSessionStatus(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
 async function generateSessionKey(req, res) {
   try {
     const characters =
@@ -94,13 +103,44 @@ async function generateSessionKey(req, res) {
   }
 }
 
+async function batchUpdateStatus(req, res) {
+  try {
+    const result = await SessionsService.batchUpdateStatus(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+async function batchClone(req, res) {
+  try {
+    const result = await SessionsService.batchClone(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+async function batchExportReport(req, res) {
+  try {
+    const result = await SessionsService.batchExportReport(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
 module.exports = {
   getAllSessions,
   getAllSessionsByClass,
   createSession,
   updateSession,
+  updateSessionStatus,
   getSessionDetailById,
   removeSession,
   archiveSession,
   generateSessionKey,
+  batchUpdateStatus,
+  batchClone,
+  batchExportReport,
 };

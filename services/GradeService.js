@@ -9,6 +9,7 @@ const {
   Part,
   Section,
   Skill,
+  sequelize,
 } = require('../models'); // Ensure models are imported
 const {
   skillMapping,
@@ -200,6 +201,15 @@ async function suggestLevels(score, skillName) {
       else if (score < 48) return level.B2;
       else return level.C;
     }
+
+    if (skillName === 'GRAMMAR AND VOCABULARY') {
+      if (score < 8) return level.X;
+      else if (score < 16) return level.A1;
+      else if (score < 26) return level.A2;
+      else if (score < 38) return level.B1;
+      else if (score < 46) return level.B2;
+      else return level.C;
+    }
   } catch (error) {
     throw new Error(error.message);
   }
@@ -241,11 +251,15 @@ async function calculateTotalPoints(
 
     const totalPoints = listening + reading + writing + speaking;
 
-    const levelSkill = await suggestLevels(skillScore, skillName.toUpperCase());
+    const lookupName = (skillName === 'GrammarVocab') ? 'GRAMMAR AND VOCABULARY' : skillName.toUpperCase();
+    const levelSkill = await suggestLevels(skillScore, lookupName);
 
-    if (skillName === skillMapping['GRAMMAR AND VOCABULARY']) {
+    if (skillName === 'GrammarVocab' || skillName === skillMapping['GRAMMAR AND VOCABULARY']) {
       await SessionParticipant.update(
-        { [skillName]: skillScore },
+        { 
+          [skillName]: skillScore,
+          GrammarVocabLevel: levelSkill
+        },
         { where: { ID: sessionParticipantId } }
       );
     } else {
@@ -374,23 +388,25 @@ async function calculatePoints(req) {
         logItem.studentAnswer = studentAnswers;
         logItem.correctAnswer = correctAnswers;
 
-        correctAnswers.forEach((correct) => {
-          const matched = studentAnswers.find(
+        // Check if ALL pairs match (All-or-Nothing logic to match checkCorrectness)
+        const allMatched = correctAnswers.every((correct) => {
+          return studentAnswers.some(
             (s) =>
               s.left.trim() === correct.left.trim() &&
               s.right.trim() === correct.right.trim()
           );
-          if (matched) {
-            isCorrect = true;
-            totalPoints += pointPerQuestion;
-          }
         });
-      }
 
-      // ================================
-      // ORDERING
-      // ================================
-      else if (type === 'ordering') {
+        if (allMatched && correctAnswers.length > 0) {
+          isCorrect = true;
+          totalPoints += pointPerQuestion;
+        }
+        }
+
+        // ================================
+        // ORDERING
+        // ================================
+        else if (type === 'ordering') {
         const studentAnswers = JSON.parse(rawStudentAnswer).sort(
           (a, b) => a.value - b.value
         );
@@ -399,16 +415,20 @@ async function calculatePoints(req) {
         logItem.studentAnswer = studentAnswers;
         logItem.correctAnswer = correctAnswers;
 
-        const minLength = Math.min(
-          studentAnswers.length,
-          correctAnswers.length
-        );
-
-        for (let i = 0; i < minLength; i++) {
-          if (studentAnswers[i].key.trim() === correctAnswers[i].key.trim()) {
-            isCorrect = true;
-            totalPoints += pointPerQuestion;
+        // Check if ALL items are in correct order (All-or-Nothing)
+        let allCorrect = studentAnswers.length === correctAnswers.length;
+        if (allCorrect) {
+          for (let i = 0; i < correctAnswers.length; i++) {
+            if (studentAnswers[i].key.trim() !== correctAnswers[i].key.trim()) {
+              allCorrect = false;
+              break;
+            }
           }
+        }
+
+        if (allCorrect && correctAnswers.length > 0) {
+          isCorrect = true;
+          totalPoints += pointPerQuestion;
         }
       } else if (type === 'dropdown-list') {
         let studentAnswers = [];
@@ -439,27 +459,6 @@ async function calculatePoints(req) {
           }
         });
       } else if (type === 'listening-questions-group') {
-        const studentAnswers = JSON.parse(answer.AnswerText);
-        const correctList = correctContent.groupContent.listContent;
-
-        correctList.forEach((question) => {
-          const studentAnswer = studentAnswers.find(
-            (ans) => ans.ID === question.ID
-          );
-          if (
-            studentAnswer &&
-            studentAnswer.answer === question.correctAnswer
-          ) {
-            isCorrect = true;
-            totalPoints += pointPerQuestion;
-          }
-        });
-      }
-
-      // ================================
-      // LISTENING GROUP
-      // ================================
-      else if (type === 'listening-questions-group') {
         const studentAnswers = JSON.parse(rawStudentAnswer);
         const correctList = correctContent.groupContent.listContent;
 
@@ -469,7 +468,7 @@ async function calculatePoints(req) {
         correctList.forEach((q) => {
           const stu = studentAnswers.find((x) => x.ID === q.ID);
 
-          if (stu && stu.answer.trim() === q.correctAnswer.trim()) {
+          if (stu && stu.answer.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase()) {
             isCorrect = true;
             totalPoints += pointPerQuestion;
           }
@@ -589,7 +588,7 @@ async function calculatePointForWritingAndSpeaking(req) {
     };
   }
 }
-async function getFullExamReview(sessionParticipantId) {
+async function getFullExamReview(sessionParticipantId, user) {
   try {
     // 1. Lấy thông tin Participant
     const sessionParticipant = await SessionParticipant.findByPk(
@@ -608,6 +607,8 @@ async function getFullExamReview(sessionParticipantId) {
               'startTime',
               'endTime',
               'examSet',
+              'status',
+              'isPublished'
             ],
             include: [{ model: Topic, attributes: ['ID', 'Name'] }],
           },
@@ -619,8 +620,27 @@ async function getFullExamReview(sessionParticipantId) {
       return { status: 404, message: 'Session participant not found' };
     }
 
+    if (user && user.role === 'student') {
+      const session = sessionParticipant.Session;
+      const now = new Date();
+      
+      if (sessionParticipant.UserID !== user.id) {
+        return { status: 403, message: 'Unauthorized access to this review.' };
+      }
+
+      if (
+        session.status !== 'COMPLETE' || 
+        !sessionParticipant.IsPublished || 
+        new Date(session.endTime) >= now
+      ) {
+        return { 
+          status: 403, 
+          message: 'Chưa thể xem lại bài làm lúc này. Kỳ thi chưa kết thúc hoặc điểm chưa được công bố.' 
+        };
+      }
+    }
+
     // 2. Lấy Topic kèm theo Sections và Parts
-    // [FIX] Thêm include Section để lấy dữ liệu đúng cấu trúc
     const topic = await Topic.findByPk(sessionParticipant.Session.examSet, {
       include: [
         {
@@ -704,7 +724,6 @@ async function getFullExamReview(sessionParticipantId) {
       return upper.toLowerCase();
     };
 
-    // [FIX] Hàm parse JSON an toàn (Chống crash server)
     const safeParse = (str) => {
       if (typeof str === 'object' && str !== null) return str;
       try {
@@ -714,7 +733,6 @@ async function getFullExamReview(sessionParticipantId) {
       }
     };
 
-    // [FIX] Hàm kiểm tra đúng sai an toàn
     const checkCorrectness = (
       questionType,
       userAnswerText,
@@ -722,7 +740,6 @@ async function getFullExamReview(sessionParticipantId) {
     ) => {
       if (!userAnswerText) return false;
 
-      // Parse user answer an toàn
       let userAnsObj = userAnswerText;
       if (typeof userAnswerText === 'string') {
         userAnsObj = safeParse(userAnswerText);
@@ -784,14 +801,12 @@ async function getFullExamReview(sessionParticipantId) {
       }
     };
 
-    // [FIX] Helper xử lý danh sách parts để tái sử dụng
     const processParts = (partsList) => {
       if (!partsList || !Array.isArray(partsList)) return;
 
       partsList.forEach((part) => {
         if (part.Questions && part.Questions.length > 0) {
           part.Questions.forEach((question) => {
-            // Skip nếu question lỗi hoặc không có skill
             if (!part.Skill || !part.Skill.Name) return;
 
             const skillKey = getSkillKey(part.Skill.Name);
@@ -841,10 +856,6 @@ async function getFullExamReview(sessionParticipantId) {
       });
     };
 
-    // 5. Duyệt dữ liệu (Ưu tiên Sections trước)
-    let hasData = false;
-
-    // Case 1: Cấu trúc mới (Topic -> Sections -> Parts)
     if (topic.Sections && topic.Sections.length > 0) {
       topic.Sections.forEach((section) => {
         if (section.Parts && section.Parts.length > 0) {
@@ -853,18 +864,10 @@ async function getFullExamReview(sessionParticipantId) {
       });
     }
 
-    // Case 2: Cấu trúc cũ (Topic -> Parts trực tiếp)
-    // Chỉ chạy nếu Case 1 không có dữ liệu
-    // if (topic.Sections && topic.Sections.length > 0) {
-
-    //     processParts(topic.Sections?.[0]?.Parts);
-    // }
-
     const startTime = new Date(sessionParticipant.createdAt);
     const endTime = new Date(sessionParticipant.updatedAt);
     let durationMs = endTime - startTime;
 
-    // Đảm bảo không bị số âm (trong trường hợp edge case)
     if (durationMs < 0) durationMs = 0;
     const durationMinutes = Math.floor(durationMs / 60000);
 
@@ -885,7 +888,6 @@ async function getFullExamReview(sessionParticipantId) {
     };
   } catch (error) {
     console.error('Error in getFullExamReview:', error);
-    // Trả về lỗi 500 kèm message để dễ debug, thay vì crash server
     return { status: 500, message: `Server Error: ${error.message}` };
   }
 }

@@ -13,13 +13,16 @@ async function getAllSessionRequests(req) {
     const { sessionId } = req.params;
     const status = req.query.status;
 
-    const whereClause = { SessionID: sessionId };
+    const whereClause = {};
+    if (sessionId) {
+      whereClause.SessionID = sessionId;
+    }
     if (Object.values(SESSION_REQUEST_STATUS).includes(status)) {
       whereClause.status = status;
     }
     const sessionRequests = await SessionRequest.findAll({
       where: whereClause,
-      include: ["User"],
+      include: ["User", "Session"],
     });
     return {
       status: 200,
@@ -40,13 +43,22 @@ async function getSessionRequestByStudentId(req) {
     const { sessionId, studentId } = req.params;
     const { requestId } = req.query;
 
+    if (sessionId === "undefined" || studentId === "undefined") {
+      return {
+        status: 400,
+        message: "Invalid sessionId or studentId provided",
+      };
+    }
+
     const status = req.query.status;
 
     const whereClause = {
       UserID: studentId,
       SessionID: sessionId,
-      ID: requestId,
     };
+    if (requestId && requestId !== "undefined") {
+      whereClause.ID = requestId;
+    }
     if (Object.values(SESSION_REQUEST_STATUS).includes(status)) {
       whereClause.status = status;
     }
@@ -128,7 +140,7 @@ async function createSessionRequest(req) {
       return {
         status: 201,
         message: "Session request created successfully",
-        data: [pendingRequest],
+        data: pendingRequest.toJSON ? pendingRequest.toJSON() : pendingRequest,
       };
     }
 
@@ -147,34 +159,28 @@ async function createSessionRequest(req) {
       throw new Error("Session request limit reached");
     }
 
-    let sessionRequest;
-    const hasApprovedSessionRequest = allSessionRequest.some(
+    const approvedRequest = allSessionRequest.find(
       (request) => request.status === SESSION_REQUEST_STATUS.APPROVED
     );
 
-    if (!hasApprovedSessionRequest) {
-      sessionRequest = await SessionRequest.create({
-        UserID,
-        SessionID: session.ID,
-      });
-    } else {
-      const approvedSessionRequest = await SessionRequest.findOne({
-        where: {
-          UserID,
-          SessionID: session.ID,
-          status: SESSION_REQUEST_STATUS.APPROVED,
-        },
-      });
-
-      approvedSessionRequest.status = SESSION_REQUEST_STATUS.PENDING;
-      await approvedSessionRequest.save();
-      sessionRequest = approvedSessionRequest;
+    if (approvedRequest) {
+      return {
+        status: 200,
+        message: "Student is already approved for this session",
+        data: approvedRequest.toJSON ? approvedRequest.toJSON() : approvedRequest,
+      };
     }
+
+    let sessionRequest;
+    sessionRequest = await SessionRequest.create({
+      UserID,
+      SessionID: session.ID,
+    });
 
     return {
       status: 201,
       message: "Session request created successfully",
-      data: sessionRequest,
+      data: sessionRequest.toJSON ? sessionRequest.toJSON() : sessionRequest,
     };
   } catch (error) {
     const errorMsg = `Error creating session request: ${error.message}`;

@@ -12,8 +12,7 @@ COPY . .
 RUN rm -rf \
     *.md \
     .git \
-    .env \
-    migrations
+    .env
 
 # Stage 2: Production image
 FROM node:20.19-alpine

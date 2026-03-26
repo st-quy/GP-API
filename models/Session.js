@@ -24,6 +24,14 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DATE,
       allowNull: false,
     },
+    duration: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    instructions: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
     examSet: {
       type: DataTypes.UUID,
       references: {

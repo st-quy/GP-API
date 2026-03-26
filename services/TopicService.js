@@ -72,7 +72,7 @@ const getQuestionsByQuestionSetId = async (req) => {
 
 const createTopic = async (req) => {
   try {
-    const { Name, Status } = req.body;
+    const { Name, Status, ShuffleQuestions, ShuffleAnswers } = req.body;
     if (!Name) {
       return {
         status: 400,
@@ -87,6 +87,8 @@ const createTopic = async (req) => {
     const newTopic = await Topic.create({
       Name,
       Status: validStatuses.includes(Status) ? Status : finalStatus,
+      ShuffleQuestions: ShuffleQuestions || false,
+      ShuffleAnswers: ShuffleAnswers || false,
     });
     return {
       status: 201,
@@ -165,7 +167,7 @@ const getTopicWithRelations = async (req, res) => {
         {
           model: Section,
           as: 'Sections',
-          through: { attributes: [] },
+          through: { attributes: ['ScoreConfig'] },
 
           include: [
             {
@@ -329,7 +331,7 @@ async function deleteTopic(req) {
   }
 };
 
-async function updateTopic(req, res) {
+async function updateTopic(req) {
   try {
     const { id } = req.params;
     const updatedTopicData = req.body;
@@ -349,8 +351,10 @@ async function updateTopic(req, res) {
       data: topic,
     };
   } catch (error) {
-
-    return res.status(500).json({ message: 'Internal server error' });
+    return {
+      status: 500,
+      message: `Internal server error: ${error.message}`,
+    };
   }
 }
 

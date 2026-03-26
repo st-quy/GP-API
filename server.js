@@ -7,9 +7,6 @@ const cookieParser = require('cookie-parser');
 const app = express();
 const { swaggerUi, swaggerSpec } = require('./swagger');
 const { initializeBucket } = require('./services/MinIOService');
-const https = require('https');
-const fs = require('fs');
-
 const PORT = process.env.PORT || 3000;
 
 app.use(cors({
@@ -26,17 +23,20 @@ app.use('/api', require('./routes'));
   await initializeBucket(); //Just for the first time
 })();
 
+<<<<<<< HEAD
 const sslOptions = {
   key: fs.readFileSync('./ssl/private.key'),
   cert: fs.readFileSync('./ssl/public.crt'),
 };
 
+=======
+>>>>>>> origin/develop
 db.sequelize
   .sync({ alter: true })
   // .authenticate()
   .then(async () => {
     console.log('Database synchronized and models updated successfully.');
-    https.createServer(sslOptions, app).listen(PORT, () => {
+    app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
     });
   })
