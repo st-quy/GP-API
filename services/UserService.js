@@ -79,7 +79,7 @@ async function registerUser(data) {
           case 'phone':
             return 'Phone already exists';
           case 'studentCode':
-            return 'Student Code already exists';
+            return 'Student ID already exists';
           case 'teacherCode':
             return 'Teacher Code already exists';
           default:
