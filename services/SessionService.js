@@ -2,6 +2,7 @@ const { Sequelize, Op } = require("sequelize");
 const cron = require("node-cron");
 const { Session, SessionParticipant, Class, Topic, sequelize } = require("../models");
 const { removeMinIOAudio } = require("./StudentAnswerService");
+const { SESSION_STATUS, SESSION_STATUS_TRANSITIONS } = require("../helpers/constants");
 
 async function getAllSessions(req) {
   try {
@@ -491,10 +492,78 @@ async function removeSession(req) {
   }
 }
 
+async function updateSessionStatus(req) {
+  try {
+    const { sessionId } = req.params;
+    const { status: newStatus } = req.body;
+
+    if (!newStatus) {
+      return {
+        status: 400,
+        message: "status is required",
+      };
+    }
+
+    const validStatuses = Object.values(SESSION_STATUS);
+    if (!validStatuses.includes(newStatus)) {
+      return {
+        status: 400,
+        message: `Invalid status. Must be one of: ${validStatuses.join(", ")}`,
+      };
+    }
+
+    const session = await Session.findByPk(sessionId);
+    if (!session) {
+      return {
+        status: 404,
+        message: "Session not found",
+      };
+    }
+
+    const currentStatus = session.status;
+    const allowedTransitions = SESSION_STATUS_TRANSITIONS[currentStatus] || [];
+
+    if (!allowedTransitions.includes(newStatus)) {
+      return {
+        status: 400,
+        message: `Cannot transition from ${currentStatus} to ${newStatus}. Allowed transitions: ${allowedTransitions.join(", ") || "none"}`,
+      };
+    }
+
+    await Session.update(
+      { status: newStatus },
+      { where: { ID: sessionId } }
+    );
+
+    const updatedSession = await Session.findByPk(sessionId);
+
+    return {
+      status: 200,
+      data: updatedSession,
+      message: `Session status updated from ${currentStatus} to ${newStatus}`,
+    };
+  } catch (error) {
+    throw new Error(`Error updating session status: ${error.message}`);
+  }
+}
+
 async function cronStatusAllSessions() {
+  const MANUAL_STATUSES = [
+    SESSION_STATUS.DRAFT,
+    SESSION_STATUS.PUBLISHED,
+    SESSION_STATUS.ARCHIVED,
+    SESSION_STATUS.DELETED,
+  ];
+
   try {
     const now = new Date();
-    const sessions = await Session.findAll();
+    const sessions = await Session.findAll({
+      where: {
+        status: {
+          [Op.notIn]: MANUAL_STATUSES,
+        },
+      },
+    });
 
     for (const session of sessions) {
       let newStatus;
@@ -811,6 +880,7 @@ module.exports = {
   getSessionByClass,
   createSession,
   updateSession,
+  updateSessionStatus,
   getSessionDetailById,
   removeSession,
   cronStatusAllSessions,

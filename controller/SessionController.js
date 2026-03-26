@@ -55,6 +55,15 @@ async function removeSession(req, res) {
   }
 }
 
+async function updateSessionStatus(req, res) {
+  try {
+    const result = await SessionsService.updateSessionStatus(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
 async function generateSessionKey(req, res) {
   try {
     const characters =
@@ -117,6 +126,7 @@ module.exports = {
   getAllSessionsByClass,
   createSession,
   updateSession,
+  updateSessionStatus,
   getSessionDetailById,
   removeSession,
   generateSessionKey,
