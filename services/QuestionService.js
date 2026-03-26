@@ -18,6 +18,24 @@ const { v4: uuidv4 } = require('uuid');
 const { Op } = require('sequelize');
 const Response = require('./ServiceResponse');
 
+function normalizeTags(input) {
+  if (input === null || input === undefined) return [];
+
+  const raw = Array.isArray(input) ? input : String(input).split(',');
+
+  return [...new Set(raw.map((tag) => String(tag).trim()).filter(Boolean))];
+}
+
+function parseTagsQuery(tagsQuery) {
+  if (!tagsQuery) return [];
+
+  if (Array.isArray(tagsQuery)) {
+    return normalizeTags(tagsQuery.flatMap((value) => String(value).split(',')));
+  }
+
+  return normalizeTags(tagsQuery);
+}
+
 async function getAllQuestions(req) {
   try {
     const {
@@ -27,6 +45,7 @@ async function getAllQuestions(req) {
       skillName,
       partId,
       type,
+      tags,
     } = req.query;
 
     const limit = Number(pageSize) > 0 ? Number(pageSize) : 10;
@@ -57,6 +76,14 @@ async function getAllQuestions(req) {
     if (type) {
       whereQuestion.Type = type;
     }
+
+    // Tag-based filtering is currently disabled because the Question model/DB
+    // schema does not yet define a Tags column. Once Tags is added to the
+    // model and migrated, this can be re-enabled.
+    // const parsedTags = parseTagsQuery(tags);
+    // if (parsedTags.length > 0) {
+    //   whereQuestion.Tags = { [Op.overlap]: parsedTags };
+    // }
 
     // --------------------------------------------------
     // PART + SKILL (Skill belongsTo Part)
@@ -130,6 +157,7 @@ async function createQuestion(req) {
       GroupContent,
       AnswerContent,
       GroupID,
+      Tags,
     } = req.body;
 
     if (!Type || !SkillID || !PartID || !Sequence || !Content || !GroupID) {
@@ -152,7 +180,7 @@ async function createQuestion(req) {
       GroupContent,
       AnswerContent,
       GroupID,
-      GroupID,
+      Tags: normalizeTags(Tags),
     });
 
     return {
@@ -274,6 +302,7 @@ async function createQuestionGroup(req) {
             SubContent: q.SubContent || null,
             GroupContent: q.GroupContent || null,
             AnswerContent: answerContent,
+            Tags: normalizeTags(q.Tags || q.tags),
             CreatedBy: userId || null,
             UpdatedBy: userId || null,
           },
@@ -421,6 +450,7 @@ async function createSpeakingGroup(req) {
             GroupContent: null,
             ImageKeys: imageKeys,
             AudioKeys: null,
+            Tags: normalizeTags(q.Tags || q.tags || p.Tags || p.tags),
             AnswerContent: buildSpeakingAnswerContent({
               content,
               imageKeys,
@@ -563,35 +593,26 @@ async function createReadingGroup(req) {
           transaction: t,
         });
 
-        if (existingQuestion) {
-          await existingQuestion.update(
-            {
-              Type: p.Type,
-              Sequence: 1, // ALWAYS 1 for READING
-              Content: p.Content,
-              AnswerContent: p.AnswerContent,
-              UpdatedBy: userId,
-            },
-            { transaction: t }
-          );
-        } else {
-          await Question.create(
-            {
-              ID: uuidv4(),
-              PartID: partRow.ID,
-              Type: p.Type,
-              Sequence: 1, // ALWAYS 1 for READING
-              Content: p.Content,
-              AnswerContent: p.AnswerContent,
-              ImageKeys: null,
-              AudioKeys: null,
-              GroupContent: null,
-              CreatedBy: userId,
-              UpdatedBy: userId,
-            },
-            { transaction: t }
-          );
-        }
+        // =====================
+        // 3) CREATE QUESTION FOR THIS PART
+        // =====================
+        await Question.create(
+          {
+            ID: uuidv4(),
+            PartID: partRow.ID,
+            Type: p.Type,
+            Sequence: 1, // ALWAYS 1 for READING
+            Content: p.Content,
+            AnswerContent: p.AnswerContent,
+            ImageKeys: null,
+            AudioKeys: null,
+            GroupContent: null,
+            Tags: normalizeTags(p.Tags || p.tags),
+            CreatedBy: userId,
+            UpdatedBy: userId,
+          },
+          { transaction: t }
+        );
 
         finalParts.push(partRow);
       }
@@ -733,6 +754,7 @@ async function createWritingGroup(req) {
           AudioKeys: null,
           ImageKeys: null,
           AnswerContent: null,
+          Tags: normalizeTags(q.Tags || q.tags || parts.part1?.Tags || parts.part1?.tags),
           CreatedBy: userId,
           UpdatedBy: userId,
         });
@@ -755,6 +777,7 @@ async function createWritingGroup(req) {
         AudioKeys: null,
         ImageKeys: null,
         AnswerContent: null,
+        Tags: normalizeTags(parts.part2?.Tags || parts.part2?.tags),
         CreatedBy: userId,
         UpdatedBy: userId,
       });
@@ -777,6 +800,7 @@ async function createWritingGroup(req) {
           AudioKeys: null,
           ImageKeys: null,
           AnswerContent: null,
+          Tags: normalizeTags(c.Tags || c.tags || parts.part3?.Tags || parts.part3?.tags),
           CreatedBy: userId,
           UpdatedBy: userId,
         });
@@ -799,6 +823,7 @@ async function createWritingGroup(req) {
         AudioKeys: null,
         ImageKeys: null,
         AnswerContent: null,
+        Tags: normalizeTags(parts.part4?.q1_tags || parts.part4?.q1Tags || parts.part4?.Tags || parts.part4?.tags),
         CreatedBy: userId,
         UpdatedBy: userId,
       });
@@ -817,6 +842,7 @@ async function createWritingGroup(req) {
         AudioKeys: null,
         ImageKeys: null,
         AnswerContent: null,
+        Tags: normalizeTags(parts.part4?.q2_tags || parts.part4?.q2Tags || parts.part4?.Tags || parts.part4?.tags),
         CreatedBy: userId,
         UpdatedBy: userId,
       });
@@ -998,6 +1024,7 @@ async function createListeningGroup(req) {
             GroupContent: q.GroupContent || null,
             ImageKeys: q.ImageKeys || null,
             AudioKeys: q.AudioKeys || null,
+            Tags: normalizeTags(q.Tags || q.tags),
             AnswerContent: q.AnswerContent || null, // Không stringify → Sequelize JSON column tự nhận
             CreatedBy: userId,
             UpdatedBy: userId,
@@ -1179,6 +1206,7 @@ async function createGrammarAndVocabGroup(req) {
             GroupContent: q.GroupContent || null,
             AudioKeys: q.AudioKeys || null,
             ImageKeys: q.ImageKeys || null,
+            Tags: normalizeTags(q.Tags || q.tags),
             AnswerContent: q.AnswerContent, // FE đã build chuẩn → không stringify
             CreatedBy: userId,
             UpdatedBy: userId,
@@ -1415,7 +1443,15 @@ async function getQuestionsByTopicID(req) {
 async function updateQuestion(req) {
   try {
     const { questionId } = req.params;
-    const updatedData = req.body;
+    const updatedData = { ...req.body };
+
+    if (
+      Object.prototype.hasOwnProperty.call(updatedData, 'Tags') ||
+      Object.prototype.hasOwnProperty.call(updatedData, 'tags')
+    ) {
+      updatedData.Tags = normalizeTags(updatedData.Tags || updatedData.tags);
+      delete updatedData.tags;
+    }
 
     const question = await Question.findByPk(questionId);
     if (!question) {
@@ -1545,6 +1581,7 @@ async function getQuestionGroupDetail(req) {
             ImageKeys: q.ImageKeys,
             GroupContent: q.GroupContent,
             AnswerContent: q.AnswerContent,
+            Tags: q.Tags,
           })),
         };
       });
@@ -1562,6 +1599,7 @@ async function getQuestionGroupDetail(req) {
           Sequence: p.SectionPart.Sequence,
           Content: q.Content,
           AnswerContent: q.AnswerContent,
+          Tags: q.Tags,
         };
       });
 
@@ -1621,6 +1659,7 @@ async function getQuestionGroupDetail(req) {
             Type: q.Type,
             Content: q.Content,
             AnswerContent: q.AnswerContent,
+            Tags: q.Tags,
           })),
         };
       });
@@ -1761,7 +1800,7 @@ async function updateSpeakingGroup(sectionId, payload) {
           Sequence: qSequence,
           Content: qContent,
           ImageKeys: imageKeys,
-          UpdatedBy: userId,
+          Tags: normalizeTags(q.Tags || q.tags),
         };
 
         if (questionRow) {
@@ -1918,26 +1957,32 @@ async function updateReadingGroup(sectionId, payload) {
       });
 
       if (oldQ) {
-        await oldQ.update(
-          {
-            Type: p.Type,
-            Content: p.Content,
-            AnswerContent: p.AnswerContent,
-          },
-          { transaction: t }
-        );
+        const updatePayload = {
+          Type: p.Type,
+          Content: p.Content,
+          AnswerContent: p.AnswerContent,
+        };
+
+        if ('Tags' in p || 'tags' in p) {
+          updatePayload.Tags = normalizeTags(p.Tags || p.tags);
+        }
+
+        await oldQ.update(updatePayload, { transaction: t });
       } else {
-        await Question.create(
-          {
-            ID: uuidv4(),
-            PartID: partRow.ID,
-            Type: p.Type,
-            Sequence: 1,
-            Content: p.Content,
-            AnswerContent: p.AnswerContent,
-          },
-          { transaction: t }
-        );
+        const createPayload = {
+          ID: uuidv4(),
+          PartID: partRow.ID,
+          Type: p.Type,
+          Sequence: 1,
+          Content: p.Content,
+          AnswerContent: p.AnswerContent,
+        };
+
+        if ('Tags' in p || 'tags' in p) {
+          createPayload.Tags = normalizeTags(p.Tags || p.tags);
+        }
+
+        await Question.create(createPayload, { transaction: t });
       }
 
       finalParts.push(partRow);
@@ -2059,6 +2104,7 @@ async function updateWritingGroup(sectionId, payload) {
           AudioKeys: null,
           ImageKeys: null,
           AnswerContent: null,
+          Tags: normalizeTags(q.Tags || q.tags || parts.part1?.Tags || parts.part1?.tags),
           CreatedBy: userId,
           UpdatedBy: userId,
         });
@@ -2079,6 +2125,7 @@ async function updateWritingGroup(sectionId, payload) {
         AudioKeys: null,
         ImageKeys: null,
         AnswerContent: null,
+        Tags: normalizeTags(parts.part2?.Tags || parts.part2?.tags),
         CreatedBy: userId,
         UpdatedBy: userId,
       });
@@ -2099,6 +2146,7 @@ async function updateWritingGroup(sectionId, payload) {
           AudioKeys: null,
           ImageKeys: null,
           AnswerContent: null,
+          Tags: normalizeTags(c.Tags || c.tags || parts.part3?.Tags || parts.part3?.tags),
           CreatedBy: userId,
           UpdatedBy: userId,
         });
@@ -2119,6 +2167,7 @@ async function updateWritingGroup(sectionId, payload) {
         AudioKeys: null,
         ImageKeys: null,
         AnswerContent: null,
+        Tags: normalizeTags(parts.part4?.q1_tags || parts.part4?.q1Tags || parts.part4?.Tags || parts.part4?.tags),
         CreatedBy: userId,
         UpdatedBy: userId,
       });
@@ -2137,6 +2186,7 @@ async function updateWritingGroup(sectionId, payload) {
         AudioKeys: null,
         ImageKeys: null,
         AnswerContent: null,
+        Tags: normalizeTags(parts.part4?.q2_tags || parts.part4?.q2Tags || parts.part4?.Tags || parts.part4?.tags),
         CreatedBy: userId,
         UpdatedBy: userId,
       });
@@ -2288,6 +2338,7 @@ async function updateListeningGroup(sectionId, payload) {
               AudioKeys: q.AudioKeys || null,
               ImageKeys: q.ImageKeys || null,
               AnswerContent: q.AnswerContent || null,
+              Tags: normalizeTags(q.Tags || q.tags),
               Sequence: i + 1,
               UpdatedBy: userId,
             },
@@ -2308,6 +2359,7 @@ async function updateListeningGroup(sectionId, payload) {
               AudioKeys: q.AudioKeys,
               ImageKeys: q.ImageKeys || null,
               AnswerContent: q.AnswerContent || null,
+              Tags: normalizeTags(q.Tags || q.tags),
               CreatedBy: userId,
               UpdatedBy: userId,
             },
@@ -2463,6 +2515,7 @@ async function updateGrammarAndVocabGroup(sectionId, payload) {
               AudioKeys: q.AudioKeys || null,
               ImageKeys: q.ImageKeys || null,
               AnswerContent: q.AnswerContent,
+              Tags: normalizeTags(q.Tags || q.tags),
               Sequence: i + 1,
               UpdatedBy: userId,
             },
@@ -2483,6 +2536,7 @@ async function updateGrammarAndVocabGroup(sectionId, payload) {
               AudioKeys: q.AudioKeys || null,
               ImageKeys: q.ImageKeys || null,
               AnswerContent: q.AnswerContent,
+              Tags: normalizeTags(q.Tags || q.tags),
               CreatedBy: userId,
               UpdatedBy: userId,
             },

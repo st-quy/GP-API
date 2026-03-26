@@ -46,6 +46,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.JSON,
       allowNull: true,
     },
+    Tags: {
+      type: DataTypes.ARRAY(DataTypes.TEXT),
+      allowNull: true,
+      defaultValue: [],
+    },
     CreatedBy: {
       type: DataTypes.UUID,
       allowNull: true,
