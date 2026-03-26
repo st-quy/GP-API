@@ -151,8 +151,12 @@ router.delete("/topic/:topicId", deleteTopicSectionbyTopicID);
  *                 items:
  *                   type: string
  *                 description: Array of SectionIDs to associate with the Topic
+ *               scoreConfig:
+ *                 type: object
+ *                 description: JSON object mapping Question IDs to specific scores
  *             example:
  *               sectionIds: ["7d8f3b6a-9b4c-4e3c-91f7-1f2e3d4a5b6c", "8a9b1c2d-3e4f-5g6h-7i8j-9k0l1m2n3o4p"]
+ *               scoreConfig: {"uuid-q1": 1.5, "uuid-q2": 2.0}
  *     responses:
  *       200:
  *         description: TopicSections updated successfully

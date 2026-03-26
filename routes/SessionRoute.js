@@ -5,10 +5,15 @@ const {
   getAllSessionsByClass,
   createSession,
   updateSession,
+  updateSessionStatus,
   getSessionDetailById,
   removeSession,
+  archiveSession,
   generateSessionKey,
   getAllSessions,
+  batchUpdateStatus,
+  batchClone,
+  batchExportReport,
 } = require("../controller/SessionController");
 /**
  * @swagger
@@ -44,7 +49,7 @@ const {
  *           description: The exam set associated with the session
  *         status:
  *           type: string
- *           enum: [NOT_STARTED, ON_GOING, COMPLETE]
+ *           enum: [NOT_STARTED, ON_GOING, COMPLETE, DRAFT, PUBLISHED, ARCHIVED, DELETED]
  *           description: The status of the session
  *         ClassID:
  *           type: string
@@ -96,7 +101,7 @@ router.get("/all", getAllSessions);
  *               properties:
  *                 sessionKey:
  *                   type: string
- *       500:
+       500:
  *         description: Internal server error
  */
 router.get("/generate-key", generateSessionKey);
@@ -187,6 +192,44 @@ router.post("/", createSession);
 
 /**
  * @swagger
+ * /sessions/{sessionId}/status:
+ *   patch:
+ *     summary: Update session status with transition validation
+ *     tags: [Session]
+ *     parameters:
+ *       - in: path
+ *         name: sessionId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: The ID of the session
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - status
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [NOT_STARTED, ON_GOING, COMPLETE, DRAFT, PUBLISHED, ARCHIVED, DELETED]
+ *                 description: The new status to transition to
+ *     responses:
+ *       200:
+ *         description: Session status updated successfully
+ *       400:
+ *         description: Invalid status transition
+ *       404:
+ *         description: Session not found
+ *       500:
+ *         description: Internal server error
+ */
+router.patch("/:sessionId/status", updateSessionStatus);
+
+/**
+ * @swagger
  * /sessions/{sessionId}:
  *   put:
  *     summary: Update a session by class ID
@@ -220,29 +263,98 @@ router.put("/:sessionId", updateSession);
 
 /**
  * @swagger
- * /sessions/{sessionId}:
- *   get:
- *     summary: Get session details by sessionId
+ * /sessions/batch/status:
+ *   patch:
+ *     summary: Batch update status for multiple sessions
  *     tags: [Session]
- *     parameters:
- *       - in: path
- *         name: sessionId
- *         schema:
- *           type: string
- *         required: true
- *         description: The ID of the class
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - sessionIds
+ *               - status
+ *             properties:
+ *               sessionIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: uuid
+ *               status:
+ *                 type: string
+ *                 enum: [NOT_STARTED, ON_GOING, COMPLETE]
  *     responses:
  *       200:
- *         description: Session details
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Session'
- *       404:
- *         description: Session not found
- *       500:
- *         description: Internal server error
+ *         description: All sessions updated successfully
+ *       207:
+ *         description: Partial success - some sessions failed to update
+ *       400:
+ *         description: All sessions failed to update or invalid input
  */
+router.patch("/batch/status", batchUpdateStatus);
+
+/**
+ * @swagger
+ * /sessions/batch/clone:
+ *   post:
+ *     summary: Batch clone multiple sessions
+ *     tags: [Session]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - sessionIds
+ *             properties:
+ *               sessionIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: uuid
+ *     responses:
+ *       201:
+ *         description: All sessions cloned successfully
+ *       207:
+ *         description: Partial success - some sessions failed to clone
+ *       400:
+ *         description: All sessions failed to clone or invalid input
+ */
+router.post("/batch/clone", batchClone);
+
+/**
+ * @swagger
+ * /sessions/batch/export-report:
+ *   post:
+ *     summary: Batch export reports for multiple sessions
+ *     tags: [Session]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - sessionIds
+ *             properties:
+ *               sessionIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: uuid
+ *     responses:
+ *       200:
+ *         description: All reports generated successfully
+ *       207:
+ *         description: Partial success - some reports failed to generate
+ *       400:
+ *         description: All reports failed to generate or invalid input
+ */
+router.post("/batch/export-report", batchExportReport);
+
 router.get("/:sessionId", getSessionDetailById);
 
 /**
@@ -267,5 +379,28 @@ router.get("/:sessionId", getSessionDetailById);
  *         description: Internal server error
  */
 router.delete("/:sessionId", removeSession);
+
+/**
+ * @swagger
+ * /sessions/{sessionId}/archive:
+ *   patch:
+ *     summary: Archive a session by session ID
+ *     tags: [Session]
+ *     parameters:
+ *       - in: path
+ *         name: sessionId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: The ID of the session
+ *     responses:
+ *       200:
+ *         description: Session archived or deleted successfully
+ *       404:
+ *         description: Session not found
+ *       500:
+ *         description: Internal server error
+ */
+router.patch("/:sessionId/archive", archiveSession);
 
 module.exports = router;
