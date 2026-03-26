@@ -9,10 +9,7 @@ const { swaggerUi, swaggerSpec } = require('./swagger');
 const { initializeBucket } = require('./services/MinIOService');
 const PORT = process.env.PORT || 3000;
 
-app.use(cors({
-  origin: ['https://127.0.0.1:3000', 'https://127.0.0.1:3001', 'http://localhost:3000', 'http://localhost:3001'],
-  credentials: true
-}));
+app.use(cors());
 app.use(cookieParser());
 app.use(bodyParser.json());
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
@@ -23,14 +20,6 @@ app.use('/api', require('./routes'));
   await initializeBucket(); //Just for the first time
 })();
 
-<<<<<<< HEAD
-const sslOptions = {
-  key: fs.readFileSync('./ssl/private.key'),
-  cert: fs.readFileSync('./ssl/public.crt'),
-};
-
-=======
->>>>>>> origin/develop
 db.sequelize
   .sync({ alter: true })
   // .authenticate()
