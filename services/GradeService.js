@@ -484,7 +484,7 @@ async function calculatePoints(req) {
       logs.push(logItem);
     });
 
-    totalPoints = parseFloat(totalPoints.toFixed(1));
+    totalPoints = Math.min(50, parseFloat(totalPoints.toFixed(1)));
 
     await calculateTotalPoints(
       sessionParticipantId,
