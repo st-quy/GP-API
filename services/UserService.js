@@ -309,28 +309,6 @@ async function sendResetPasswordEmail(email, host) {
       throw new Error('User with this email does not exist');
     }
 
-    // const resetToken = await jwt.sign({ userId: user.ID }, process.env.JWT_SECRET, {
-    //   expiresIn: "15m",
-    // });
-
-    // const resetLink = `${host}/reset-password?token=${resetToken}`;
-
-    // const mailOptions = {
-    //   from: process.env.EMAIL_USER,
-    //   to: user.email,
-    //   subject: "🔑 Reset Your Password",
-    //   html: `
-    //     <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ddd;">
-    //       <h2 style="color: #333;">🔑 Reset Your Password</h2>
-    //       <p>Hello <strong>${user.firstName} ${user.lastName}</strong>,</p>
-    //       <p>Click the link below to reset your password:</p>
-    //       <a href="${resetLink}" style="display: inline-block; padding: 10px 15px; background-color: #28a745; color: #fff; text-decoration: none; border-radius: 5px;">
-    //         Reset Password
-    //       </a>
-    //       <p style="color: #777; font-size: 12px;">This link will expire in 15 minutes.</p>
-    //     </div>
-    //   `,
-    // };
     // 1. Tạo Token bảo mật (Hết hạn sau 15 phút)
     const resetToken = jwt.sign({ userId: user.ID }, process.env.JWT_SECRET, {
       expiresIn: '15m',
