@@ -423,7 +423,6 @@ async function updateSession(req) {
       };
     }
 
-    const now = new Date();
     const resolvedIsPublished =
       isPublished !== undefined ? isPublished : session.isPublished;
     let newStatus;
