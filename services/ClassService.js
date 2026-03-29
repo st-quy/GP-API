@@ -47,12 +47,12 @@ async function findAll(req) {
       status: 200,
       message: 'Classes fetched successfully',
       data: result.docs,
+      total: totalCount,
       pagination: {
         currentPage: parseInt(req.query.page) || 1,
         pageSize: parseInt(req.query.limit) || 10,
         itemsOnPage: result.docs.length,
         totalPages: result.pages,
-        totalItems: totalCount,
       },
     };
   } catch (error) {
