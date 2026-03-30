@@ -211,22 +211,107 @@ async function updateUser(userId, data) {
       throw new Error('User not found');
     }
 
-    if (data.phone) {
+    const normalizedData = { ...data };
+
+    if (typeof normalizedData.firstName === 'string') {
+      normalizedData.firstName = normalizedData.firstName.trim();
+      if (!normalizedData.firstName) {
+        throw new Error('First name is required');
+      }
+      if (normalizedData.firstName.length > 50) {
+        throw new Error('First name must not exceed 50 characters');
+      }
+      if (!/^[a-zA-Z\s]+$/.test(normalizedData.firstName)) {
+        throw new Error('First name cannot contain special characters or numbers');
+      }
+    }
+
+    if (typeof normalizedData.lastName === 'string') {
+      normalizedData.lastName = normalizedData.lastName.trim();
+      if (!normalizedData.lastName) {
+        throw new Error('Last name is required');
+      }
+      if (normalizedData.lastName.length > 50) {
+        throw new Error('Last name must not exceed 50 characters');
+      }
+      if (!/^[a-zA-Z\s]+$/.test(normalizedData.lastName)) {
+        throw new Error('Last name cannot contain special characters or numbers');
+      }
+    }
+
+    if (typeof normalizedData.email === 'string') {
+      normalizedData.email = normalizedData.email.trim();
+      if (!normalizedData.email) {
+        throw new Error('Email is required');
+      }
+      if (normalizedData.email.length > 100) {
+        throw new Error('Email must not exceed 100 characters');
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(normalizedData.email)) {
+        throw new Error(`Invalid email format: ${normalizedData.email}`);
+      }
+
+      const existingEmail = await User.findOne({
+        where: {
+          email: normalizedData.email,
+          ID: { [Op.ne]: userId },
+        },
+      });
+
+      if (existingEmail) {
+        throw new Error('Email already exists');
+      }
+    }
+
+    if (typeof normalizedData.teacherCode === 'string') {
+      normalizedData.teacherCode = normalizedData.teacherCode.trim();
+      if (!normalizedData.teacherCode) {
+        throw new Error('Teacher Code is required');
+      }
+      if (normalizedData.teacherCode.length > 20) {
+        throw new Error('Teacher Code must not exceed 20 characters');
+      }
+
+      const existingTeacherCode = await User.findOne({
+        where: {
+          teacherCode: normalizedData.teacherCode,
+          ID: { [Op.ne]: userId },
+        },
+      });
+
+      if (existingTeacherCode) {
+        throw new Error('Teacher Code already exists');
+      }
+    }
+
+    if (typeof normalizedData.phone === 'string') {
+      normalizedData.phone = normalizedData.phone.trim();
+      if (!normalizedData.phone) {
+        normalizedData.phone = null;
+      }
+    }
+
+    if (normalizedData.phone) {
       const phoneRegex = /^\d{10}$/;
-      if (!phoneRegex.test(data.phone)) {
-        throw new Error(`Invalid phone format: ${data.phone}`);
+      if (!phoneRegex.test(normalizedData.phone)) {
+        throw new Error(`Invalid phone format: ${normalizedData.phone}`);
       }
 
       const existingPhone = await User.findOne({
-        where: { phone: data.phone },
+        where: {
+          phone: normalizedData.phone,
+          ID: { [Op.ne]: userId },
+        },
       });
 
-      if (existingPhone && existingPhone.ID !== userId) {
+      if (existingPhone) {
         throw new Error('Phone number already exists');
       }
     }
 
-    await user.update(data);
+    await user.update(normalizedData);
     return {
       status: 200,
       message: 'User updated successfully',
