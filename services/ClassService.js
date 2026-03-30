@@ -132,6 +132,16 @@ async function getClassDetailById(req) {
       include: [
         {
           association: 'Sessions',
+          attributes: {
+            include: [
+              [
+                sequelize.literal(
+                  '(SELECT COUNT(*) FROM "SessionParticipants" WHERE "SessionParticipants"."SessionID" = "Sessions"."ID")'
+                ),
+                'participantCount',
+              ],
+            ],
+          },
           include: [
             {
               association: 'SessionParticipants',

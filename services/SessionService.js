@@ -467,6 +467,16 @@ async function getSessionDetailById(req) {
 
     const session = await Session.findOne({
       where: { ID: sessionId },
+      attributes: {
+        include: [
+          [
+            sequelize.literal(
+              '(SELECT COUNT(*) FROM "SessionParticipants" WHERE "SessionParticipants"."SessionID" = "Session"."ID")'
+            ),
+            'participantCount',
+          ],
+        ],
+      },
       include: [
         {
           model: SessionParticipant,
