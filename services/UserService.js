@@ -5,6 +5,21 @@ const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
 const { Op } = require('sequelize');
 
+const buildUniqueFieldMessage = (fieldName) => {
+  switch (fieldName) {
+    case 'email':
+      return 'Email already exists';
+    case 'phone':
+      return 'Phone already exists';
+    case 'studentCode':
+      return 'Student ID already exists';
+    case 'teacherCode':
+      return 'Teacher Code already exists';
+    default:
+      return `${fieldName} already exists`;
+  }
+};
+
 // Logic for user registration
 async function registerUser(data) {
   try {
@@ -215,6 +230,7 @@ async function updateUser(userId, data) {
     if (data.firstName) data.firstName = data.firstName.trim();
     if (data.lastName) data.lastName = data.lastName.trim();
     if (data.email) data.email = data.email.trim();
+    if (data.teacherCode) data.teacherCode = data.teacherCode.trim();
     if (data.address) data.address = data.address.trim();
     if (data.phone) data.phone = data.phone.trim();
 
@@ -228,6 +244,9 @@ async function updateUser(userId, data) {
     if (data.email && data.email.length > 100) {
       throw new Error('Email must not exceed 100 characters');
     }
+    if (data.teacherCode && data.teacherCode.length > 20) {
+      throw new Error('Teacher Code must not exceed 20 characters');
+    }
     if (data.address && data.address.length > 200) {
       throw new Error('Address must not exceed 200 characters');
     }
@@ -239,19 +258,56 @@ async function updateUser(userId, data) {
     if (data.lastName !== undefined && data.lastName.length === 0) {
       throw new Error('Last name is required');
     }
+    if (data.teacherCode !== undefined && data.teacherCode.length === 0) {
+      throw new Error('Teacher Code is required');
+    }
+
+    if (data.email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(data.email)) {
+        throw new Error(`Invalid email format: ${data.email}`);
+      }
+
+      const existingEmail = await User.findOne({
+        where: {
+          email: data.email,
+          ID: { [Op.ne]: userId },
+        },
+      });
+
+      if (existingEmail) {
+        throw new Error('Email already exists');
+      }
+    }
+
+    if (data.teacherCode) {
+      const existingTeacherCode = await User.findOne({
+        where: {
+          teacherCode: data.teacherCode,
+          ID: { [Op.ne]: userId },
+        },
+      });
+
+      if (existingTeacherCode) {
+        throw new Error('Teacher Code already exists');
+      }
+    }
 
     if (data.phone) {
-      const phoneRegex = /^\d{9,20}$/;
+      const phoneRegex = /^\d{10}$/;
       if (!phoneRegex.test(data.phone)) {
-        throw new Error(`Invalid phone format: ${data.phone}. Phone must contain 9-20 digits only.`);
+        throw new Error(`Invalid phone format: ${data.phone}`);
       }
 
       const existingPhone = await User.findOne({
-        where: { phone: data.phone },
+        where: {
+          phone: data.phone,
+          ID: { [Op.ne]: userId },
+        },
       });
 
-      if (existingPhone && existingPhone.ID !== userId) {
-        throw new Error('Phone number already exists');
+      if (existingPhone) {
+        throw new Error('Phone already exists');
       }
     }
 
@@ -262,6 +318,14 @@ async function updateUser(userId, data) {
       data: user,
     };
   } catch (error) {
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      const messages = error.errors.map((err) =>
+        buildUniqueFieldMessage(err.path)
+      );
+
+      throw new Error(messages.join(', '));
+    }
+
     console.log(error);
     throw new Error(`Error updating user: ${error.message}`);
   }
