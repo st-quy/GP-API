@@ -186,7 +186,7 @@ router.get('/detail', getTopicByName);
  *       500:
  *         description: Internal server error
  */
-router.delete('/:id', deleteTopic);
+router.delete('/:id', authorize(['teacher', 'admin']), deleteTopic);
 
 router.get('/:id', getTopicWithRelations);
 

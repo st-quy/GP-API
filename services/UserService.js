@@ -502,6 +502,62 @@ async function getAllUsersByRoleTeacher(req) {
   }
 }
 
+async function getAllUsersByRoleStudent(req) {
+  try {
+    const { page = 1, limit = 10, search = '', status } = req.query;
+
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const searchTerms = search.trim().split(' ').filter(Boolean);
+
+    const whereClause = {};
+
+    if (searchTerms.length > 0) {
+      whereClause[Op.and] = searchTerms.map((term) => ({
+        [Op.or]: [
+          { firstName: { [Op.iLike]: `%${term}%` } },
+          { lastName: { [Op.iLike]: `%${term}%` } },
+          { studentCode: { [Op.iLike]: `%${term}%` } },
+        ],
+      }));
+    }
+
+    if (status !== undefined) {
+      whereClause.status = status;
+    }
+
+    const { rows: students, count: total } = await User.findAndCountAll({
+      where: whereClause,
+      include: [
+        {
+          model: Role,
+          where: { Name: 'student' },
+          through: { attributes: [] },
+        },
+      ],
+      offset,
+      limit: parseInt(limit),
+      order: [['updatedAt', 'DESC']],
+      distinct: true,
+    });
+
+    return {
+      status: 200,
+      message: 'Students fetched successfully',
+      data: {
+        students,
+        pagination: {
+          total,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          totalPages: Math.ceil(total / parseInt(limit)),
+        },
+      },
+    };
+  } catch (error) {
+    throw new Error(`Error fetching students: ${error.message}`);
+  }
+}
+
 async function deleteUser(userId) {
   try {
     const user = await User.findByPk(userId);
@@ -529,5 +585,6 @@ module.exports = {
   resetPassword,
   logoutUser,
   getAllUsersByRoleTeacher,
+  getAllUsersByRoleStudent,
   deleteUser,
 };

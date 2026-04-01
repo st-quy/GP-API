@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { authorize } = require('../middleware/AuthMiddleware');
 
 const {
   getAllSection,
@@ -10,10 +11,9 @@ const {
 } = require('../controller/SectionController');
 
 router.get('/', getAllSection);
-router.put('/:id', updateSection);
-router.delete('/:id', deleteSection);
+router.put('/:id', authorize(['teacher', 'admin']), updateSection);
+router.delete('/:id', authorize(['teacher', 'admin']), deleteSection);
 router.get('/:id', getSectionDetail);
-
-router.post('/', createSection);
+router.post('/', authorize(['teacher', 'admin']), createSection);
 
 module.exports = router;
