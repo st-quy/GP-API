@@ -17,6 +17,7 @@ const {
 const { v4: uuidv4 } = require('uuid');
 const { Op } = require('sequelize');
 const Response = require('./ServiceResponse');
+const { logActivity } = require('./ActivityLogService');
 
 function normalizeTags(input) {
   if (input === null || input === undefined) return [];
@@ -181,6 +182,16 @@ async function createQuestion(req) {
       AnswerContent,
       GroupID,
       Tags: normalizeTags(Tags),
+    });
+
+    const userIdFromReq = req.user?.userId || null;
+    logActivity({
+      userId: userIdFromReq,
+      action: 'create',
+      entityType: 'question',
+      entityID: newQuestion.ID,
+      entityName: Content?.substring(0, 50) || 'Question',
+      details: `Question created (Type: ${Type})`,
     });
 
     return {
@@ -1463,6 +1474,16 @@ async function updateQuestion(req) {
 
     await question.update(updatedData);
 
+    const userIdFromReq = req.user?.userId || null;
+    logActivity({
+      userId: userIdFromReq,
+      action: 'update',
+      entityType: 'question',
+      entityID: questionId,
+      entityName: question.Content?.substring(0, 50) || 'Question',
+      details: `Question updated (Type: ${question.Type})`,
+    });
+
     return {
       status: 200,
       message: 'Question updated successfully',
@@ -1477,6 +1498,10 @@ async function deleteQuestion(req) {
   try {
     const { questionId } = req.params;
 
+    const question = await Question.findByPk(questionId);
+    const questionName = question ? (question.Content?.substring(0, 50) || 'Question') : questionId;
+    const userIdFromReq = req.user?.userId || null;
+
     const deletedRows = await Question.destroy({
       where: { ID: questionId },
     });
@@ -1487,6 +1512,15 @@ async function deleteQuestion(req) {
         message: 'Question not found',
       };
     }
+
+    logActivity({
+      userId: userIdFromReq,
+      action: 'delete',
+      entityType: 'question',
+      entityID: questionId,
+      entityName: questionName,
+      details: `Question deleted (Type: ${question?.Type || 'unknown'})`,
+    });
 
     return {
       status: 200,

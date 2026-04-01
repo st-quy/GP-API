@@ -41,6 +41,7 @@ db.Class = require('./Class')(sequelize, DataTypes);
 db.Section = require('./Section')(sequelize, DataTypes);
 db.TopicSection = require('./TopicSection')(sequelize, DataTypes);
 db.SectionPart = require('./SectionPart')(sequelize, DataTypes);
+db.ActivityLog = require('./ActivityLog')(sequelize, DataTypes);
 
 // Relationships
 // User <-> Role
@@ -146,5 +147,9 @@ db.SessionParticipant.belongsTo(db.User, { foreignKey: 'UserID' });
 // SessionRequest
 db.SessionRequest.belongsTo(db.Session, { foreignKey: 'SessionID' });
 db.SessionRequest.belongsTo(db.User, { foreignKey: 'UserID' });
+
+// ActivityLog
+db.User.hasMany(db.ActivityLog, { foreignKey: 'UserID' });
+db.ActivityLog.belongsTo(db.User, { foreignKey: 'UserID' });
 
 module.exports = db;

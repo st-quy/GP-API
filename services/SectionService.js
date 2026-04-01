@@ -8,6 +8,7 @@ const {
   Topic,
 } = require('../models');
 const { Op } = require('sequelize');
+const { logActivity } = require('./ActivityLogService');
 
 async function resolveSkill({ skillId, skillName }) {
   if (!skillId && !skillName) {
@@ -148,6 +149,17 @@ async function createSection(req) {
       Name,
       SkillID,
     });
+
+    const userIdFromReq = req.user?.userId || null;
+    logActivity({
+      userId: userIdFromReq,
+      action: 'create',
+      entityType: 'section',
+      entityID: newSection.ID,
+      entityName: Name,
+      details: `Section "${Name}" created`,
+    });
+
     return {
       status: 201,
       message: 'Section created successfully',
@@ -196,6 +208,16 @@ async function updateSection(req) {
     // 3) Update fields
     section.Name = name || section.Name;
     section.SkillID = updatedSkillId;
+
+    const userIdFromReq = req.user?.userId || null;
+    logActivity({
+      userId: userIdFromReq,
+      action: 'update',
+      entityType: 'section',
+      entityID: id,
+      entityName: name || section.Name,
+      details: `Section "${name || section.Name}" updated`,
+    });
 
     await section.save();
 
@@ -280,7 +302,18 @@ async function deleteSection(req) {
     });
 
     // 7) Xóa Section
+    const sectionName = section.Name;
+    const userIdFromReq = req.user?.userId || null;
     await section.destroy({ transaction: t });
+
+    logActivity({
+      userId: userIdFromReq,
+      action: 'delete',
+      entityType: 'section',
+      entityID: id,
+      entityName: sectionName,
+      details: `Section "${sectionName}" deleted`,
+    });
 
     await t.commit();
 

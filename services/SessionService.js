@@ -3,6 +3,7 @@ const cron = require("node-cron");
 const { Session, SessionParticipant, Class, Topic, sequelize } = require("../models");
 const { removeMinIOAudio } = require("./StudentAnswerService");
 const { SESSION_STATUS, SESSION_STATUS_TRANSITIONS } = require("../helpers/constants");
+const { logActivity } = require("./ActivityLogService");
 
 async function getAllSessions(req) {
   try {
@@ -255,6 +256,17 @@ async function createSession(req) {
       ClassID,
       status,
     });
+
+    const userIdFromReq = req.user?.userId || null;
+    logActivity({
+      userId: userIdFromReq,
+      action: 'create',
+      entityType: 'session',
+      entityID: newSession.ID,
+      entityName: sessionName,
+      details: `Session "${sessionName}" created`,
+    });
+
     return {
       status: 201,
       data: newSession,
@@ -438,6 +450,14 @@ async function updateSession(req) {
       newStatus = "COMPLETE";
     }
 
+    const oldSessionName = session.sessionName;
+    const oldSessionKey = session.sessionKey;
+    const oldStartTime = session.startTime;
+    const oldEndTime = session.endTime;
+    const oldExamSet = session.examSet;
+    const oldClassID = session.ClassID;
+    const oldStatus = session.status;
+
     const updateFields = {
       ...(sessionName !== undefined && { sessionName }),
       ...(sessionKey !== undefined && { sessionKey }),
@@ -451,6 +471,35 @@ async function updateSession(req) {
     };
 
     await session.update(updateFields);
+
+    const userIdFromReq = req.user?.userId || null;
+
+    const actuallyChanged = [];
+    if (sessionName !== undefined && sessionName !== oldSessionName) actuallyChanged.push('name');
+    if (sessionKey !== undefined && sessionKey !== oldSessionKey) actuallyChanged.push('key');
+    if (startTime !== undefined && new Date(startTime).getTime() !== new Date(oldStartTime).getTime()) actuallyChanged.push('start time');
+    if (endTime !== undefined && new Date(endTime).getTime() !== new Date(oldEndTime).getTime()) actuallyChanged.push('end time');
+    if (examSet !== undefined && examSet !== oldExamSet) actuallyChanged.push('exam set');
+    if (ClassID !== undefined && ClassID !== oldClassID) actuallyChanged.push('class');
+    if (newStatus !== oldStatus) actuallyChanged.push('status');
+
+    let details;
+    if (sessionName !== undefined && sessionName !== oldSessionName) {
+      details = `Session "${oldSessionName}" renamed to "${sessionName}"`;
+    } else if (actuallyChanged.length > 0) {
+      details = `Session "${oldSessionName}" updated: ${actuallyChanged.join(', ')}`;
+    } else {
+      details = `Session "${oldSessionName}" status changed to ${newStatus}`;
+    }
+
+    logActivity({
+      userId: userIdFromReq,
+      action: 'update',
+      entityType: 'session',
+      entityID: sessionId,
+      entityName: sessionName || oldSessionName,
+      details,
+    });
 
     return {
       status: 200,
@@ -512,6 +561,9 @@ async function getSessionDetailById(req) {
 async function removeSession(req) {
   try {
     const { sessionId } = req.params;
+    const session = await Session.findByPk(sessionId);
+    const sessionName = session ? session.sessionName : sessionId;
+    
     const deletedCount = await Session.destroy({
       where: { ID: sessionId },
     });
@@ -522,6 +574,16 @@ async function removeSession(req) {
         message: "Session not found",
       };
     }
+
+    const userIdFromReq = req.user?.userId || null;
+    logActivity({
+      userId: userIdFromReq,
+      action: 'delete',
+      entityType: 'session',
+      entityID: sessionId,
+      entityName: sessionName,
+      details: `Session "${sessionName}" deleted`,
+    });
 
     return {
       status: 200,
