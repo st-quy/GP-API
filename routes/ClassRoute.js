@@ -93,7 +93,7 @@ router.get("/", getAllClasses);
  *       500:
  *         description: Internal server error
  */
-router.post("/", createClass);
+router.post("/", authorize(['teacher', 'admin']), createClass);
 
 /**
  * @swagger
@@ -122,7 +122,7 @@ router.post("/", createClass);
  *       500:
  *         description: Internal server error
  */
-router.put("/:classId", updateClass);
+router.put("/:classId", authorize(['teacher', 'admin']), updateClass);
 
 /**
  * @swagger
@@ -172,6 +172,6 @@ router.get("/:classId", getClassById);
  *       500:
  *         description: Internal server error
  */
-router.delete("/:classId", deleteClass);
+router.delete("/:classId", authorize(['teacher', 'admin']), deleteClass);
 
 module.exports = router;

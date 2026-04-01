@@ -99,6 +99,16 @@ const getAllUsersByRoleTeacher = async (req, res) => {
   }
 };
 
+const getAllUsersByRoleStudent = async (req, res) => {
+  try {
+    const result = await userService.getAllUsersByRoleStudent(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    console.error('Error fetching users with role student:', error);
+    return res.status(400).json({ message: error.message });
+  }
+};
+
 const deleteUserAccount = async (req, res) => {
   try {
     const userId = req.params.userId;
@@ -120,5 +130,6 @@ module.exports = {
   resetPassword,
   logoutUser,
   getAllUsersByRoleTeacher,
+  getAllUsersByRoleStudent,
   deleteUserAccount,
 };

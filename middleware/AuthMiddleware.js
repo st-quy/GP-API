@@ -35,7 +35,9 @@ function authorize(allowedRoles = []) {
         req.user = decoded;
 
         // Role-based authorization check - only check if allowedRoles has items
-        if (allowedRoles.length > 0 && !allowedRoles.includes(decoded.role)) {
+        // decoded.role can be an array (e.g. ['teacher', 'admin']) or a string
+        const userRoles = Array.isArray(decoded.role) ? decoded.role : [decoded.role];
+        if (allowedRoles.length > 0 && !allowedRoles.some(r => userRoles.includes(r))) {
           return res
             .status(403)
             .json({ message: 'Forbidden: Insufficient permissions' });

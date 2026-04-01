@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const { authorize } = require("../middleware/AuthMiddleware");
 
 const {
   getAllSessionsByClass,
@@ -188,7 +189,7 @@ router.get("/", getAllSessionsByClass);
  *       500:
  *         description: Internal server error
  */
-router.post("/", createSession);
+router.post("/", authorize(['teacher', 'admin']), createSession);
 
 /**
  * @swagger
@@ -286,7 +287,7 @@ router.patch("/:sessionId/status", updateSessionStatus);
  *       500:
  *         description: Internal server error
  */
-router.put("/:sessionId", updateSession);
+router.put("/:sessionId", authorize(['teacher', 'admin']), updateSession);
 
 /**
  * @swagger
@@ -405,7 +406,7 @@ router.get("/:sessionId", getSessionDetailById);
  *       500:
  *         description: Internal server error
  */
-router.delete("/:sessionId", removeSession);
+router.delete("/:sessionId", authorize(['teacher', 'admin']), removeSession);
 
 /**
  * @swagger

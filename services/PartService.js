@@ -1,5 +1,6 @@
 const { Part, Skill, Question } = require('../models');
 const { Op } = require('sequelize');
+const { logActivity } = require('./ActivityLogService');
 
 /**
  * Helper: resolve Skill từ skillId hoặc skillName
@@ -51,6 +52,16 @@ async function createPart(req) {
       SkillID,
     });
 
+    const userIdFromReq = req.user?.userId || null;
+    logActivity({
+      userId: userIdFromReq,
+      action: 'create',
+      entityType: 'part',
+      entityID: newPart.ID,
+      entityName: content,
+      details: `Part "${content}" created`,
+    });
+
     return {
       status: 201,
       message: 'Part created successfully',
@@ -91,6 +102,16 @@ async function updatePart(req) {
       SubContent: subContent ?? part.SubContent,
       Sequence: sequence ?? part.Sequence,
       SkillID,
+    });
+
+    const userIdFromReq = req.user?.userId || null;
+    logActivity({
+      userId: userIdFromReq,
+      action: 'update',
+      entityType: 'part',
+      entityID: partId,
+      entityName: content ?? part.Content,
+      details: `Part "${content ?? part.Content}" updated`,
     });
 
     return {
@@ -221,7 +242,19 @@ async function deletePart(req) {
       };
     }
 
+    const partName = part.Content;
+    const userIdFromReq = req.user?.userId || null;
     await part.destroy();
+
+    logActivity({
+      userId: userIdFromReq,
+      action: 'delete',
+      entityType: 'part',
+      entityID: partId,
+      entityName: partName,
+      details: `Part "${partName}" deleted`,
+    });
+
     return {
       status: 200,
       message: 'Part deleted successfully',

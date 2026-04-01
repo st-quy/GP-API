@@ -10,6 +10,7 @@ const {
 } = require('../models');
 const { Op } = require('sequelize');
 const { TOPIC_STATUS } = require('../helpers/constants');
+const { logActivity } = require('./ActivityLogService');
 
 const getQuestionsByQuestionSetId = async (req) => {
   try {
@@ -96,6 +97,16 @@ const createTopic = async (req) => {
       ShuffleQuestions: ShuffleQuestions || false,
       ShuffleAnswers: ShuffleAnswers || false,
     });
+
+    logActivity({
+      userId: userId,
+      action: 'create',
+      entityType: 'topic',
+      entityID: newTopic.ID,
+      entityName: Name,
+      details: `Exam Set "${Name}" created`,
+    });
+
     return {
       status: 201,
       message: 'Topic created successfully',
@@ -352,7 +363,19 @@ async function deleteTopic(req) {
         message: `Cannot delete topic with status '${topic.Status}'`,
       };
     }
+    const topicName = topic.Name;
+    const userId = req.user?.userId || null;
     await topic.destroy();
+
+    logActivity({
+      userId,
+      action: 'delete',
+      entityType: 'topic',
+      entityID: id,
+      entityName: topicName,
+      details: `Exam Set "${topicName}" deleted`,
+    });
+
     return {
       status: 200,
       message: 'Topic deleted successfully',
@@ -379,7 +402,36 @@ async function updateTopic(req) {
       updatedTopicData.UpdatedBy = userId;
     }
 
+    const oldName = topic.Name;
+    const oldStatus = topic.Status;
+    const newName = updatedTopicData.Name || oldName;
+    const newStatus = updatedTopicData.Status || oldStatus;
+
     await topic.update(updatedTopicData);
+
+    let details;
+    if (oldStatus !== newStatus) {
+      const statusLabels = {
+        draft: 'Draft',
+        submited: 'Submitted',
+        approved: 'Approved',
+        rejected: 'Rejected',
+      };
+      details = `Exam Set "${oldName}" status changed from ${statusLabels[oldStatus] || oldStatus} to ${statusLabels[newStatus] || newStatus}`;
+    } else if (oldName !== newName) {
+      details = `Exam Set "${oldName}" renamed to "${newName}"`;
+    } else {
+      details = `Exam Set "${oldName}" updated`;
+    }
+
+    logActivity({
+      userId,
+      action: 'update',
+      entityType: 'topic',
+      entityID: topic.ID,
+      entityName: newName,
+      details,
+    });
 
     return {
       status: 200,
