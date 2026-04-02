@@ -14,6 +14,11 @@ const {
   buildSpeakingAnswerContent,
   buildReadingAnswerContent,
 } = require('../utils/question-create.util');
+const {
+  validateSpeakingPayload,
+  validateWritingPayload,
+  validateListeningPayload,
+} = require('../utils/question-bank.validation');
 const { v4: uuidv4 } = require('uuid');
 const { Op } = require('sequelize');
 const Response = require('./ServiceResponse');
@@ -306,6 +311,17 @@ async function createSpeakingGroup(req, res) {
       return {
         status: 400,
         message: 'SkillName, SectionName and parts[] are required',
+      };
+    }
+
+    const speakingValidationError = validateSpeakingPayload({
+      SectionName,
+      parts,
+    });
+    if (speakingValidationError) {
+      return {
+        status: 400,
+        message: speakingValidationError,
       };
     }
 
@@ -639,6 +655,18 @@ async function createWritingGroup(req, res) {
       return { message: 'SectionName and parts are required' };
     }
 
+    const writingValidationError = validateWritingPayload({
+      SectionName,
+      parts,
+    });
+    if (writingValidationError) {
+      await t.rollback();
+      return {
+        status: 400,
+        message: writingValidationError,
+      };
+    }
+
     // ================================================
     // 0) Skill WRITING
     // ================================================
@@ -875,6 +903,17 @@ async function createListeningGroup(req, res) {
       return {
         status: 400,
         message: 'SkillName, SectionName and parts{} are required',
+      };
+    }
+
+    const listeningValidationError = validateListeningPayload({
+      SectionName,
+      parts,
+    });
+    if (listeningValidationError) {
+      return {
+        status: 400,
+        message: listeningValidationError,
       };
     }
 
@@ -1637,6 +1676,18 @@ async function updateSpeakingGroup(sectionId, payload) {
   try {
     const { SectionName, Description, parts } = payload;
 
+    const speakingValidationError = validateSpeakingPayload({
+      SectionName,
+      parts,
+    });
+    if (speakingValidationError) {
+      await t.rollback();
+      return {
+        status: 400,
+        message: speakingValidationError,
+      };
+    }
+
     /** =============================
      * 1. Update Section
      * ============================= */
@@ -1938,6 +1989,18 @@ async function updateWritingGroup(sectionId, payload) {
       throw new Error('SectionName and parts are required');
     }
 
+    const writingValidationError = validateWritingPayload({
+      SectionName,
+      parts,
+    });
+    if (writingValidationError) {
+      await t.rollback();
+      return {
+        status: 400,
+        message: writingValidationError,
+      };
+    }
+
     // ================================================
     // 1) UPDATE SECTION
     // ================================================
@@ -2150,6 +2213,18 @@ async function updateListeningGroup(sectionId, payload) {
 
     if (!SkillName || !SectionName || !parts) {
       throw new Error('SkillName, SectionName and parts{} are required');
+    }
+
+    const listeningValidationError = validateListeningPayload({
+      SectionName,
+      parts,
+    });
+    if (listeningValidationError) {
+      await t.rollback();
+      return {
+        status: 400,
+        message: listeningValidationError,
+      };
     }
 
     // 1) Validate Skill
