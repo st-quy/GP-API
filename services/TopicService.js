@@ -6,9 +6,11 @@ const {
   Part,
   Topic,
   Section,
+  User,
 } = require('../models');
 const { Op } = require('sequelize');
 const { TOPIC_STATUS } = require('../helpers/constants');
+const { logActivity } = require('./ActivityLogService');
 
 const getQuestionsByQuestionSetId = async (req) => {
   try {
@@ -72,7 +74,7 @@ const getQuestionsByQuestionSetId = async (req) => {
 
 const createTopic = async (req) => {
   try {
-    const { Name, Status } = req.body;
+    const { Name, Status, ShuffleQuestions, ShuffleAnswers, Duration } = req.body;
     if (!Name) {
       return {
         status: 400,
@@ -84,10 +86,27 @@ const createTopic = async (req) => {
 
     let finalStatus = TOPIC_STATUS.DRAFT;
 
+    const userId = req.user?.userId || null;
+
     const newTopic = await Topic.create({
       Name,
       Status: validStatuses.includes(Status) ? Status : finalStatus,
+      Duration: Duration || null,
+      CreatedBy: userId,
+      UpdatedBy: userId,
+      ShuffleQuestions: ShuffleQuestions || false,
+      ShuffleAnswers: ShuffleAnswers || false,
     });
+
+    logActivity({
+      userId: userId,
+      action: 'create',
+      entityType: 'topic',
+      entityID: newTopic.ID,
+      entityName: Name,
+      details: `Exam Set "${Name}" created`,
+    });
+
     return {
       status: 201,
       message: 'Topic created successfully',
@@ -118,7 +137,7 @@ const getAllTopics = async (req) => {
       whereClause.Status = status;
     }
 
-     const allTopics = await Topic.findAll({ attributes: ["Status"] });
+    const allTopics = await Topic.findAll({ attributes: ["Status"] });
 
     const statusCounts = {
       submited: allTopics.filter(t => t.Status === "submited").length,
@@ -132,6 +151,31 @@ const getAllTopics = async (req) => {
       offset,
       limit: pageSize,
       order: [['Name', 'ASC']],
+      include: [
+        {
+          model: User,
+          as: 'creator',
+          attributes: ['ID', 'firstName', 'lastName'],
+        },
+        {
+          model: User,
+          as: 'updater',
+          attributes: ['ID', 'firstName', 'lastName'],
+        },
+      ],
+    });
+
+    const data = rows.map((topic) => {
+      const plain = topic.get({ plain: true });
+      return {
+        ...plain,
+        createdBy: plain.creator
+          ? `${plain.creator.firstName} ${plain.creator.lastName}`
+          : null,
+        updatedBy: plain.updater
+          ? `${plain.updater.firstName} ${plain.updater.lastName}`
+          : null,
+      };
     });
 
     return {
@@ -141,7 +185,7 @@ const getAllTopics = async (req) => {
       pageSize,
       totalItems: count,
       totalPages: Math.ceil(count / pageSize),
-      data: rows,
+      data,
       statusCounts,
     };
   } catch (error) {
@@ -165,7 +209,7 @@ const getTopicWithRelations = async (req, res) => {
         {
           model: Section,
           as: 'Sections',
-          through: { attributes: [] },
+          through: { attributes: ['ScoreConfig'] },
 
           include: [
             {
@@ -319,7 +363,19 @@ async function deleteTopic(req) {
         message: `Cannot delete topic with status '${topic.Status}'`,
       };
     }
+    const topicName = topic.Name;
+    const userId = req.user?.userId || null;
     await topic.destroy();
+
+    logActivity({
+      userId,
+      action: 'delete',
+      entityType: 'topic',
+      entityID: id,
+      entityName: topicName,
+      details: `Exam Set "${topicName}" deleted`,
+    });
+
     return {
       status: 200,
       message: 'Topic deleted successfully',
@@ -329,19 +385,53 @@ async function deleteTopic(req) {
   }
 };
 
-async function updateTopic(req, res) {
+async function updateTopic(req) {
   try {
     const { id } = req.params;
     const updatedTopicData = req.body;
     const topic = await Topic.findByPk(id);
     if (!topic) {
-      return { 
+      return {
         status: 404,
-        message: 'Topic not found' 
+        message: 'Topic not found'
       };
     }
-    
+
+    const userId = req.user?.userId || null;
+    if (userId) {
+      updatedTopicData.UpdatedBy = userId;
+    }
+
+    const oldName = topic.Name;
+    const oldStatus = topic.Status;
+    const newName = updatedTopicData.Name || oldName;
+    const newStatus = updatedTopicData.Status || oldStatus;
+
     await topic.update(updatedTopicData);
+
+    let details;
+    if (oldStatus !== newStatus) {
+      const statusLabels = {
+        draft: 'Draft',
+        submited: 'Submitted',
+        approved: 'Approved',
+        rejected: 'Rejected',
+      };
+      details = `Exam Set "${oldName}" status changed from ${statusLabels[oldStatus] || oldStatus} to ${statusLabels[newStatus] || newStatus}`;
+    } else if (oldName !== newName) {
+      details = `Exam Set "${oldName}" renamed to "${newName}"`;
+    } else {
+      details = `Exam Set "${oldName}" updated`;
+    }
+
+    logActivity({
+      userId,
+      action: 'update',
+      entityType: 'topic',
+      entityID: topic.ID,
+      entityName: newName,
+      details,
+    });
 
     return {
       status: 200,
@@ -349,8 +439,10 @@ async function updateTopic(req, res) {
       data: topic,
     };
   } catch (error) {
-
-    return res.status(500).json({ message: 'Internal server error' });
+    return {
+      status: 500,
+      message: `Internal server error: ${error.message}`,
+    };
   }
 }
 

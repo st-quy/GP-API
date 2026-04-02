@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { authorize } = require('../middleware/AuthMiddleware');
 const {
   getTopicWithRelations,
   getTopicByName,
@@ -58,7 +59,7 @@ const {
  *       500:
  *         description: Internal server error
  */
-router.post('', createTopic);
+router.post('', authorize(), createTopic);
 
 /**
  * @swagger
@@ -185,7 +186,7 @@ router.get('/detail', getTopicByName);
  *       500:
  *         description: Internal server error
  */
-router.delete('/:id', deleteTopic);
+router.delete('/:id', authorize(['teacher', 'admin']), deleteTopic);
 
 router.get('/:id', getTopicWithRelations);
 
@@ -229,7 +230,7 @@ router.get('/:id', getTopicWithRelations);
  *       500:
  *         description: Internal server error
  */
-router.put('/:id', updateTopic);
+router.put('/:id', authorize(), updateTopic);
 
 
 module.exports = router;

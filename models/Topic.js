@@ -42,6 +42,10 @@ module.exports = (sequelize, DataTypes) => {
         key: 'ID',
       },
     },
+    Duration: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
     ReasonReject: {
       type: DataTypes.STRING,
       allowNull: true,

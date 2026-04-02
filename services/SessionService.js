@@ -1,11 +1,53 @@
 const { Sequelize, Op } = require("sequelize");
 const cron = require("node-cron");
-const { Session, SessionParticipant, Class, Topic } = require("../models");
+const { Session, SessionParticipant, Class, Topic, sequelize } = require("../models");
 const { removeMinIOAudio } = require("./StudentAnswerService");
+const { SESSION_STATUS, SESSION_STATUS_TRANSITIONS } = require("../helpers/constants");
+const { logActivity } = require("./ActivityLogService");
 
 async function getAllSessions(req) {
   try {
-    const sessions = await Session.findAll({
+    const {
+      search,
+      status,
+      classId,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 10,
+    } = req.query;
+
+    const whereClause = {
+      status: {
+        [Op.notIn]: [SESSION_STATUS.ARCHIVED, SESSION_STATUS.DELETED],
+      },
+    };
+
+    if (search) {
+      whereClause.sessionName = { [Op.iLike]: `%${search}%` };
+    }
+
+    if (status) {
+      whereClause.status = status;
+    }
+
+    if (classId) {
+      whereClause.ClassID = classId;
+    }
+
+    if (startDate && endDate) {
+      whereClause.startTime = { [Op.gte]: new Date(startDate) };
+      whereClause.endTime = { [Op.lte]: new Date(endDate) };
+    } else if (startDate) {
+      whereClause.startTime = { [Op.gte]: new Date(startDate) };
+    } else if (endDate) {
+      whereClause.endTime = { [Op.lte]: new Date(endDate) };
+    }
+
+    const offset = (page - 1) * limit;
+
+    const { rows, count } = await Session.findAndCountAll({
+      where: whereClause,
       include: [
         {
           model: Class,
@@ -16,10 +58,17 @@ async function getAllSessions(req) {
           as: "Topic",
         },
       ],
+      limit: Number(limit),
+      offset: Number(offset),
+      order: [["createdAt", "DESC"]],
     });
+
     return {
       status: 200,
-      data: sessions,
+      data: rows,
+      total: count,
+      currentPage: Number(page),
+      totalPages: Math.ceil(count / limit),
     };
   } catch (error) {
     throw new Error(`Error fetching all sessions: ${error.message}`);
@@ -64,8 +113,16 @@ async function getSessionByClass(req) {
 
 async function createSession(req) {
   try {
-    const { sessionName, sessionKey, startTime, endTime, examSet, ClassID } =
-      req.body;
+    const {
+      sessionName,
+      sessionKey,
+      startTime,
+      endTime,
+      examSet,
+      ClassID,
+      duration,
+      instructions,
+    } = req.body;
     if (
       !sessionName ||
       !sessionKey ||
@@ -81,11 +138,58 @@ async function createSession(req) {
       };
     }
 
-    if (startTime > endTime) {
+    const parsedStartTime = new Date(startTime);
+    const parsedEndTime = new Date(endTime);
+
+    if (
+      Number.isNaN(parsedStartTime.getTime()) ||
+      Number.isNaN(parsedEndTime.getTime())
+    ) {
+      return {
+        status: 400,
+        message: "startTime and endTime must be valid dates",
+      };
+    }
+
+    if (parsedStartTime >= parsedEndTime) {
       return {
         status: 400,
         message: "Start time must be before end time",
       };
+    }
+
+    let normalizedDuration = null;
+    if (duration !== undefined && duration !== null && duration !== "") {
+      const parsedDuration = Number(duration);
+
+      if (!Number.isInteger(parsedDuration) || parsedDuration <= 0) {
+        return {
+          status: 400,
+          message: "duration must be a positive integer",
+        };
+      }
+
+      normalizedDuration = parsedDuration;
+    }
+
+    let normalizedInstructions = null;
+    if (instructions !== undefined && instructions !== null) {
+      if (typeof instructions !== "string") {
+        return {
+          status: 400,
+          message: "instructions must be a string",
+        };
+      }
+
+      const trimmedInstructions = instructions.trim();
+      if (!trimmedInstructions) {
+        return {
+          status: 400,
+          message: "instructions cannot be empty",
+        };
+      }
+
+      normalizedInstructions = trimmedInstructions;
     }
 
     const checkExistTopic = await Topic.findByPk(examSet);
@@ -133,9 +237,9 @@ async function createSession(req) {
 
     let status;
     const now = new Date();
-    if (new Date(startTime) > now) {
+    if (parsedStartTime > now) {
       status = "NOT_STARTED";
-    } else if (new Date(endTime) > now) {
+    } else if (parsedEndTime > now) {
       status = "ON_GOING";
     } else {
       status = "COMPLETE";
@@ -144,12 +248,25 @@ async function createSession(req) {
     const newSession = await Session.create({
       sessionName,
       sessionKey,
-      startTime,
-      endTime,
+      startTime: parsedStartTime,
+      endTime: parsedEndTime,
+      duration: normalizedDuration,
+      instructions: normalizedInstructions,
       examSet,
       ClassID,
       status,
     });
+
+    const userIdFromReq = req.user?.userId || null;
+    logActivity({
+      userId: userIdFromReq,
+      action: 'create',
+      entityType: 'session',
+      entityID: newSession.ID,
+      entityName: sessionName,
+      details: `Session "${sessionName}" created`,
+    });
+
     return {
       status: 201,
       data: newSession,
@@ -162,18 +279,227 @@ async function createSession(req) {
 async function updateSession(req) {
   try {
     const { sessionId } = req.params;
-    const { sessionName, sessionKey, startTime, endTime, examSet } = req.body;
+    const {
+      sessionName,
+      sessionKey,
+      startTime,
+      endTime,
+      examSet,
+      ClassID,
+      isPublished,
+      minioAudioRemoved
+    } = req.body;
 
-    const session = await Session.update(
-      { sessionName, sessionKey, startTime, endTime, examSet },
-      { where: { ID: sessionId } }
-    );
+    // Prevent clients from mutating system-managed fields
+    if (typeof isPublished !== "undefined" || typeof minioAudioRemoved !== "undefined") {
+      return {
+        status: 400,
+        message:
+          "The fields 'isPublished' and 'minioAudioRemoved' are system-managed and cannot be updated via this endpoint",
+      };
+    }
+
+    const session = await Session.findByPk(sessionId);
     if (!session) {
       return {
         status: 404,
-        message: "Session not found",
+        message: "Session not found or no changes made",
       };
     }
+
+    // Derive whether the session is currently ON_GOING from time and isPublished,
+    // instead of relying solely on the persisted session.status, which may be stale.
+    const now = new Date();
+    const effectiveStartTime = startTime ? new Date(startTime) : session.startTime;
+    const effectiveEndTime = endTime ? new Date(endTime) : session.endTime;
+    const effectiveIsPublished =
+      typeof isPublished === "boolean" ? isPublished : session.isPublished;
+
+    const isOngoingByTime =
+      effectiveIsPublished &&
+      effectiveStartTime &&
+      effectiveEndTime &&
+      now >= effectiveStartTime &&
+      now <= effectiveEndTime;
+
+    if (isOngoingByTime) {
+      return {
+        status: 403,
+        message: "Cannot edit a session that is currently ON_GOING",
+      };
+    }
+
+    // Validate examSet if provided (treat undefined as "not provided")
+    if (examSet !== undefined) {
+      // Explicitly reject null or empty values for non-nullable column
+      if (examSet === null || examSet === "") {
+        return {
+          status: 400,
+          message: "examSet cannot be null or empty",
+        };
+      }
+
+      const checkExistTopic = await Topic.findByPk(examSet);
+      if (!checkExistTopic) {
+        return {
+          status: 400,
+          message: "Topic (exam set) not found",
+        };
+      }
+    }
+
+    // Validate ClassID if provided (treat undefined as "not provided")
+    if (ClassID !== undefined) {
+      // Explicitly reject null or empty values for non-nullable column
+      if (ClassID === null || ClassID === "") {
+        return {
+          status: 400,
+          message: "ClassID cannot be null or empty",
+        };
+      }
+
+      const checkExistClass = await Class.findByPk(ClassID);
+      if (!checkExistClass) {
+        return {
+          status: 400,
+          message: "Class not found",
+        };
+      }
+    }
+
+    // Check unique sessionKey (excluding current session)
+    if (sessionKey && sessionKey !== session.sessionKey) {
+      const duplicate = await Session.findOne({
+        where: { sessionKey, ID: { [Op.ne]: sessionId } },
+      });
+      if (duplicate) {
+        return {
+          status: 400,
+          message: `Session with key ${sessionKey} already exists`,
+        };
+      }
+    }
+
+    // Check unique sessionName within the same class (excluding current session)
+    const resolvedClassID =
+      ClassID !== undefined ? ClassID : session.ClassID;
+    const resolvedSessionName = sessionName || session.sessionName;
+    const sessionNameChanged = sessionName && sessionName !== session.sessionName;
+    const classIdChanged = ClassID && ClassID !== session.ClassID;
+    if (sessionNameChanged || classIdChanged) {
+      const duplicate = await Session.findOne({
+        where: {
+          sessionName: resolvedSessionName,
+          ClassID: resolvedClassID,
+          ID: { [Op.ne]: sessionId },
+        },
+      });
+      if (duplicate) {
+        return {
+          status: 400,
+          message: `Session with name ${resolvedSessionName} already exists in this class`,
+        };
+      }
+    }
+
+    // Validate and recalculate status when time fields change
+    let resolvedStartTime = session.startTime;
+    let resolvedEndTime = session.endTime;
+
+    if (startTime !== undefined) {
+      const parsedStart = new Date(startTime);
+      if (Number.isNaN(parsedStart.getTime())) {
+        return {
+          status: 400,
+          message: "Invalid start time",
+        };
+      }
+      resolvedStartTime = parsedStart;
+    }
+
+    if (endTime !== undefined) {
+      const parsedEnd = new Date(endTime);
+      if (Number.isNaN(parsedEnd.getTime())) {
+        return {
+          status: 400,
+          message: "Invalid end time",
+        };
+      }
+      resolvedEndTime = parsedEnd;
+    }
+
+    if (resolvedStartTime >= resolvedEndTime) {
+      return {
+        status: 400,
+        message: "Start time must be before end time",
+      };
+    }
+
+    const resolvedIsPublished =
+      isPublished !== undefined ? isPublished : session.isPublished;
+    let newStatus;
+    if (resolvedStartTime > now) {
+      newStatus = "NOT_STARTED";
+    } else if (resolvedEndTime > now) {
+      newStatus = "ON_GOING";
+    } else {
+      newStatus = "COMPLETE";
+    }
+
+    if (resolvedIsPublished === true) {
+      newStatus = "COMPLETE";
+    }
+
+    const oldSessionName = session.sessionName;
+    const oldSessionKey = session.sessionKey;
+    const oldStartTime = session.startTime;
+    const oldEndTime = session.endTime;
+    const oldExamSet = session.examSet;
+    const oldClassID = session.ClassID;
+    const oldStatus = session.status;
+
+    const updateFields = {
+      ...(sessionName !== undefined && { sessionName }),
+      ...(sessionKey !== undefined && { sessionKey }),
+      ...(startTime !== undefined && { startTime }),
+      ...(endTime !== undefined && { endTime }),
+      ...(examSet !== undefined && { examSet }),
+      ...(ClassID !== undefined && { ClassID }),
+      ...(isPublished !== undefined && { isPublished }),
+      ...(minioAudioRemoved !== undefined && { minioAudioRemoved }),
+      status: newStatus,
+    };
+
+    await session.update(updateFields);
+
+    const userIdFromReq = req.user?.userId || null;
+
+    const actuallyChanged = [];
+    if (sessionName !== undefined && sessionName !== oldSessionName) actuallyChanged.push('name');
+    if (sessionKey !== undefined && sessionKey !== oldSessionKey) actuallyChanged.push('key');
+    if (startTime !== undefined && new Date(startTime).getTime() !== new Date(oldStartTime).getTime()) actuallyChanged.push('start time');
+    if (endTime !== undefined && new Date(endTime).getTime() !== new Date(oldEndTime).getTime()) actuallyChanged.push('end time');
+    if (examSet !== undefined && examSet !== oldExamSet) actuallyChanged.push('exam set');
+    if (ClassID !== undefined && ClassID !== oldClassID) actuallyChanged.push('class');
+    if (newStatus !== oldStatus) actuallyChanged.push('status');
+
+    let details;
+    if (sessionName !== undefined && sessionName !== oldSessionName) {
+      details = `Session "${oldSessionName}" renamed to "${sessionName}"`;
+    } else if (actuallyChanged.length > 0) {
+      details = `Session "${oldSessionName}" updated: ${actuallyChanged.join(', ')}`;
+    } else {
+      details = `Session "${oldSessionName}" status changed to ${newStatus}`;
+    }
+
+    logActivity({
+      userId: userIdFromReq,
+      action: 'update',
+      entityType: 'session',
+      entityID: sessionId,
+      entityName: sessionName || oldSessionName,
+      details,
+    });
 
     return {
       status: 200,
@@ -190,6 +516,16 @@ async function getSessionDetailById(req) {
 
     const session = await Session.findOne({
       where: { ID: sessionId },
+      attributes: {
+        include: [
+          [
+            sequelize.literal(
+              '(SELECT COUNT(*) FROM "SessionParticipants" WHERE "SessionParticipants"."SessionID" = "Session"."ID")'
+            ),
+            'participantCount',
+          ],
+        ],
+      },
       include: [
         {
           model: SessionParticipant,
@@ -225,6 +561,9 @@ async function getSessionDetailById(req) {
 async function removeSession(req) {
   try {
     const { sessionId } = req.params;
+    const session = await Session.findByPk(sessionId);
+    const sessionName = session ? session.sessionName : sessionId;
+    
     const deletedCount = await Session.destroy({
       where: { ID: sessionId },
     });
@@ -236,6 +575,16 @@ async function removeSession(req) {
       };
     }
 
+    const userIdFromReq = req.user?.userId || null;
+    logActivity({
+      userId: userIdFromReq,
+      action: 'delete',
+      entityType: 'session',
+      entityID: sessionId,
+      entityName: sessionName,
+      details: `Session "${sessionName}" deleted`,
+    });
+
     return {
       status: 200,
       message: "Session deleted successfully",
@@ -245,10 +594,119 @@ async function removeSession(req) {
   }
 }
 
+async function archiveSession(req) {
+  try {
+    const { sessionId } = req.params;
+
+    const session = await Session.findByPk(sessionId);
+    if (!session) {
+      return {
+        status: 404,
+        message: "Session not found",
+      };
+    }
+
+    const participantCount = await SessionParticipant.count({
+      where: { SessionID: sessionId },
+    });
+
+    if (participantCount > 0) {
+      // If there are participants, change status to ARCHIVED
+      await Session.update(
+        { status: SESSION_STATUS.ARCHIVED },
+        { where: { ID: sessionId } }
+      );
+      return {
+        status: 200,
+        message: "Session has participants, moved to ARCHIVED status instead of deleting.",
+      };
+    } else {
+      // If no participants, delete the session
+      await Session.destroy({
+        where: { ID: sessionId },
+      });
+      return {
+        status: 200,
+        message: "Session deleted successfully because it has no participants.",
+      };
+    }
+  } catch (error) {
+    throw new Error(`Error archiving session: ${error.message}`);
+  }
+}
+
+async function updateSessionStatus(req) {
+  try {
+    const { sessionId } = req.params;
+    const { status: newStatus } = req.body;
+
+    if (!newStatus) {
+      return {
+        status: 400,
+        message: "status is required",
+      };
+    }
+
+    const validStatuses = Object.values(SESSION_STATUS);
+    if (!validStatuses.includes(newStatus)) {
+      return {
+        status: 400,
+        message: `Invalid status. Must be one of: ${validStatuses.join(", ")}`,
+      };
+    }
+
+    const session = await Session.findByPk(sessionId);
+    if (!session) {
+      return {
+        status: 404,
+        message: "Session not found",
+      };
+    }
+
+    const currentStatus = session.status;
+    const allowedTransitions = SESSION_STATUS_TRANSITIONS[currentStatus] || [];
+
+    if (!allowedTransitions.includes(newStatus)) {
+      return {
+        status: 400,
+        message: `Cannot transition from ${currentStatus} to ${newStatus}. Allowed transitions: ${allowedTransitions.join(", ") || "none"}`,
+      };
+    }
+
+    await Session.update(
+      { status: newStatus },
+      { where: { ID: sessionId } }
+    );
+
+    const updatedSession = await Session.findByPk(sessionId);
+
+    return {
+      status: 200,
+      data: updatedSession,
+      message: `Session status updated from ${currentStatus} to ${newStatus}`,
+    };
+  } catch (error) {
+    throw new Error(`Error updating session status: ${error.message}`);
+  }
+}
+
 async function cronStatusAllSessions() {
+  const MANUAL_STATUSES = [
+    SESSION_STATUS.DRAFT,
+    SESSION_STATUS.PUBLISHED,
+    SESSION_STATUS.ARCHIVED,
+    SESSION_STATUS.DELETED,
+  ];
+
   try {
     const now = new Date();
-    const sessions = await Session.findAll();
+    const sessions = await Session.findAll({
+      where: {
+        status: {
+          [Op.notIn]: MANUAL_STATUSES,
+        },
+      },
+    });
 
     for (const session of sessions) {
       let newStatus;
@@ -334,13 +792,244 @@ cron.schedule("*/2 * * * *", async () => {
   await cronStatusAllSessions();
 });
 
+async function batchUpdateStatus(req) {
+  const { sessionIds, status } = req.body;
+
+  if (!sessionIds || !Array.isArray(sessionIds) || sessionIds.length === 0) {
+    return {
+      status: 400,
+      message: "sessionIds must be a non-empty array",
+    };
+  }
+
+  const validStatuses = ["NOT_STARTED", "ON_GOING", "COMPLETE"];
+  if (!status || !validStatuses.includes(status)) {
+    return {
+      status: 400,
+      message: `status must be one of: ${validStatuses.join(", ")}`,
+    };
+  }
+
+  const results = { success: [], failed: [] };
+
+  for (const sessionId of sessionIds) {
+    try {
+      const session = await Session.findByPk(sessionId);
+      if (!session) {
+        results.failed.push({
+          sessionId,
+          reason: "Session not found",
+        });
+        continue;
+      }
+
+      await session.update({ status });
+      results.success.push(sessionId);
+    } catch (error) {
+      results.failed.push({
+        sessionId,
+        reason: error.message,
+      });
+    }
+  }
+
+  const httpStatus = results.failed.length === sessionIds.length ? 400
+    : results.failed.length > 0 ? 207
+    : 200;
+
+  return {
+    status: httpStatus,
+    message: `${results.success.length}/${sessionIds.length} sessions updated`,
+    data: results,
+  };
+}
+
+async function batchClone(req) {
+  const { sessionIds } = req.body;
+
+  if (!sessionIds || !Array.isArray(sessionIds) || sessionIds.length === 0) {
+    return {
+      status: 400,
+      message: "sessionIds must be a non-empty array",
+    };
+  }
+
+  const results = { success: [], failed: [] };
+
+  for (const sessionId of sessionIds) {
+    try {
+      const session = await Session.findByPk(sessionId);
+      if (!session) {
+        results.failed.push({
+          sessionId,
+          reason: "Session not found",
+        });
+        continue;
+      }
+
+      // Generate unique session key
+      const characters =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+      let newKey;
+      let isUnique = false;
+      while (!isUnique) {
+        newKey = "";
+        for (let i = 0; i < 10; i++) {
+          newKey += characters.charAt(
+            Math.floor(Math.random() * characters.length)
+          );
+        }
+        const existing = await Session.findOne({
+          where: { sessionKey: newKey },
+        });
+        if (!existing) isUnique = true;
+      }
+
+      // Generate unique session name within the same class
+      let newName = `${session.sessionName} (Copy)`;
+      let nameCounter = 1;
+      while (
+        await Session.findOne({
+          where: { sessionName: newName, ClassID: session.ClassID },
+        })
+      ) {
+        nameCounter++;
+        newName = `${session.sessionName} (Copy ${nameCounter})`;
+      }
+
+      const cloned = await Session.create({
+        sessionName: newName,
+        sessionKey: newKey,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        examSet: session.examSet,
+        ClassID: session.ClassID,
+        status: "NOT_STARTED",
+      });
+
+      results.success.push({ originalId: sessionId, clonedSession: cloned });
+    } catch (error) {
+      results.failed.push({
+        sessionId,
+        reason: error.message,
+      });
+    }
+  }
+
+  const httpStatus = results.failed.length === sessionIds.length ? 400
+    : results.failed.length > 0 ? 207
+    : 201;
+
+  return {
+    status: httpStatus,
+    message: `${results.success.length}/${sessionIds.length} sessions cloned`,
+    data: results,
+  };
+}
+
+async function batchExportReport(req) {
+  const { sessionIds } = req.body;
+
+  if (!sessionIds || !Array.isArray(sessionIds) || sessionIds.length === 0) {
+    return {
+      status: 400,
+      message: "sessionIds must be a non-empty array",
+    };
+  }
+
+  const results = { success: [], failed: [] };
+
+  for (const sessionId of sessionIds) {
+    try {
+      const session = await Session.findOne({
+        where: { ID: sessionId },
+        include: [
+          { model: Class, as: "Classes" },
+          { model: Topic, as: "Topic" },
+          {
+            model: SessionParticipant,
+            as: "SessionParticipants",
+          },
+        ],
+      });
+
+      if (!session) {
+        results.failed.push({
+          sessionId,
+          reason: "Session not found",
+        });
+        continue;
+      }
+
+      const participants = session.SessionParticipants || [];
+      if (participants.length === 0) {
+        results.failed.push({
+          sessionId,
+          reason: "No participants found",
+        });
+        continue;
+      }
+
+      const report = {
+        sessionId: session.ID,
+        sessionName: session.sessionName,
+        sessionKey: session.sessionKey,
+        className: session.Classes?.className || null,
+        topicName: session.Topic?.Name || null,
+        status: session.status,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        totalParticipants: participants.length,
+        participants: participants.map((p) => ({
+          participantId: p.ID,
+          userId: p.UserID,
+          grammarVocab: p.GrammarVocab,
+          reading: p.Reading,
+          readingLevel: p.ReadingLevel,
+          listening: p.Listening,
+          listeningLevel: p.ListeningLevel,
+          writing: p.Writing,
+          writingLevel: p.WritingLevel,
+          speaking: p.Speaking,
+          speakingLevel: p.SpeakingLevel,
+          total: p.Total,
+          level: p.Level,
+          isPublished: p.IsPublished,
+        })),
+      };
+
+      results.success.push(report);
+    } catch (error) {
+      results.failed.push({
+        sessionId,
+        reason: error.message,
+      });
+    }
+  }
+
+  const httpStatus = results.failed.length === sessionIds.length ? 400
+    : results.failed.length > 0 ? 207
+    : 200;
+
+  return {
+    status: httpStatus,
+    message: `${results.success.length}/${sessionIds.length} reports generated`,
+    data: results,
+  };
+}
+
 module.exports = {
   getAllSessions,
   getSessionByClass,
   createSession,
   updateSession,
+  updateSessionStatus,
   getSessionDetailById,
   removeSession,
+  archiveSession,
   cronStatusAllSessions,
   checkAndRemoveOldAudios,
+  batchUpdateStatus,
+  batchClone,
+  batchExportReport,
 };

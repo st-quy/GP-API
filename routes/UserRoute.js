@@ -13,6 +13,7 @@ const {
   logoutUser,
   resetPassword,
   getAllUsersByRoleTeacher,
+  getAllUsersByRoleStudent,
   deleteUserAccount,
 } = require("../controller/UserController");
 const storage = multer.memoryStorage();
@@ -153,6 +154,7 @@ const storage = multer.memoryStorage();
  *         description: Internal server error
  */
 router.get("/teachers", getAllUsersByRoleTeacher);
+router.get("/students", getAllUsersByRoleStudent);
 
 /**
  * @swagger

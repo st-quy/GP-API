@@ -27,7 +27,29 @@ const getUploadUrl = async (req, res) => {
   }
 };
 
+const uploadFile = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+
+    const { folder = 'general' } = req.body;
+    const result = await UploadFileService.uploadBufferToMinIO(
+      folder,
+      req.file.originalname,
+      req.file.buffer,
+      req.file.mimetype
+    );
+
+    return res.status(result.status).json(result.data);
+  } catch (error) {
+    console.error('uploadFile error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+};
+
 module.exports = {
   getFileURL,
   getUploadUrl,
+  uploadFile,
 };
