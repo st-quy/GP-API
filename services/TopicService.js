@@ -207,6 +207,16 @@ const getTopicWithRelations = async (req, res) => {
 
       include: [
         {
+          model: User,
+          as: 'creator',
+          attributes: ['ID', 'firstName', 'lastName'],
+        },
+        {
+          model: User,
+          as: 'updater',
+          attributes: ['ID', 'firstName', 'lastName'],
+        },
+        {
           model: Section,
           as: 'Sections',
           through: { attributes: ['ScoreConfig'] },
