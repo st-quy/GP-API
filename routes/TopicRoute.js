@@ -11,6 +11,7 @@ const {
   removePartFromTopic,
   deleteTopic,
   updateTopic,
+  duplicateTopic,
 } = require('../controller/TopicController');
 /**
  * @swagger
@@ -231,6 +232,29 @@ router.get('/:id', getTopicWithRelations);
  *         description: Internal server error
  */
 router.put('/:id', authorize(), updateTopic);
+
+/**
+ * @swagger
+ * /topics/{id}/duplicate:
+ *   post:
+ *     summary: Duplicate a topic by ID
+ *     tags: [Topic]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID of the topic to duplicate
+ *     responses:
+ *       201:
+ *         description: Topic duplicated successfully
+ *       404:
+ *         description: Topic not found
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/:id/duplicate', authorize(['teacher', 'admin']), duplicateTopic);
 
 
 module.exports = router;
