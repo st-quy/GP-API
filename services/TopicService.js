@@ -7,6 +7,7 @@ const {
   Topic,
   Section,
   User,
+  sequelize,
 } = require('../models');
 const { Op } = require('sequelize');
 const { TOPIC_STATUS } = require('../helpers/constants');
@@ -487,6 +488,88 @@ async function updateTopic(req) {
   }
 }
 
+async function duplicateTopic(req) {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.userId || null;
+
+    const originalTopic = await Topic.findByPk(id, {
+      include: [
+        {
+          model: Section,
+          as: 'Sections',
+          through: { attributes: ['ScoreConfig'] },
+        },
+      ],
+    });
+
+    if (!originalTopic) {
+      return {
+        status: 404,
+        message: 'Original topic not found',
+      };
+    }
+
+    let newName = `${originalTopic.Name} (Copy)`;
+    let counter = 1;
+
+    // Ensure unique name for the copy
+    let nameExists = true;
+    while (nameExists) {
+      const existing = await Topic.findOne({
+        where: { Name: { [Op.iLike]: newName } }
+      });
+      if (!existing) {
+        nameExists = false;
+      } else {
+        newName = `${originalTopic.Name} (Copy ${counter++})`;
+      }
+    }
+
+    const newTopic = await Topic.create({
+      Name: newName,
+      Status: TOPIC_STATUS.DRAFT,
+      Duration: originalTopic.Duration,
+      ShuffleQuestions: originalTopic.ShuffleQuestions,
+      ShuffleAnswers: originalTopic.ShuffleAnswers,
+      CreatedBy: userId,
+      UpdatedBy: userId,
+    });
+
+    // Copy sections
+    if (originalTopic.Sections && originalTopic.Sections.length > 0) {
+      for (const section of originalTopic.Sections) {
+        const { TopicSection: tsData } = section;
+        await sequelize.models.TopicSection.create({
+          TopicID: newTopic.ID,
+          SectionID: section.ID,
+          ScoreConfig: tsData ? tsData.ScoreConfig : null,
+        });
+      }
+    }
+
+    logActivity({
+      userId,
+      action: 'create',
+      entityType: 'topic',
+      entityID: newTopic.ID,
+      entityName: newName,
+      details: `Exam Set "${newName}" created by duplicating "${originalTopic.Name}"`,
+    });
+
+    return {
+      status: 201,
+      message: `Exam set "${originalTopic.Name}" duplicated successfully as "${newName}"`,
+      data: newTopic,
+    };
+  } catch (error) {
+    return {
+      status: 500,
+      message: `Error duplicating topic: ${error.message}`,
+    };
+  }
+}
+
 module.exports = {
   getAllTopics,
   createTopic,
@@ -497,4 +580,5 @@ module.exports = {
   getQuestionsByQuestionSetId,
   deleteTopic,
   updateTopic,
+  duplicateTopic,
 };
