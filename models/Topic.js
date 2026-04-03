@@ -12,7 +12,7 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
     },
     Status: {
-      type: DataTypes.ENUM(['draft', 'submited', 'approved', 'rejected']),
+      type: DataTypes.ENUM(['draft', 'submited', 'approved', 'rejected', 'archived']),
       allowNull: true,
       defaultValue: TOPIC_STATUS.DRAFT,
     },
