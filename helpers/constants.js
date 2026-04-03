@@ -27,6 +27,7 @@ module.exports = {
     REJECTED: 'rejected',
     DRAFT: 'draft',
     SUBMITED: 'submited',
+    ARCHIVED: 'archived',
   },
   skillMapping: {
     READING: 'Reading',

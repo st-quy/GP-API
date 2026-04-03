@@ -82,6 +82,19 @@ const createTopic = async (req) => {
       };
     }
 
+    const existingTopic = await Topic.findOne({
+      where: {
+        Name: { [Op.iLike]: Name.trim() }
+      }
+    });
+
+    if (existingTopic) {
+      return {
+        status: 400,
+        message: `An exam set with the name "${Name}" already exists.`,
+      };
+    }
+
     const validStatuses = Object.values(TOPIC_STATUS);
 
     let finalStatus = TOPIC_STATUS.DRAFT;
@@ -144,6 +157,7 @@ const getAllTopics = async (req) => {
       approved: allTopics.filter(t => t.Status === "approved").length,
       draft: allTopics.filter(t => t.Status === "draft").length,
       rejected: allTopics.filter(t => t.Status === "rejected").length,
+      archived: allTopics.filter(t => t.Status === "archived").length,
     };
 
     const { rows, count } = await Topic.findAndCountAll({
@@ -367,7 +381,7 @@ async function deleteTopic(req) {
         message: `Topic with id ${id} not found`,
       };
     }
-    if (topic.Status !== 'draft' && topic.Status !== 'rejected') {
+    if (topic.Status !== 'draft' && topic.Status !== 'rejected' && topic.Status !== 'archived') {
       return {
         status: 400,
         message: `Cannot delete topic with status '${topic.Status}'`,
@@ -412,6 +426,22 @@ async function updateTopic(req) {
       updatedTopicData.UpdatedBy = userId;
     }
 
+    if (updatedTopicData.Name) {
+      const existingTopic = await Topic.findOne({
+        where: {
+          Name: { [Op.iLike]: updatedTopicData.Name.trim() },
+          ID: { [Op.ne]: id }
+        }
+      });
+
+      if (existingTopic) {
+        return {
+          status: 400,
+          message: `An exam set with the name "${updatedTopicData.Name}" already exists.`,
+        };
+      }
+    }
+
     const oldName = topic.Name;
     const oldStatus = topic.Status;
     const newName = updatedTopicData.Name || oldName;
@@ -426,6 +456,7 @@ async function updateTopic(req) {
         submited: 'Submitted',
         approved: 'Approved',
         rejected: 'Rejected',
+        archived: 'Archived',
       };
       details = `Exam Set "${oldName}" status changed from ${statusLabels[oldStatus] || oldStatus} to ${statusLabels[newStatus] || newStatus}`;
     } else if (oldName !== newName) {
