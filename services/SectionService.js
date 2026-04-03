@@ -268,7 +268,7 @@ async function deleteSection(req) {
       return {
         status: 400,
         message:
-          'Cannot delete section because it is already used in one or more Topics',
+          'This question cannot be deleted because it is linked to one or more exams. Please remove the question from all exams first.',
         usedByTopics: usageCount,
       };
     }
