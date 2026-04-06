@@ -2962,11 +2962,112 @@ async function updateGrammarAndVocabGroup(sectionId, payload) {
   }
 }
 
+async function duplicateSection(req) {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const userId = req.user?.userId || null;
+
+    const originalSection = await Section.findByPk(id, {
+      include: [
+        {
+          model: Part,
+          as: 'Parts',
+          include: [
+            {
+              model: Question,
+              as: 'Questions',
+            },
+          ],
+        },
+        {
+          model: Skill,
+          as: 'Skill',
+        },
+      ],
+    });
+
+    if (!originalSection) {
+      await t.rollback();
+      return Response.notFound('Section not found');
+    }
+
+    let newName = `${originalSection.Name} (Copy)`;
+    let counter = 1;
+
+    let nameExists = true;
+    while (nameExists) {
+      const existing = await Section.findOne({
+        where: { Name: { [Op.iLike]: newName } }
+      });
+      if (!existing) {
+        nameExists = false;
+      } else {
+        newName = `${originalSection.Name} (Copy ${counter++})`;
+      }
+    }
+
+    const newSection = await Section.create({
+      Name: newName,
+      Description: originalSection.Description,
+      SkillID: originalSection.SkillID,
+      Status: 'draft',
+    }, { transaction: t });
+
+    const sortedParts = (originalSection.Parts || []).sort((a, b) => (a.Sequence ?? 0) - (b.Sequence ?? 0));
+
+    for (const originalPart of sortedParts) {
+      const newPart = await Part.create({
+        Content: originalPart.Content,
+        SubContent: originalPart.SubContent,
+        Sequence: originalPart.Sequence,
+        SkillID: originalPart.SkillID,
+      }, { transaction: t });
+
+      await SectionPart.create({
+        SectionID: newSection.ID,
+        PartID: newPart.ID,
+      }, { transaction: t });
+
+      const sortedQuestions = (originalPart.Questions || []).sort((a, b) => (a.Sequence ?? 0) - (b.Sequence ?? 0));
+
+      for (const originalQuestion of sortedQuestions) {
+        await Question.create({
+          Type: originalQuestion.Type,
+          AudioKeys: originalQuestion.AudioKeys,
+          ImageKeys: originalQuestion.ImageKeys,
+          PartID: newPart.ID,
+          Sequence: originalQuestion.Sequence,
+          Content: originalQuestion.Content,
+          SubContent: originalQuestion.SubContent,
+          GroupContent: originalQuestion.GroupContent,
+          AnswerContent: originalQuestion.AnswerContent,
+          Tags: originalQuestion.Tags,
+          CreatedBy: userId,
+          UpdatedBy: userId,
+        }, { transaction: t });
+      }
+    }
+
+    await logActivity({
+      userId,
+      action: 'create',
+      entityType: 'section',
+      entityID: newSection.ID,
+      entityName: newName,
+      details: `Question Bank "${newName}" created by duplicating "${originalSection.Name}"`,
+    });
+
+    await t.commit();
+
+    return Response.success(newSection, `Question Bank "${originalSection.Name}" duplicated successfully as "${newName}"`, 201);
+  } catch (error) {
+    await t.rollback();
+    return Response.error(`Error duplicating section: ${error.message}`);
+  }
+}
+
 module.exports = {
-  getAllQuestions,
-  createQuestion,
-  createQuestionGroup,
-  getQuestionByID,
   updateQuestion,
   deleteQuestion,
   getQuestionsByPartID,
@@ -2983,4 +3084,5 @@ module.exports = {
   updateWritingGroup,
   updateListeningGroup,
   updateGrammarAndVocabGroup,
+  duplicateSection,
 };

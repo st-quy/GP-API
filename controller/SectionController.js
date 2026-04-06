@@ -1,4 +1,5 @@
 const SectionService = require('../services/SectionService');
+const QuestionService = require('../services/QuestionService');
 
 const getAllSection = async (req, res) => {
   try {
@@ -102,6 +103,19 @@ const archiveSection = async (req, res) => {
   }
 };
 
+/* ============================================
+   DUPLICATE SECTION
+============================================ */
+const duplicateSection = async (req, res) => {
+  try {
+    const result = await QuestionService.duplicateSection(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    console.error('Error duplicating section:', error.message);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 module.exports = {
   getAllSection,
   createSection,
@@ -112,4 +126,5 @@ module.exports = {
   getSectionDetail,
   createDraftSection,
   getDraftBySkill,
+  duplicateSection,
 };
