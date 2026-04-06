@@ -801,12 +801,24 @@ async function getFullExamReview(sessionParticipantId, user) {
       }
     };
 
-    const processParts = (partsList) => {
+    const toSequenceNumber = (value) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+    };
+
+    const sortBySequence = (items = []) =>
+      [...items].sort((a, b) => {
+        const seqDiff = toSequenceNumber(a?.Sequence) - toSequenceNumber(b?.Sequence);
+        if (seqDiff !== 0) return seqDiff;
+        return String(a?.ID || '').localeCompare(String(b?.ID || ''));
+      });
+
+    const processParts = (partsList, section) => {
       if (!partsList || !Array.isArray(partsList)) return;
 
-      partsList.forEach((part) => {
+      sortBySequence(partsList).forEach((part) => {
         if (part.Questions && part.Questions.length > 0) {
-          part.Questions.forEach((question) => {
+          sortBySequence(part.Questions).forEach((question) => {
             if (!part.Skill || !part.Skill.Name) return;
 
             const skillKey = getSkillKey(part.Skill.Name);
@@ -818,6 +830,12 @@ async function getFullExamReview(sessionParticipantId, user) {
             const questionDetail = {
               id: question.ID,
               type: question.Type,
+              sectionId: section?.ID || null,
+              sectionName: section?.Name || null,
+              sectionSequence: toSequenceNumber(section?.Sequence),
+              partId: part.ID,
+              partSequence: toSequenceNumber(part.Sequence),
+              questionSequence: toSequenceNumber(question.Sequence),
               questionContent: question.Content,
               partContent: part.Content,
               subContent: question.SubContent || part.SubContent,
@@ -857,12 +875,27 @@ async function getFullExamReview(sessionParticipantId, user) {
     };
 
     if (topic.Sections && topic.Sections.length > 0) {
-      topic.Sections.forEach((section) => {
+      sortBySequence(topic.Sections).forEach((section) => {
         if (section.Parts && section.Parts.length > 0) {
-          processParts(section.Parts);
+          processParts(section.Parts, section);
         }
       });
     }
+
+    Object.values(reviewData).forEach((skillReview) => {
+      skillReview.questions = sortBySequence(skillReview.questions).sort((a, b) => {
+        const sectionDiff = a.sectionSequence - b.sectionSequence;
+        if (sectionDiff !== 0) return sectionDiff;
+
+        const partDiff = a.partSequence - b.partSequence;
+        if (partDiff !== 0) return partDiff;
+
+        const questionDiff = a.questionSequence - b.questionSequence;
+        if (questionDiff !== 0) return questionDiff;
+
+        return String(a.id || '').localeCompare(String(b.id || ''));
+      });
+    });
 
     const startTime = new Date(sessionParticipant.createdAt);
     const endTime = new Date(sessionParticipant.updatedAt);
