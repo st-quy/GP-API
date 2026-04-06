@@ -26,11 +26,18 @@ const createTopicSection = async (req) => {
       };
     }
 
-    // Check if section is a draft
+    // Check if section is a draft or archived
     if (section.Status === 'draft') {
       return {
         status: 400,
         message: "Cannot add draft questions to an exam. Please publish the question first.",
+      };
+    }
+
+    if (section.Status === 'archived') {
+      return {
+        status: 400,
+        message: "Cannot add archived questions to an exam. Please unarchive or duplicate the question first.",
       };
     }
 

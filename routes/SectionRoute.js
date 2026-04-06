@@ -6,6 +6,7 @@ const {
   getAllSection,
   updateSection,
   updateSectionStatus,
+  archiveSection,
   deleteSection,
   createSection,
   getSectionDetail,
@@ -16,6 +17,7 @@ const {
 router.get('/', getAllSection);
 router.put('/:id', authorize(['teacher', 'admin']), updateSection);
 router.put('/:id/status', authorize(['teacher', 'admin']), updateSectionStatus);
+router.put('/:id/archive', authorize(['teacher', 'admin']), archiveSection);
 router.delete('/:id', authorize(['teacher', 'admin']), deleteSection);
 router.get('/:id', getSectionDetail);
 router.post('/', authorize(['teacher', 'admin']), createSection);

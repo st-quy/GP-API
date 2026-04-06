@@ -32,6 +32,7 @@ module.exports = {
   SECTION_STATUS: {
     DRAFT: 'draft',
     PUBLISHED: 'published',
+    ARCHIVED: 'archived',
   },
   skillMapping: {
     READING: 'Reading',
