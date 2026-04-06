@@ -362,6 +362,8 @@ async function calculatePoints(req) {
         pointAdded: 0,
       };
 
+      let pointsForThisQuestion = 0;
+
       // ================================
       // MULTIPLE CHOICE
       // ================================
@@ -374,7 +376,7 @@ async function calculatePoints(req) {
 
         if (stu === cor) {
           isCorrect = true;
-          totalPoints += pointPerQuestion;
+          pointsForThisQuestion += pointPerQuestion;
         }
       }
 
@@ -388,25 +390,24 @@ async function calculatePoints(req) {
         logItem.studentAnswer = studentAnswers;
         logItem.correctAnswer = correctAnswers;
 
-        // Check if ALL pairs match (All-or-Nothing logic to match checkCorrectness)
-        const allMatched = correctAnswers.every((correct) => {
-          return studentAnswers.some(
+        // Count points for each correct pair
+        correctAnswers.forEach((correct) => {
+          const match = studentAnswers.find(
             (s) =>
               s.left.trim() === correct.left.trim() &&
               s.right.trim() === correct.right.trim()
           );
+          if (match) {
+            isCorrect = true;
+            pointsForThisQuestion += pointPerQuestion;
+          }
         });
+      }
 
-        if (allMatched && correctAnswers.length > 0) {
-          isCorrect = true;
-          totalPoints += pointPerQuestion;
-        }
-        }
-
-        // ================================
-        // ORDERING
-        // ================================
-        else if (type === 'ordering') {
+      // ================================
+      // ORDERING
+      // ================================
+      else if (type === 'ordering') {
         const studentAnswers = JSON.parse(rawStudentAnswer).sort(
           (a, b) => a.value - b.value
         );
@@ -415,21 +416,16 @@ async function calculatePoints(req) {
         logItem.studentAnswer = studentAnswers;
         logItem.correctAnswer = correctAnswers;
 
-        // Check if ALL items are in correct order (All-or-Nothing)
-        let allCorrect = studentAnswers.length === correctAnswers.length;
-        if (allCorrect) {
-          for (let i = 0; i < correctAnswers.length; i++) {
-            if (studentAnswers[i].key.trim() !== correctAnswers[i].key.trim()) {
-              allCorrect = false;
-              break;
-            }
+        // Count points for each correct position
+        correctAnswers.forEach((correct, index) => {
+          if (
+            studentAnswers[index] &&
+            studentAnswers[index].key.trim() === correct.key.trim()
+          ) {
+            isCorrect = true;
+            pointsForThisQuestion += pointPerQuestion;
           }
-        }
-
-        if (allCorrect && correctAnswers.length > 0) {
-          isCorrect = true;
-          totalPoints += pointPerQuestion;
-        }
+        });
       } else if (type === 'dropdown-list') {
         let studentAnswers = [];
         try {
@@ -455,7 +451,8 @@ async function calculatePoints(req) {
             match &&
             String(match.value).trim() === String(correct.value).trim()
           ) {
-            totalPoints += pointPerQuestion;
+            isCorrect = true;
+            pointsForThisQuestion += pointPerQuestion;
           }
         });
       } else if (type === 'listening-questions-group') {
@@ -468,9 +465,13 @@ async function calculatePoints(req) {
         correctList.forEach((q) => {
           const stu = studentAnswers.find((x) => x.ID === q.ID);
 
-          if (stu && stu.answer.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase()) {
+          if (
+            stu &&
+            stu.answer.trim().toLowerCase() ===
+              q.correctAnswer.trim().toLowerCase()
+          ) {
             isCorrect = true;
-            totalPoints += pointPerQuestion;
+            pointsForThisQuestion += pointPerQuestion;
           }
         });
       }
@@ -478,8 +479,9 @@ async function calculatePoints(req) {
       // ================================
       // Finalize tracking
       // ================================
+      totalPoints += pointsForThisQuestion;
       logItem.result = isCorrect ? 'correct' : 'incorrect';
-      logItem.pointAdded = isCorrect ? pointPerQuestion : 0;
+      logItem.pointAdded = pointsForThisQuestion;
 
       logs.push(logItem);
     });
