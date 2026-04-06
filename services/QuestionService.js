@@ -1782,6 +1782,13 @@ async function updateSpeakingGroup(sectionId, payload) {
   const t = await sequelize.transaction();
 
   try {
+    // Check if section is archived
+    const existingSection = await Section.findByPk(sectionId);
+    if (existingSection && existingSection.Status === 'archived') {
+      await t.rollback();
+      return { status: 403, message: 'Cannot update an archived section' };
+    }
+
     const { SectionName, Description, parts, userId, Status } = payload;
 
     const isDraft = Status === 'draft';
@@ -1980,9 +1987,14 @@ async function updateReadingGroup(sectionId, payload) {
   const t = await sequelize.transaction();
 
   try {
-    const { SectionName, Description, parts, userId, Status } = payload;
+    // Check if section is archived
+    const existingSection = await Section.findByPk(sectionId);
+    if (existingSection && existingSection.Status === 'archived') {
+      await t.rollback();
+      return { status: 403, message: 'Cannot update an archived section' };
+    }
 
-    console.log('[READING UPDATE] sectionId:', sectionId, 'Status:', Status, 'parts count:', parts?.length);
+    const { SectionName, Description, parts, userId, Status } = payload;
 
     const isDraft = Status === 'draft';
 
@@ -2195,6 +2207,13 @@ async function updateWritingGroup(sectionId, payload) {
   const t = await sequelize.transaction();
 
   try {
+    // Check if section is archived
+    const existingSection = await Section.findByPk(sectionId);
+    if (existingSection && existingSection.Status === 'archived') {
+      await t.rollback();
+      return { status: 403, message: 'Cannot update an archived section' };
+    }
+
     const { SectionName, Description, parts, userId, Status } = payload;
 
     const isDraft = Status === 'draft';
@@ -2502,6 +2521,13 @@ async function updateListeningGroup(sectionId, payload) {
   const t = await sequelize.transaction();
 
   try {
+    // Check if section is archived
+    const existingSection = await Section.findByPk(sectionId);
+    if (existingSection && existingSection.Status === 'archived') {
+      await t.rollback();
+      return { status: 403, message: 'Cannot update an archived section' };
+    }
+
     const { SkillName, SectionName, Description, parts, userId, Status } = payload;
 
     const isDraft = Status === 'draft';
@@ -2736,6 +2762,13 @@ async function updateGrammarAndVocabGroup(sectionId, payload) {
   const t = await sequelize.transaction();
 
   try {
+    // Check if section is archived
+    const existingSection = await Section.findByPk(sectionId);
+    if (existingSection && existingSection.Status === 'archived') {
+      await t.rollback();
+      return { status: 403, message: 'Cannot update an archived section' };
+    }
+
     const { SkillName, SectionName, Description, parts, userId, Status } = payload;
 
     const isDraft = Status === 'draft';

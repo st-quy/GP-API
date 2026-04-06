@@ -92,11 +92,22 @@ const getDraftBySkill = async (req, res) => {
   }
 };
 
+const archiveSection = async (req, res) => {
+  try {
+    const result = await SectionService.archiveSection(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    console.error('Error archiving section:', error.message);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 module.exports = {
   getAllSection,
   createSection,
   updateSection,
   updateSectionStatus,
+  archiveSection,
   deleteSection,
   getSectionDetail,
   createDraftSection,

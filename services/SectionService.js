@@ -928,8 +928,8 @@ async function updateSectionStatus(req) {
       return { status: 400, message: 'Section ID is required' };
     }
 
-    if (!Status || !['draft', 'published'].includes(Status)) {
-      return { status: 400, message: 'Invalid status. Must be "draft" or "published"' };
+    if (!Status || !['draft', 'published', 'archived'].includes(Status)) {
+      return { status: 400, message: 'Invalid status. Must be "draft", "published", or "archived"' };
     }
 
     const section = await Section.findByPk(id);
@@ -961,6 +961,47 @@ async function updateSectionStatus(req) {
   }
 }
 
+async function archiveSection(req) {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return { status: 400, message: 'Section ID is required' };
+    }
+
+    const section = await Section.findByPk(id);
+    if (!section) {
+      return { status: 404, message: `Section with id ${id} not found` };
+    }
+
+    if (section.Status === 'archived') {
+      return { status: 400, message: 'Section is already archived' };
+    }
+
+    const oldStatus = section.Status;
+    section.Status = 'archived';
+    await section.save();
+
+    const userIdFromReq = req.user?.userId || null;
+    logActivity({
+      userId: userIdFromReq,
+      action: 'archive',
+      entityType: 'section',
+      entityID: section.ID,
+      entityName: section.Name,
+      details: `Section status changed from "${oldStatus}" to "archived"`,
+    });
+
+    return {
+      status: 200,
+      message: 'Section archived successfully',
+      data: section,
+    };
+  } catch (error) {
+    throw new Error(`Error archiving section: ${error.message}`);
+  }
+}
+
 module.exports = {
   getAllSection,
   updateSection,
@@ -968,6 +1009,7 @@ module.exports = {
   createSection,
   getSectionDetail,
   updateSectionStatus,
+  archiveSection,
   createDraftSection,
   getDraftBySkill,
 };
