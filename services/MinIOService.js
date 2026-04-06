@@ -5,7 +5,6 @@ const { v4: uuidv4 } = require('uuid');
 const MINIO_PORT = process.env.MINIO_PORT;
 const MINIO_HOST = process.env.MINIO_HOST;
 const BUCKET = process.env.BUCKET;
-const MINIO_URL_BASE = process.env.MINIO_URL_BASE;
 
 // Internal client — for bucket ops, delete, etc. (Docker network)
 const minioClient = new Minio.Client({
@@ -20,6 +19,9 @@ const minioClient = new Minio.Client({
 const MINIO_EXTERNAL_HOST = process.env.MINIO_EXTERNAL_HOST || MINIO_HOST;
 const MINIO_EXTERNAL_PORT = parseInt(process.env.MINIO_EXTERNAL_PORT || '443', 10);
 const MINIO_EXTERNAL_USE_SSL = process.env.MINIO_EXTERNAL_USE_SSL !== 'false'; // default true
+const MINIO_URL_BASE =
+  process.env.MINIO_URL_BASE ||
+  `${MINIO_EXTERNAL_USE_SSL ? 'https' : 'http'}://${MINIO_EXTERNAL_HOST}:${MINIO_EXTERNAL_PORT}/${BUCKET}`;
 
 const externalMinioClient = new Minio.Client({
   endPoint: MINIO_EXTERNAL_HOST,
