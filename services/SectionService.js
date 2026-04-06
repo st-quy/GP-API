@@ -34,7 +34,7 @@ async function resolveSkill({ skillId, skillName }) {
 
 async function getAllSection(req) {
   try {
-    const { skillId, skillName, searchName } = req.query || {};
+    const { skillId, skillName, searchName, status } = req.query || {};
 
     const page = Number(req.query.page) || 1;
     const pageSize = Number(req.query.pageSize) || 10;
@@ -42,6 +42,10 @@ async function getAllSection(req) {
     const limit = pageSize;
 
     let where = {};
+
+    if (status) {
+      where.Status = status;
+    }
 
     // Filter skill
     if (skillId || skillName) {

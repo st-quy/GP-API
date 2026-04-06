@@ -100,6 +100,11 @@ const updateTopicSectionByTopicID = async (topicId, data) => {
 
     const newTopicSections = [];
     for (const sectionId of sectionIds) {
+      const section = await Section.findByPk(sectionId);
+      if (!section || section.Status === 'draft') {
+        throw new Error(`Cannot add draft or non-existent question set (ID: ${sectionId}) to an exam.`);
+      }
+
       const newTopicSection = await TopicSection.create({
         TopicID: topicId,
         SectionID: sectionId,
