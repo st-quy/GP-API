@@ -109,6 +109,7 @@ const {
  *         description: Server error
  */
 router.post("/", createSessionRequest);
+router.get("/", getAllSessionRequests);
 
 /**
  * @swagger

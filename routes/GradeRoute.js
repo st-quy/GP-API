@@ -114,7 +114,7 @@ router.post("/teacher-grade", calculatePointForWritingAndSpeaking);
  * /grades/review/{sessionParticipantId}:
  *   get:
  *     summary: Get full exam review details for a participant
- *     description: Retrieves all questions, student answers, correct answers, and feedback grouped by skill (Grammar, Listening, Reading, Speaking, Writing).
+ *     description: Retrieves all questions, student answers, correct answers, and feedback grouped by skill.
  *     tags: [Grade]
  *     parameters:
  *       - in: path
@@ -136,12 +136,12 @@ router.post("/teacher-grade", calculatePointForWritingAndSpeaking);
  *                   example: 200
  *                 data:
  *                   type: object
- *                   description: Object containing participant info and skills data grouped by skill name
+ *                   description: Object containing participant info and skills data
  *       404:
  *         description: Participant or exam data not found
  *       500:
  *         description: Internal server error
  */
-router.get("/review/:sessionParticipantId", getFullExamReview);
+router.get("/review/:sessionParticipantId", authorize(), getFullExamReview);
 
 module.exports = router;

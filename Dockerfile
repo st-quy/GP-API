@@ -4,7 +4,7 @@ FROM node:20.19-alpine AS build
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+RUN if [ ! -f package-lock.json ]; then echo "Error: package-lock.json is required for reproducible builds" >&2; exit 1; fi && npm ci
 
 COPY . .
 
@@ -12,8 +12,7 @@ COPY . .
 RUN rm -rf \
     *.md \
     .git \
-    .env \
-    migrations
+    .env
 
 # Stage 2: Production image
 FROM node:20.19-alpine

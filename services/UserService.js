@@ -79,7 +79,7 @@ async function registerUser(data) {
           case 'phone':
             return 'Phone already exists';
           case 'studentCode':
-            return 'Student Code already exists';
+            return 'Student ID already exists';
           case 'teacherCode':
             return 'Teacher Code already exists';
           default:
@@ -211,10 +211,39 @@ async function updateUser(userId, data) {
       throw new Error('User not found');
     }
 
+    // Trim string fields
+    if (data.firstName) data.firstName = data.firstName.trim();
+    if (data.lastName) data.lastName = data.lastName.trim();
+    if (data.email) data.email = data.email.trim();
+    if (data.address) data.address = data.address.trim();
+    if (data.phone) data.phone = data.phone.trim();
+
+    // Validate maxLength
+    if (data.firstName && data.firstName.length > 50) {
+      throw new Error('First name must not exceed 50 characters');
+    }
+    if (data.lastName && data.lastName.length > 50) {
+      throw new Error('Last name must not exceed 50 characters');
+    }
+    if (data.email && data.email.length > 100) {
+      throw new Error('Email must not exceed 100 characters');
+    }
+    if (data.address && data.address.length > 200) {
+      throw new Error('Address must not exceed 200 characters');
+    }
+
+    // Validate not only spaces
+    if (data.firstName !== undefined && data.firstName.length === 0) {
+      throw new Error('First name is required');
+    }
+    if (data.lastName !== undefined && data.lastName.length === 0) {
+      throw new Error('Last name is required');
+    }
+
     if (data.phone) {
-      const phoneRegex = /^\d{10}$/;
+      const phoneRegex = /^\d{9,20}$/;
       if (!phoneRegex.test(data.phone)) {
-        throw new Error(`Invalid phone format: ${data.phone}`);
+        throw new Error(`Invalid phone format: ${data.phone}. Phone must contain 9-20 digits only.`);
       }
 
       const existingPhone = await User.findOne({
@@ -263,8 +292,12 @@ async function changePassword(userId, oldPassword, newPassword) {
 }
 
 async function sendResetPasswordEmail(email, host) {
+  const isEthereal = process.env.EMAIL_USER.endsWith('@ethereal.email');
+  
   const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: isEthereal ? 'smtp.ethereal.email' : 'smtp.gmail.com',
+    port: isEthereal ? 587 : 465,
+    secure: !isEthereal, // true cho 465, false cho 587
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
@@ -276,45 +309,35 @@ async function sendResetPasswordEmail(email, host) {
       throw new Error('User with this email does not exist');
     }
 
-    // const resetToken = await jwt.sign({ userId: user.ID }, process.env.JWT_SECRET, {
-    //   expiresIn: "15m",
-    // });
+    // 1. Tạo Token bảo mật (Hết hạn sau 15 phút)
+    const resetToken = jwt.sign({ userId: user.ID }, process.env.JWT_SECRET, {
+      expiresIn: '15m',
+    });
 
-    // const resetLink = `${host}/reset-password?token=${resetToken}`;
+    // 2. Tạo Link dẫn về trang reset mật khẩu của Frontend (Đảm bảo có dấu ?)
+    const resetLink = `${host}/reset-password?token=${resetToken}`;
+    console.log('==========================================');
+    console.log('>>> TEST LINK RESET PASSWORD:', resetLink);
+    console.log('==========================================');
 
-    // const mailOptions = {
-    //   from: process.env.EMAIL_USER,
-    //   to: user.email,
-    //   subject: "🔑 Reset Your Password",
-    //   html: `
-    //     <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ddd;">
-    //       <h2 style="color: #333;">🔑 Reset Your Password</h2>
-    //       <p>Hello <strong>${user.firstName} ${user.lastName}</strong>,</p>
-    //       <p>Click the link below to reset your password:</p>
-    //       <a href="${resetLink}" style="display: inline-block; padding: 10px 15px; background-color: #28a745; color: #fff; text-decoration: none; border-radius: 5px;">
-    //         Reset Password
-    //       </a>
-    //       <p style="color: #777; font-size: 12px;">This link will expire in 15 minutes.</p>
-    //     </div>
-    //   `,
-    // };
-    const defaultPassword = process.env.DEFAULT_PASSWORD;
-
-    user.password = await bcrypt.hash(defaultPassword, 10);
-    await user.save();
-
+    // 3. Gửi Mail với nội dung "Forgot Password?"
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: user.email,
-      subject: '🔐 Your Password Has Been Reset',
+      subject: '❓ Forgot your password?',
       html: `
-    <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ddd;">
-      <h2 style="color: #333;">🔐 Password Reset Successful</h2>
+    <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px; max-width: 500px; margin: auto;">
+      <h2 style="color: #003087;">Forgot password?</h2>
       <p>Hello <strong>${user.firstName} ${user.lastName}</strong>,</p>
-      <p>You have requested to reset your password. Here is your new password:</p>
-      <p style="font-size: 16px; font-weight: bold; color: #000;">${defaultPassword}</p>
-      <p style="color: #777; font-size: 12px;">For your security, please change this password after logging in.</p>
-      <p style="color: #aaa; font-size: 12px;">If you did not request this change, please ignore this email or contact support immediately.</p>
+      <p>No worries! You can reset your GreenPrep password by clicking the button below:</p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${resetLink}" style="display: inline-block; padding: 12px 25px; background-color: #003087; color: #fff; text-decoration: none; border-radius: 5px; font-weight: bold;">
+          Reset Password
+        </a>
+      </div>
+      <p style="color: #777; font-size: 12px; border-top: 1px solid #eee; padding-top: 15px;">
+        If you didn't request a password reset, you can safely ignore this email. This link will expire in 15 minutes.
+      </p>
     </div>
   `,
     };
@@ -415,6 +438,62 @@ async function getAllUsersByRoleTeacher(req) {
   }
 }
 
+async function getAllUsersByRoleStudent(req) {
+  try {
+    const { page = 1, limit = 10, search = '', status } = req.query;
+
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const searchTerms = search.trim().split(' ').filter(Boolean);
+
+    const whereClause = {};
+
+    if (searchTerms.length > 0) {
+      whereClause[Op.and] = searchTerms.map((term) => ({
+        [Op.or]: [
+          { firstName: { [Op.iLike]: `%${term}%` } },
+          { lastName: { [Op.iLike]: `%${term}%` } },
+          { studentCode: { [Op.iLike]: `%${term}%` } },
+        ],
+      }));
+    }
+
+    if (status !== undefined) {
+      whereClause.status = status;
+    }
+
+    const { rows: students, count: total } = await User.findAndCountAll({
+      where: whereClause,
+      include: [
+        {
+          model: Role,
+          where: { Name: 'student' },
+          through: { attributes: [] },
+        },
+      ],
+      offset,
+      limit: parseInt(limit),
+      order: [['updatedAt', 'DESC']],
+      distinct: true,
+    });
+
+    return {
+      status: 200,
+      message: 'Students fetched successfully',
+      data: {
+        students,
+        pagination: {
+          total,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          totalPages: Math.ceil(total / parseInt(limit)),
+        },
+      },
+    };
+  } catch (error) {
+    throw new Error(`Error fetching students: ${error.message}`);
+  }
+}
+
 async function deleteUser(userId) {
   try {
     const user = await User.findByPk(userId);
@@ -442,5 +521,6 @@ module.exports = {
   resetPassword,
   logoutUser,
   getAllUsersByRoleTeacher,
+  getAllUsersByRoleStudent,
   deleteUser,
 };

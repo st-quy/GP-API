@@ -24,8 +24,8 @@ jobs:
           script_stop: true
           script: |
             set -euo pipefail
-            REPO_DIR="/home/quy_pham/GREENLIGHT/GP-API"
-            COMPOSE_DIR="/home/quy_pham/GREENLIGHT"
+            REPO_DIR="/home/phamvanquy1306/GreenLight/GP-API"
+            COMPOSE_DIR="/home/phamvanquy1306/GreenLight"
             BRANCH="main"
 
             echo "➡️ Git in $REPO_DIR (branch $BRANCH)"
@@ -58,8 +58,8 @@ jobs:
           script_stop: true
           script: |
             set -euo pipefail
-            REPO_DIR="/home/quy_pham/dev/GREENLIGHT/GP-API"
-            COMPOSE_DIR="/home/quy_pham/dev/GREENLIGHT"
+            REPO_DIR="/home/phamvanquy1306/dev/GreenLight/GP-API"
+            COMPOSE_DIR="/home/phamvanquy1306/dev/GreenLight"
             BRANCH="develop"
 
             echo "➡️ Git in $REPO_DIR (branch $BRANCH)"
@@ -92,8 +92,8 @@ jobs:
           script_stop: true
           script: |
             set -euo pipefail
-            REPO_DIR="/home/quy_pham/uat/GREENLIGHT/GP-API"
-            COMPOSE_DIR="/home/quy_pham/uat/GREENLIGHT"
+            REPO_DIR="/home/phamvanquy1306/uat/GreenLight/GP-API"
+            COMPOSE_DIR="/home/phamvanquy1306/uat/GreenLight"
             BRANCH="uat"
 
             echo "➡️ Git in $REPO_DIR (branch $BRANCH)"
