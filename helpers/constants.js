@@ -29,6 +29,10 @@ module.exports = {
     SUBMITED: 'submited',
     ARCHIVED: 'archived',
   },
+  SECTION_STATUS: {
+    DRAFT: 'draft',
+    PUBLISHED: 'published',
+  },
   skillMapping: {
     READING: 'Reading',
     LISTENING: 'Listening',

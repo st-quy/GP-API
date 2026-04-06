@@ -26,6 +26,14 @@ const createTopicSection = async (req) => {
       };
     }
 
+    // Check if section is a draft
+    if (section.Status === 'draft') {
+      return {
+        status: 400,
+        message: "Cannot add draft questions to an exam. Please publish the question first.",
+      };
+    }
+
     const existedRelationship = await TopicSection.findOne({
       where: { TopicID, SectionID },
     });

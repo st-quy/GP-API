@@ -213,7 +213,7 @@ async function createQuestionGroup(req) {
   const t = await sequelize.transaction();
 
   try {
-    const { SkillName, parts } = req.body;
+    const { SkillName, parts, Status } = req.body;
     const userId = req?.user?.userId;
 
     if (!SkillName || !Array.isArray(parts) || parts.length === 0) {
@@ -344,25 +344,35 @@ async function createQuestionGroup(req) {
 
 async function createSpeakingGroup(req) {
   try {
-    const { SkillName, SectionName, Description, parts } = req.body;
+    const { SkillName, SectionName, Description, parts, Status } = req.body;
     const userId = req.user?.userId;
 
-    if (!SkillName || !parts || !SectionName) {
-      return {
-        status: 400,
-        message: 'SkillName, SectionName and parts[] are required',
-      };
-    }
+    // For drafts, be more lenient with validation
+    if (Status === 'draft') {
+      if (!SkillName || !parts) {
+        return {
+          status: 400,
+          message: 'SkillName and parts are required',
+        };
+      }
+    } else {
+      if (!SkillName || !parts || !SectionName) {
+        return {
+          status: 400,
+          message: 'SkillName, SectionName and parts[] are required',
+        };
+      }
 
-    const speakingValidationError = validateSpeakingPayload({
-      SectionName,
-      parts,
-    });
-    if (speakingValidationError) {
-      return {
-        status: 400,
-        message: speakingValidationError,
-      };
+      const speakingValidationError = validateSpeakingPayload({
+        SectionName,
+        parts,
+      });
+      if (speakingValidationError) {
+        return {
+          status: 400,
+          message: speakingValidationError,
+        };
+      }
     }
 
     const skill = await Skill.findOne({ where: { Name: SkillName } });
@@ -381,8 +391,9 @@ async function createSpeakingGroup(req) {
         {
           ID: uuidv4(),
           SkillID: skill.ID,
-          Name: SectionName,
+          Name: SectionName || 'Untitled Draft',
           Description: Description?.trim() || null,
+          Status: Status || 'draft',
         },
         { transaction: t }
       );
@@ -390,15 +401,25 @@ async function createSpeakingGroup(req) {
       /* =====================================================
          2) CREATE / UPDATE PARTS
       ===================================================== */
-      const partKeys = Object.keys(parts);
-      let createdParts = {};
+      // Handle both object and array formats
+      const partsArray = Array.isArray(parts) ? parts : Object.values(parts);
+      const createdParts = {};
+      const partIds = [];
 
-      for (const key of partKeys) {
-        const p = parts[key];
+      for (let i = 0; i < partsArray.length; i++) {
+        const p = partsArray[i];
+        if (!p) continue;
 
-        if (!p || !p.name) {
-          throw new Error(`Part "${key}" missing name`);
+        const hasQuestions = Array.isArray(p.questions) && p.questions.some((q) => q?.value?.trim() || q?.content?.trim());
+        const hasName = p.name && p.name.trim();
+
+        // Skip parts that have neither a name nor questions (true empty parts)
+        if (!hasName && !hasQuestions) {
+          continue;
         }
+
+        // Ensure part has a name (use default for drafts)
+        const partName = p.name || `Part ${p.sequence || (i + 1)}`;
 
         let partRow = null;
 
@@ -412,7 +433,7 @@ async function createSpeakingGroup(req) {
 
           await partRow.update(
             {
-              Content: p.name,
+              Content: partName,
               UpdatedBy: userId,
             },
             { transaction: t }
@@ -423,9 +444,9 @@ async function createSpeakingGroup(req) {
             {
               ID: uuidv4(),
               SkillID: skill.ID,
-              Content: p.name,
+              Content: partName,
               SubContent: null,
-              Sequence: p.sequence,
+              Sequence: p.sequence || (i + 1),
               CreatedBy: userId,
               UpdatedBy: userId,
             },
@@ -433,38 +454,46 @@ async function createSpeakingGroup(req) {
           );
         }
 
-        createdParts[key] = partRow;
+        createdParts[i] = partRow;
+        partIds.push(partRow.ID);
       }
 
       /* =====================================================
          3) DELETE OLD QUESTIONS
       ===================================================== */
-      const partIds = Object.values(createdParts).map((p) => p.ID);
-
-      await Question.destroy(
-        {
-          where: {
-            PartID: partIds,
-            Type: 'speaking',
+      if (partIds.length > 0) {
+        await Question.destroy(
+          {
+            where: {
+              PartID: partIds,
+              Type: 'speaking',
+            },
           },
-        },
-        { transaction: t }
-      );
+          { transaction: t }
+        );
+      }
 
       /* =====================================================
          4) CREATE NEW QUESTIONS
       ===================================================== */
       let questionPayload = [];
 
-      for (const key of partKeys) {
-        const p = parts[key];
-        const partRow = createdParts[key];
+      for (let i = 0; i < partsArray.length; i++) {
+        const p = partsArray[i];
+        if (!p) continue;
+        const partRow = createdParts[i];
+        if (!partRow) continue;
 
         const imageKeys = p.image ? [p.image] : [];
         const qs = Array.isArray(p.questions) ? p.questions : [];
 
         qs.forEach((q, idx) => {
-          const content = q.value.trim();
+          const content = q?.value?.trim() || '';
+
+          // Skip empty questions for drafts
+          if (!content && Status === 'draft') {
+            return;
+          }
 
           questionPayload.push({
             ID: uuidv4(),
@@ -477,7 +506,7 @@ async function createSpeakingGroup(req) {
             GroupContent: null,
             ImageKeys: imageKeys,
             AudioKeys: null,
-            Tags: normalizeTags(q.Tags || q.tags || p.Tags || p.tags),
+            Tags: normalizeTags(q?.Tags || q?.tags || p?.Tags || p?.tags),
             AnswerContent: buildSpeakingAnswerContent({
               content,
               imageKeys,
@@ -532,7 +561,7 @@ async function createSpeakingGroup(req) {
 
 async function createReadingGroup(req) {
   try {
-    const { SkillName, SectionName, Description, parts } = req.body;
+    const { SkillName, SectionName, Description, parts, Status } = req.body;
     const userId = req.user?.userId;
 
     if (!SkillName || !parts || !SectionName) {
@@ -556,12 +585,13 @@ async function createReadingGroup(req) {
     // -----------------------------------------
     // 1) CREATE SECTION
     // -----------------------------------------
-    const section = await Section.create({
-      ID: uuidv4(),
-      SkillID: skill.ID,
-      Name: SectionName,
-      Description: Description?.trim() || null,
-    });
+      const section = await Section.create({
+        ID: uuidv4(),
+        SkillID: skill.ID,
+        Name: SectionName,
+        Description: Description?.trim() || null,
+        Status: Status || 'draft',
+      });
 
     // 2) TRANSACTION
     const result = await sequelize.transaction(async (t) => {
@@ -724,16 +754,17 @@ async function createWritingGroup(req) {
     // 1) CREATE SECTION
     // ================================================
     const section = await Section.create(
-      {
-        ID: uuidv4(),
-        SkillID: skill.ID,
-        Name: SectionName,
-        Description: Description?.trim() || null,
-        CreatedBy: userId,
-        UpdatedBy: userId,
-      },
-      { transaction: t }
-    );
+        {
+          ID: uuidv4(),
+          SkillID: skill.ID,
+          Name: SectionName,
+          Description: Description?.trim() || null,
+          Status: Status || 'draft',
+          CreatedBy: userId,
+          UpdatedBy: userId,
+        },
+        { transaction: t }
+      );
 
     // ================================================
     // 2) ALWAYS CREATE 4 PARTS (no update)
@@ -929,7 +960,7 @@ async function createWritingGroup(req) {
 
 async function createListeningGroup(req) {
   try {
-    const { SkillName, SectionName, Description, parts } = req.body;
+    const { SkillName, SectionName, Description, parts, Status } = req.body;
     const userId = req.user?.userId;
 
     if (!SkillName || !SectionName || !parts) {
@@ -1131,7 +1162,7 @@ async function createListeningGroup(req) {
 
 async function createGrammarAndVocabGroup(req) {
   try {
-    const { SkillName, SectionName, Description, parts } = req.body;
+    const { SkillName, SectionName, Description, parts, Status } = req.body;
     const userId = req.user?.userId;
 
     if (!SkillName || !SectionName || !parts) {
@@ -1166,6 +1197,7 @@ async function createGrammarAndVocabGroup(req) {
           SkillID: skill.ID,
           Name: SectionName,
           Description: Description?.trim() || null,
+          Status: Status || 'draft',
           CreatedBy: userId,
           UpdatedBy: userId,
         },
@@ -1750,25 +1782,32 @@ async function updateSpeakingGroup(sectionId, payload) {
   const t = await sequelize.transaction();
 
   try {
-    const { SectionName, Description, parts, userId } = payload;
+    const { SectionName, Description, parts, userId, Status } = payload;
 
-    const speakingValidationError = validateSpeakingPayload({
-      SectionName,
-      parts,
-    });
-    if (speakingValidationError) {
-      await t.rollback();
-      return {
-        status: 400,
-        message: speakingValidationError,
-      };
+    const isDraft = Status === 'draft';
+    if (!isDraft) {
+      const speakingValidationError = validateSpeakingPayload({
+        SectionName,
+        parts,
+      });
+      if (speakingValidationError) {
+        await t.rollback();
+        return {
+          status: 400,
+          message: speakingValidationError,
+        };
+      }
     }
 
     /** =============================
      * 1. Update Section
      * ============================= */
+    const updateData = { Name: SectionName, Description: Description?.trim() || null };
+    if (payload.Status) {
+      updateData.Status = payload.Status;
+    }
     await Section.update(
-      { Name: SectionName, Description: Description?.trim() || null },
+      updateData,
       { where: { ID: sectionId }, transaction: t }
     );
 
@@ -1818,24 +1857,25 @@ async function updateSpeakingGroup(sectionId, payload) {
        * 3.1 Upsert Part
        * ============================= */
       if (partRow) {
-        // UPDATE existing part
-        await partRow.update(
-          {
-            Content: incoming.name,
-            Sequence: incomingSequence,
-            UpdatedBy: userId,
-          },
-          { transaction: t }
-        );
+        // UPDATE existing part - preserve existing name if draft sends undefined
+        const updateFields = {
+          Sequence: incomingSequence,
+          UpdatedBy: userId,
+        };
+        if (incoming.name) {
+          updateFields.Content = incoming.name;
+        }
+        await partRow.update(updateFields, { transaction: t });
         partId = partRow.ID;
         console.info(`[Speaking Update]   -> Updated Part: ${key} (ID: ${partId})`);
       } else {
-        // CREATE new part
+        // CREATE new part - use default name for drafts
+        const partName = incoming.name || `Part ${incomingSequence || (key.replace('part', ''))}`;
         partRow = await Part.create(
           {
             ID: uuidv4(),
             SkillID: section.SkillID,
-            Content: incoming.name,
+            Content: partName,
             Sequence: incomingSequence,
             CreatedBy: userId,
             UpdatedBy: userId,
@@ -1876,6 +1916,11 @@ async function updateSpeakingGroup(sectionId, payload) {
       for (const q of newItems) {
         const qSequence = q.sequence || 1;
         const qContent = q.content || q.value || '';
+        
+        // Skip empty questions for draft updates
+        if (isDraft && !qContent.trim()) {
+          continue;
+        }
         
         // Find by ID or Fallback to Sequence
         let questionRow = oldQuestions.find(oldQ => oldQ.ID === q.id) || existingQuestionSequenceMap[qSequence];
@@ -1935,15 +1980,24 @@ async function updateReadingGroup(sectionId, payload) {
   const t = await sequelize.transaction();
 
   try {
-    const { SectionName, Description, parts, userId } = payload;
+    const { SectionName, Description, parts, userId, Status } = payload;
 
-    if (!SectionName || !Array.isArray(parts)) {
-      throw new Error('SectionName and parts are required');
+    console.log('[READING UPDATE] sectionId:', sectionId, 'Status:', Status, 'parts count:', parts?.length);
+
+    const isDraft = Status === 'draft';
+
+    if (!isDraft) {
+      if (!SectionName || !Array.isArray(parts)) {
+        throw new Error('SectionName and parts are required');
+      }
     }
 
     // 1) Update SECTION
+    const updateData = { Name: SectionName, Description: Description?.trim() || null };
+    if (Status) updateData.Status = Status;
+    console.log('[READING UPDATE] Updating section with Status:', Status);
     await Section.update(
-      { Name: SectionName, Description: Description?.trim() || null },
+      updateData,
       { where: { ID: sectionId }, transaction: t }
     );
 
@@ -1965,51 +2019,56 @@ async function updateReadingGroup(sectionId, payload) {
 
     const existingParts = section.Parts || [];
     const existingPartMap = {};
+    const partSeqMap = {};
 
     existingParts.forEach((p) => {
       existingPartMap[p.ID] = p;
+      partSeqMap[p.Sequence] = p;
     });
 
-    const incomingPartIds = parts.map((p) => p.PartID).filter((id) => !!id); // ensure non-null
+    const incomingPartIds = parts.map((p) => p.PartID).filter((id) => !!id);
 
     const existingPartIds = existingParts.map((p) => p.ID);
 
-    // 3) Delete parts that are truly removed
-    const removedPartIds = existingPartIds.filter(
-      (id) => !incomingPartIds.includes(id)
-    );
+    // 3) Delete parts that are truly removed (only for published)
+    if (!isDraft) {
+      const removedPartIds = existingPartIds.filter(
+        (id) => !incomingPartIds.includes(id)
+      );
 
-    if (removedPartIds.length > 0) {
-      // delete questions first
-      await Question.destroy({
-        where: { PartID: removedPartIds },
-        transaction: t,
-      });
+      if (removedPartIds.length > 0) {
+        await Question.destroy({
+          where: { PartID: removedPartIds },
+          transaction: t,
+        });
 
-      // delete mapping
-      await SectionPart.destroy({
-        where: { SectionID: sectionId, PartID: removedPartIds },
-        transaction: t,
-      });
+        await SectionPart.destroy({
+          where: { SectionID: sectionId, PartID: removedPartIds },
+          transaction: t,
+        });
 
-      // delete part rows
-      await Part.destroy({
-        where: { ID: removedPartIds },
-        transaction: t,
-      });
+        await Part.destroy({
+          where: { ID: removedPartIds },
+          transaction: t,
+        });
+      }
     }
 
     const finalParts = [];
 
     // 4) Process all incoming parts
     for (const p of parts) {
+      console.log('[READING UPDATE] Processing part:', p.PartName, 'PartID:', p.PartID, 'Sequence:', p.Sequence);
+      // Skip empty parts for drafts
+      if (isDraft && !p.PartName?.trim() && !p.Content?.trim()) {
+        continue;
+      }
+
       let partRow;
 
       // UPDATE existing
-      if (p.PartID) {
+      if (p.PartID && existingPartMap[p.PartID]) {
         partRow = existingPartMap[p.PartID];
-        if (!partRow) throw new Error(`PartID ${p.PartID} not found`);
-
         await partRow.update(
           {
             Type: p.Type,
@@ -2018,21 +2077,41 @@ async function updateReadingGroup(sectionId, payload) {
           },
           { transaction: t }
         );
-      }
-
-      // CREATE new
-      if (!p.PartID) {
-        partRow = await Part.create(
-          {
-            ID: uuidv4(),
-            SkillID: section.SkillID,
-            Type: p.Type,
-            PartName: p.PartName,
-            Content: p.Content,
-            Sequence: p.Sequence,
-          },
-          { transaction: t }
-        );
+      } else if (isDraft && !p.PartID) {
+        // For drafts: find by sequence or create new
+        const existingBySeq = partSeqMap[p.Sequence];
+        if (existingBySeq) {
+          partRow = existingBySeq;
+          await partRow.update(
+            {
+              Type: p.Type,
+              Content: p.PartName || partRow.Content,
+              Sequence: p.Sequence,
+            },
+            { transaction: t }
+          );
+        } else {
+          partRow = await Part.create(
+            {
+              ID: uuidv4(),
+              SkillID: section.SkillID,
+              Type: p.Type,
+              Content: p.PartName || `Part ${p.Sequence}`,
+              Sequence: p.Sequence,
+              CreatedBy: userId,
+              UpdatedBy: userId,
+            },
+            { transaction: t }
+          );
+          await SectionPart.create(
+            { SectionID: sectionId, PartID: partRow.ID, Sequence: p.Sequence },
+            { transaction: t }
+          );
+        }
+      } else if (!p.PartID) {
+        throw new Error(`Missing PartID for part`);
+      } else {
+        throw new Error(`PartID ${p.PartID} not found`);
       }
 
       // 5) Update/create single question per part
@@ -2041,10 +2120,17 @@ async function updateReadingGroup(sectionId, payload) {
         transaction: t,
       });
 
+      const qContent = p.Content || '';
+      if (isDraft && !qContent.trim() && !p.AnswerContent) {
+        // Skip empty questions for drafts
+        finalParts.push(partRow);
+        continue;
+      }
+
       if (oldQ) {
         const updatePayload = {
           Type: p.Type,
-          Content: p.Content,
+          Content: qContent,
           AnswerContent: p.AnswerContent,
         };
 
@@ -2059,7 +2145,7 @@ async function updateReadingGroup(sectionId, payload) {
           PartID: partRow.ID,
           Type: p.Type,
           Sequence: 1,
-          Content: p.Content,
+          Content: qContent,
           AnswerContent: p.AnswerContent,
         };
 
@@ -2109,29 +2195,37 @@ async function updateWritingGroup(sectionId, payload) {
   const t = await sequelize.transaction();
 
   try {
-    const { SectionName, Description, parts, userId } = payload;
+    const { SectionName, Description, parts, userId, Status } = payload;
 
-    if (!SectionName || !parts) {
-      throw new Error('SectionName and parts are required');
-    }
+    const isDraft = Status === 'draft';
 
-    const writingValidationError = validateWritingPayload({
-      SectionName,
-      parts,
-    });
-    if (writingValidationError) {
-      await t.rollback();
-      return {
-        status: 400,
-        message: writingValidationError,
-      };
+    if (!isDraft) {
+      if (!SectionName || !parts) {
+        throw new Error('SectionName and parts are required');
+      }
+
+      const writingValidationError = validateWritingPayload({
+        SectionName,
+        parts,
+      });
+      if (writingValidationError) {
+        await t.rollback();
+        return {
+          status: 400,
+          message: writingValidationError,
+        };
+      }
     }
 
     // ================================================
     // 1) UPDATE SECTION
     // ================================================
+    const updateData = { Name: SectionName, Description: Description?.trim() || null };
+    if (Status) {
+      updateData.Status = Status;
+    }
     await Section.update(
-      { Name: SectionName, Description: Description?.trim() || null },
+      updateData,
       { where: { ID: sectionId }, transaction: t }
     );
 
@@ -2159,26 +2253,90 @@ async function updateWritingGroup(sectionId, payload) {
     // 2) UPDATE ALL 4 PARTS (name + subContent)
     // ================================================
     const updatedParts = {};
+    const partSeqMap = {};
+    oldParts.forEach((p) => { partSeqMap[p.Sequence] = p; });
 
     for (const key of ['part1', 'part2', 'part3', 'part4']) {
       const incoming = parts[key];
+      const seqNum = parseInt(key.replace('part', ''));
 
-      if (!incoming || !incoming.PartID) {
+      // For drafts, skip parts that don't exist yet
+      if (!incoming) {
+        if (isDraft) continue;
+        throw new Error(`Missing data for ${key}`);
+      }
+
+      // For drafts, allow missing PartID (create new part)
+      if (!isDraft && !incoming.PartID) {
         throw new Error(`Missing PartID for ${key}`);
       }
 
-      const dbPart = oldPartMap[incoming.PartID];
-      if (!dbPart) throw new Error(`PartID ${incoming.PartID} not found`);
+      if (incoming.PartID) {
+        const dbPart = oldPartMap[incoming.PartID];
+        if (!dbPart) throw new Error(`PartID ${incoming.PartID} not found`);
 
-      await dbPart.update(
-        {
-          Content: incoming.name,
-          SubContent: incoming.subContent || null,
-        },
-        { transaction: t }
-      );
+        await dbPart.update(
+          {
+            Content: incoming.name,
+            SubContent: incoming.subContent || null,
+          },
+          { transaction: t }
+        );
 
-      updatedParts[key] = dbPart;
+        updatedParts[key] = dbPart;
+      } else if (isDraft) {
+        // For drafts: find existing part by sequence first, then create if none
+        let dbPart = partSeqMap[seqNum];
+
+        if (dbPart) {
+          // Update existing part
+          await dbPart.update(
+            {
+              Content: incoming.name || dbPart.Content,
+              SubContent: incoming.subContent || dbPart.SubContent || null,
+            },
+            { transaction: t }
+          );
+          updatedParts[key] = dbPart;
+        } else {
+          // Create new part for draft
+          const newPart = await Part.create(
+            {
+              ID: uuidv4(),
+              SkillID: section.SkillID,
+              Content: incoming.name || `${key.charAt(0).toUpperCase() + key.slice(1)}`,
+              SubContent: incoming.subContent || null,
+              Sequence: seqNum,
+              CreatedBy: userId,
+              UpdatedBy: userId,
+            },
+            { transaction: t }
+          );
+
+          // Link part to section via SectionPart
+          await SectionPart.create(
+            {
+              SectionID: sectionId,
+              PartID: newPart.ID,
+              Sequence: seqNum,
+            },
+            { transaction: t }
+          );
+
+          updatedParts[key] = newPart;
+        }
+      }
+    }
+
+    // ================================================
+    // 3) DELETE OLD QUESTIONS (for drafts, delete all; for published, delete by part)
+    // ================================================
+    const partIds = Object.values(updatedParts).map((p) => p.ID);
+    if (partIds.length > 0) {
+      await Question.destroy({
+        where: { PartID: partIds },
+        transaction: t,
+      });
     }
 
     // ================================================
@@ -2187,15 +2345,17 @@ async function updateWritingGroup(sectionId, payload) {
     const bulkQuestions = [];
 
     /** ------------ PART 1 ------------- */
-    if (Array.isArray(parts.part1.questions)) {
+    if (updatedParts.part1 && Array.isArray(parts.part1?.questions)) {
       parts.part1.questions.forEach((q, idx) => {
+        const content = q.question || '';
+        if (isDraft && !content.trim()) return;
         bulkQuestions.push({
           ID: uuidv4(),
           Type: 'writing',
           SkillID: section.SkillID,
           PartID: updatedParts.part1.ID,
           Sequence: idx + 1,
-          Content: q.question,
+          Content: content,
           SubContent: null,
           GroupContent: null,
           AudioKeys: null,
@@ -2209,35 +2369,40 @@ async function updateWritingGroup(sectionId, payload) {
     }
 
     /** ------------ PART 2 ------------- */
-    if (parts.part2.question) {
-      bulkQuestions.push({
-        ID: uuidv4(),
-        Type: 'writing',
-        SkillID: section.SkillID,
-        PartID: updatedParts.part2.ID,
-        Sequence: 1,
-        Content: parts.part2.question,
-        SubContent: '',
-        GroupContent: null,
-        AudioKeys: null,
-        ImageKeys: null,
-        AnswerContent: null,
-        Tags: normalizeTags(parts.part2?.Tags || parts.part2?.tags),
-        CreatedBy: userId,
-        UpdatedBy: userId,
-      });
+    if (updatedParts.part2 && parts.part2?.question) {
+      const content = parts.part2.question;
+      if (!isDraft || content.trim()) {
+        bulkQuestions.push({
+          ID: uuidv4(),
+          Type: 'writing',
+          SkillID: section.SkillID,
+          PartID: updatedParts.part2.ID,
+          Sequence: 1,
+          Content: content,
+          SubContent: '',
+          GroupContent: null,
+          AudioKeys: null,
+          ImageKeys: null,
+          AnswerContent: null,
+          Tags: normalizeTags(parts.part2?.Tags || parts.part2?.tags),
+          CreatedBy: userId,
+          UpdatedBy: userId,
+        });
+      }
     }
 
     /** ------------ PART 3 ------------- */
-    if (Array.isArray(parts.part3.chats)) {
+    if (updatedParts.part3 && Array.isArray(parts.part3?.chats)) {
       parts.part3.chats.forEach((c, idx) => {
+        const content = `${c.speaker}: ${c.question}`;
+        if (isDraft && !content.trim()) return;
         bulkQuestions.push({
           ID: uuidv4(),
           Type: 'writing',
           SkillID: section.SkillID,
           PartID: updatedParts.part3.ID,
           Sequence: idx + 1,
-          Content: `${c.speaker}: ${c.question}`,
+          Content: content,
           SubContent: '',
           GroupContent: null,
           AudioKeys: null,
@@ -2251,42 +2416,50 @@ async function updateWritingGroup(sectionId, payload) {
     }
 
     /** ------------ PART 4 ------------- */
-    if (parts.part4.q1) {
-      bulkQuestions.push({
-        ID: uuidv4(),
-        Type: 'writing',
-        SkillID: section.SkillID,
-        PartID: updatedParts.part4.ID,
-        Sequence: 1,
-        Content: parts.part4.q1,
-        SubContent: `* (Up to ${parts.part4.q1_wordLimit} words allowed)`,
-        GroupContent: null,
-        AudioKeys: null,
-        ImageKeys: null,
-        AnswerContent: null,
-        Tags: normalizeTags(parts.part4?.q1_tags || parts.part4?.q1Tags || parts.part4?.Tags || parts.part4?.tags),
-        CreatedBy: userId,
-        UpdatedBy: userId,
-      });
-    }
+    if (updatedParts.part4) {
+      if (parts.part4.q1) {
+        const content = parts.part4.q1;
+        if (!isDraft || content.trim()) {
+          bulkQuestions.push({
+            ID: uuidv4(),
+            Type: 'writing',
+            SkillID: section.SkillID,
+            PartID: updatedParts.part4.ID,
+            Sequence: 1,
+            Content: content,
+            SubContent: `* (Up to ${parts.part4.q1_wordLimit} words allowed)`,
+            GroupContent: null,
+            AudioKeys: null,
+            ImageKeys: null,
+            AnswerContent: null,
+            Tags: normalizeTags(parts.part4?.q1_tags || parts.part4?.q1Tags || parts.part4?.Tags || parts.part4?.tags),
+            CreatedBy: userId,
+            UpdatedBy: userId,
+          });
+        }
+      }
 
-    if (parts.part4.q2) {
-      bulkQuestions.push({
-        ID: uuidv4(),
-        Type: 'writing',
-        SkillID: section.SkillID,
-        PartID: updatedParts.part4.ID,
-        Sequence: 2,
-        Content: parts.part4.q2,
-        SubContent: `* (Up to ${parts.part4.q2_wordLimit} words allowed)`,
-        GroupContent: null,
-        AudioKeys: null,
-        ImageKeys: null,
-        AnswerContent: null,
-        Tags: normalizeTags(parts.part4?.q2_tags || parts.part4?.q2Tags || parts.part4?.Tags || parts.part4?.tags),
-        CreatedBy: userId,
-        UpdatedBy: userId,
-      });
+      if (parts.part4.q2) {
+        const content = parts.part4.q2;
+        if (!isDraft || content.trim()) {
+          bulkQuestions.push({
+            ID: uuidv4(),
+            Type: 'writing',
+            SkillID: section.SkillID,
+            PartID: updatedParts.part4.ID,
+            Sequence: 2,
+            Content: content,
+            SubContent: `* (Up to ${parts.part4.q2_wordLimit} words allowed)`,
+            GroupContent: null,
+            AudioKeys: null,
+            ImageKeys: null,
+            AnswerContent: null,
+            Tags: normalizeTags(parts.part4?.q2_tags || parts.part4?.q2Tags || parts.part4?.Tags || parts.part4?.tags),
+            CreatedBy: userId,
+            UpdatedBy: userId,
+          });
+        }
+      }
     }
 
     if (bulkQuestions.length > 0) {
@@ -2300,13 +2473,16 @@ async function updateWritingGroup(sectionId, payload) {
 
     for (let i = 0; i < partOrder.length; i++) {
       const partRow = updatedParts[partOrder[i]];
-      await SectionPart.update(
-        { Sequence: i + 1 },
+      if (!partRow) continue;
+
+      await SectionPart.upsert(
         {
-          where: {
-            SectionID: sectionId,
-            PartID: partRow.ID,
-          },
+          SectionID: sectionId,
+          PartID: partRow.ID,
+          Sequence: i + 1,
+        },
+        {
+          conflictFields: ['SectionID', 'PartID'],
           transaction: t,
         }
       );
@@ -2326,22 +2502,26 @@ async function updateListeningGroup(sectionId, payload) {
   const t = await sequelize.transaction();
 
   try {
-    const { SkillName, SectionName, Description, parts, userId } = payload;
+    const { SkillName, SectionName, Description, parts, userId, Status } = payload;
 
-    if (!SkillName || !SectionName || !parts) {
-      throw new Error('SkillName, SectionName and parts{} are required');
-    }
+    const isDraft = Status === 'draft';
 
-    const listeningValidationError = validateListeningPayload({
-      SectionName,
-      parts,
-    });
-    if (listeningValidationError) {
-      await t.rollback();
-      return {
-        status: 400,
-        message: listeningValidationError,
-      };
+    if (!isDraft) {
+      if (!SkillName || !SectionName || !parts) {
+        throw new Error('SkillName, SectionName and parts{} are required');
+      }
+
+      const listeningValidationError = validateListeningPayload({
+        SectionName,
+        parts,
+      });
+      if (listeningValidationError) {
+        await t.rollback();
+        return {
+          status: 400,
+          message: listeningValidationError,
+        };
+      }
     }
 
     // 1) Validate Skill
@@ -2365,52 +2545,93 @@ async function updateListeningGroup(sectionId, payload) {
     if (!section) throw new Error('Section not found');
 
     const oldPartsMap = {};
-    section.Parts.forEach((p) => (oldPartsMap[p.ID] = p));
+    const partSeqMap = {};
+    section.Parts.forEach((p) => {
+      oldPartsMap[p.ID] = p;
+      partSeqMap[p.Sequence] = p;
+    });
 
     // =====================================================
     // 3) UPDATE SECTION
     // =====================================================
-    await section.update(
-      {
-        Name: SectionName,
-        Description: Description?.trim() || null,
-        UpdatedBy: userId,
-      },
-      { transaction: t }
-    );
+    const updateData = {
+      Name: SectionName,
+      Description: Description?.trim() || null,
+      UpdatedBy: userId,
+    };
+    if (Status) updateData.Status = Status;
+    await section.update(updateData, { transaction: t });
 
     // =====================================================
-    // 4) UPDATE 4 PARTS (no delete)
+    // 4) UPDATE 4 PARTS
     // =====================================================
     const updatedParts = {};
 
     for (const key of ['part1', 'part2', 'part3', 'part4']) {
       const incoming = parts[key];
+      const seqNum = parseInt(key.replace('part', ''));
 
-      if (!incoming || !incoming.partId)
+      if (!incoming) {
+        if (isDraft) continue;
+        throw new Error(`Missing data for ${key}`);
+      }
+
+      if (incoming.partId && oldPartsMap[incoming.partId]) {
+        // Update existing part
+        const dbPart = oldPartsMap[incoming.partId];
+        await dbPart.update(
+          {
+            Content: incoming.name,
+            Sequence: incoming.sequence || dbPart.Sequence,
+            UpdatedBy: userId,
+          },
+          { transaction: t }
+        );
+        updatedParts[key] = dbPart;
+      } else if (isDraft && !incoming.partId) {
+        // For drafts: find by sequence or create new
+        const existingBySeq = partSeqMap[seqNum];
+        if (existingBySeq) {
+          await existingBySeq.update(
+            {
+              Content: incoming.name || existingBySeq.Content,
+              UpdatedBy: userId,
+            },
+            { transaction: t }
+          );
+          updatedParts[key] = existingBySeq;
+        } else {
+          const newPart = await Part.create(
+            {
+              ID: uuidv4(),
+              SkillID: section.SkillID,
+              Content: incoming.name || `Part ${seqNum}`,
+              Sequence: seqNum,
+              CreatedBy: userId,
+              UpdatedBy: userId,
+            },
+            { transaction: t }
+          );
+          await SectionPart.create(
+            { SectionID: sectionId, PartID: newPart.ID, Sequence: seqNum },
+            { transaction: t }
+          );
+          updatedParts[key] = newPart;
+        }
+      } else if (!incoming.partId) {
         throw new Error(`Missing partId for ${key}`);
-
-      const dbPart = oldPartsMap[incoming.partId];
-      if (!dbPart) throw new Error(`PartID ${incoming.partId} not found`);
-
-      await dbPart.update(
-        {
-          Content: incoming.name,
-          Sequence: incoming.sequence || dbPart.Sequence,
-          UpdatedBy: userId,
-        },
-        { transaction: t }
-      );
-
-      updatedParts[key] = dbPart;
+      } else {
+        throw new Error(`PartID ${incoming.partId} not found`);
+      }
     }
 
     // =====================================================
-    // 5) QUESTION SYNC (update, create, delete inside part)
+    // 5) QUESTION SYNC
     // =====================================================
     for (const key of ['part1', 'part2', 'part3', 'part4']) {
       const incoming = parts[key];
       const dbPart = updatedParts[key];
+      if (!dbPart) continue;
 
       const dbQuestions = dbPart.Questions || [];
       const dbQMap = {};
@@ -2418,7 +2639,12 @@ async function updateListeningGroup(sectionId, payload) {
 
       const feQuestions = incoming.questions || [];
 
-      const feIds = feQuestions.map((q) => q.questionId).filter(Boolean);
+      // For drafts, skip empty questions
+      const filteredQs = isDraft
+        ? feQuestions.filter((q) => q.Content?.trim() || q.AnswerContent)
+        : feQuestions;
+
+      const feIds = filteredQs.map((q) => q.questionId).filter(Boolean);
 
       // ===== DELETE questions removed on FE =====
       const deleteIds = dbQuestions
@@ -2433,8 +2659,8 @@ async function updateListeningGroup(sectionId, payload) {
       }
 
       // ===== CREATE OR UPDATE =====
-      for (let i = 0; i < feQuestions.length; i++) {
-        const q = feQuestions[i];
+      for (let i = 0; i < filteredQs.length; i++) {
+        const q = filteredQs[i];
 
         if (q.questionId && dbQMap[q.questionId]) {
           // ---------------- UPDATE ----------------
@@ -2479,17 +2705,15 @@ async function updateListeningGroup(sectionId, payload) {
     }
 
     // =====================================================
-    // 6) Update SectionPart sequence only (no delete)
+    // 6) Update SectionPart sequence
     // =====================================================
     const order = ['part1', 'part2', 'part3', 'part4'];
     for (let i = 0; i < order.length; i++) {
       const p = updatedParts[order[i]];
-      await SectionPart.update(
-        { Sequence: i + 1 },
-        {
-          where: { SectionID: sectionId, PartID: p.ID },
-          transaction: t,
-        }
+      if (!p) continue;
+      await SectionPart.upsert(
+        { SectionID: sectionId, PartID: p.ID, Sequence: i + 1 },
+        { conflictFields: ['SectionID', 'PartID'], transaction: t }
       );
     }
 
@@ -2512,10 +2736,14 @@ async function updateGrammarAndVocabGroup(sectionId, payload) {
   const t = await sequelize.transaction();
 
   try {
-    const { SkillName, SectionName, Description, parts, userId } = payload;
+    const { SkillName, SectionName, Description, parts, userId, Status } = payload;
 
-    if (!SkillName || !SectionName || !parts) {
-      throw new Error('SkillName, SectionName and parts{} are required');
+    const isDraft = Status === 'draft';
+
+    if (!isDraft) {
+      if (!SkillName || !SectionName || !parts) {
+        throw new Error('SkillName, SectionName and parts{} are required');
+      }
     }
 
     // =====================================================
@@ -2525,7 +2753,7 @@ async function updateGrammarAndVocabGroup(sectionId, payload) {
     if (!skill) throw new Error(`Skill "${SkillName}" does not exist`);
 
     // =====================================================
-    // 2) Load Section + Parts + Questions (NOT DELETE PART)
+    // 2) Load Section + Parts + Questions
     // =====================================================
     const section = await Section.findOne({
       where: { ID: sectionId },
@@ -2544,144 +2772,160 @@ async function updateGrammarAndVocabGroup(sectionId, payload) {
 
     const oldPartsMap = {};
     section.Parts.forEach((p) => (oldPartsMap[p.ID] = p));
+    const partSeqMap = {};
+    section.Parts.forEach((p) => { partSeqMap[p.Sequence] = p; });
 
     // =====================================================
     // 3) UPDATE SECTION NAME
     // =====================================================
-    await section.update(
-      {
-        Name: SectionName,
-        Description: Description?.trim() || null,
-        UpdatedBy: userId,
-      },
-      { transaction: t }
-    );
+    const updateData = { Name: SectionName, Description: Description?.trim() || null, UpdatedBy: userId };
+    if (Status) updateData.Status = Status;
+    await section.update(updateData, { transaction: t });
 
     // =====================================================
-    // 4) UPDATE PARTS ONLY (NO DELETE, NO CREATE)
+    // 4) UPDATE PARTS
     // =====================================================
     const updatedParts = {};
 
     for (const key of ['part1', 'part2']) {
       const incoming = parts[key];
-      if (!incoming || !incoming.id)
-        throw new Error(`Missing partId for ${key}`);
+      const seqNum = key === 'part1' ? 1 : 2;
 
-      const dbPart = oldPartsMap[incoming.id];
-      if (!dbPart) throw new Error(`PartID ${incoming.id} not found`);
-
-      await dbPart.update(
-        {
-          Content: incoming.name,
-          Sequence: incoming.sequence || dbPart.Sequence,
-          UpdatedBy: userId,
-        },
-        { transaction: t }
-      );
-
-      updatedParts[key] = dbPart;
-    }
-
-    // =====================================================
-    // 5) QUESTION SYNC (Update, Create, Delete)
-    // =====================================================
-    for (const key of ['part1', 'part2']) {
-      const incomingPart = parts[key];
-      const dbPart = updatedParts[key];
-
-      const dbQuestions = dbPart.Questions || [];
-      const dbQMap = {};
-      dbQuestions.forEach((q) => (dbQMap[q.ID] = q));
-
-      const feQuestions = incomingPart.questions || [];
-
-      const feIds = feQuestions.map((q) => q.ID).filter(Boolean);
-
-      // ---------------- DELETE removed questions ----------------
-      const deleteIds = dbQuestions
-        .filter((q) => !feIds.includes(q.ID))
-        .map((q) => q.ID);
-
-      if (deleteIds.length) {
-        await Question.destroy(
-          { where: { ID: deleteIds } },
-          { transaction: t }
-        );
+      if (!incoming) {
+        if (isDraft) continue;
+        throw new Error(`Missing data for ${key}`);
       }
 
-      // ---------------- CREATE OR UPDATE ----------------
-      for (let i = 0; i < feQuestions.length; i++) {
-        const q = feQuestions[i];
+      if (incoming.id && oldPartsMap[incoming.id]) {
+        // Update existing part
+        const dbPart = oldPartsMap[incoming.id];
+        await dbPart.update(
+          {
+            Content: incoming.name,
+            Sequence: incoming.sequence || dbPart.Sequence,
+            UpdatedBy: userId,
+          },
+          { transaction: t }
+        );
+        updatedParts[key] = dbPart;
+      } else if (isDraft) {
+        // For drafts: find existing part by sequence, or create new
+        let dbPart = partSeqMap[seqNum];
 
-        if (q.ID && dbQMap[q.ID]) {
-          // ---------------- UPDATE ----------------
-          await dbQMap[q.ID].update(
+        if (dbPart) {
+          await dbPart.update(
             {
-              Type: q.Type,
-              Content: q.Content,
-              SubContent: q.SubContent || null,
-              GroupContent: q.AnswerContent?.groupContent || null,
-              AudioKeys: q.AudioKeys || null,
-              ImageKeys: q.ImageKeys || null,
-              AnswerContent: q.AnswerContent,
-              Tags: normalizeTags(q.Tags || q.tags),
-              Sequence: i + 1,
+              Content: incoming.name || dbPart.Content,
               UpdatedBy: userId,
             },
             { transaction: t }
           );
+          updatedParts[key] = dbPart;
         } else {
-          // ---------------- CREATE ----------------
-          await Question.create(
+          const newPart = await Part.create(
             {
               ID: uuidv4(),
-              Type: q.Type,
-              SkillID: skill.ID,
-              PartID: dbPart.ID,
-              Sequence: i + 1,
-              Content: q.Content,
-              SubContent: q.SubContent || null,
-              GroupContent: q.AnswerContent?.groupContent || null,
-              AudioKeys: q.AudioKeys || null,
-              ImageKeys: q.ImageKeys || null,
-              AnswerContent: q.AnswerContent,
-              Tags: normalizeTags(q.Tags || q.tags),
+              SkillID: section.SkillID,
+              Content: incoming.name || `${key.charAt(0).toUpperCase() + key.slice(1)}`,
+              Sequence: seqNum,
               CreatedBy: userId,
               UpdatedBy: userId,
             },
             { transaction: t }
           );
+          await SectionPart.create(
+            { SectionID: sectionId, PartID: newPart.ID, Sequence: seqNum },
+            { transaction: t }
+          );
+          updatedParts[key] = newPart;
         }
+      } else {
+        throw new Error(`Missing partId for ${key}`);
       }
     }
 
     // =====================================================
-    // 6) Update SectionPart Sequence (NOT DELETE MAPPING)
+    // 5) DELETE OLD QUESTIONS
     // =====================================================
-    const order = ['part1', 'part2'];
-    for (let i = 0; i < order.length; i++) {
-      const p = updatedParts[order[i]];
-      await SectionPart.update(
-        { Sequence: i + 1 },
-        {
-          where: { SectionID: sectionId, PartID: p.ID },
-          transaction: t,
-        }
+    const partIds = Object.values(updatedParts).map((p) => p.ID);
+    if (partIds.length > 0) {
+      await Question.destroy({ where: { PartID: partIds }, transaction: t });
+    }
+
+    // =====================================================
+    // 6) CREATE NEW QUESTIONS
+    // =====================================================
+    const bulkQuestions = [];
+
+    if (updatedParts.part1 && Array.isArray(parts.part1?.questions)) {
+      parts.part1.questions.forEach((q, idx) => {
+        const content = q.Content || q.content || '';
+        if (isDraft && !content.trim()) return;
+        bulkQuestions.push({
+          ID: uuidv4(),
+          Type: q.Type || 'multiple-choice',
+          SkillID: section.SkillID,
+          PartID: updatedParts.part1.ID,
+          Sequence: idx + 1,
+          Content: content,
+          SubContent: null,
+          GroupContent: null,
+          ImageKeys: q.ImageKeys || null,
+          AudioKeys: null,
+          AnswerContent: q.AnswerContent || null,
+          Tags: normalizeTags(q.Tags || q.tags),
+          CreatedBy: userId,
+          UpdatedBy: userId,
+        });
+      });
+    }
+
+    if (updatedParts.part2 && Array.isArray(parts.part2?.questions)) {
+      parts.part2.questions.forEach((q, idx) => {
+        const content = q.Content || q.content || '';
+        if (isDraft && !content.trim()) return;
+        bulkQuestions.push({
+          ID: uuidv4(),
+          Type: q.Type || 'matching',
+          SkillID: section.SkillID,
+          PartID: updatedParts.part2.ID,
+          Sequence: idx + 26,
+          Content: content,
+          SubContent: q.SubContent || null,
+          GroupContent: null,
+          ImageKeys: q.ImageKeys || null,
+          AudioKeys: null,
+          AnswerContent: q.AnswerContent || null,
+          Tags: normalizeTags(q.Tags || q.tags),
+          CreatedBy: userId,
+          UpdatedBy: userId,
+        });
+      });
+    }
+
+    if (bulkQuestions.length > 0) {
+      await Question.bulkCreate(bulkQuestions, { transaction: t });
+    }
+
+    // =====================================================
+    // 7) Update SectionPart
+    // =====================================================
+    const partOrder = ['part1', 'part2'];
+    for (let i = 0; i < partOrder.length; i++) {
+      const partRow = updatedParts[partOrder[i]];
+      if (!partRow) continue;
+      await SectionPart.upsert(
+        { SectionID: sectionId, PartID: partRow.ID, Sequence: i + 1 },
+        { conflictFields: ['SectionID', 'PartID'], transaction: t }
       );
     }
 
     await t.commit();
-    return {
-      status: 200,
-      message: 'Grammar & Vocabulary updated successfully',
-    };
-  } catch (err) {
+    return { status: 200, message: 'Grammar & Vocab group updated successfully' };
+  } catch (error) {
     await t.rollback();
-    console.error(err);
-    return {
-      status: 500,
-      message: err.message,
-    };
+    console.error(error);
+    return { status: 500, message: error.message };
   }
 }
 

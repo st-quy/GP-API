@@ -34,6 +34,19 @@ const updateSection = async (req, res) => {
 };
 
 /* ============================================
+   UPDATE SECTION STATUS
+============================================ */
+const updateSectionStatus = async (req, res) => {
+  try {
+    const result = await SectionService.updateSectionStatus(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    console.error('Error updating section status:', error.message);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+/* ============================================
    DELETE SECTION
 ============================================ */
 const deleteSection = async (req, res) => {
@@ -59,10 +72,33 @@ const getSectionDetail = async (req, res) => {
   }
 };
 
+const createDraftSection = async (req, res) => {
+  try {
+    const result = await SectionService.createDraftSection(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    console.error('Error creating draft section:', error.message);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+const getDraftBySkill = async (req, res) => {
+  try {
+    const result = await SectionService.getDraftBySkill(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    console.error('Error fetching draft:', error.message);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 module.exports = {
   getAllSection,
   createSection,
   updateSection,
+  updateSectionStatus,
   deleteSection,
   getSectionDetail,
+  createDraftSection,
+  getDraftBySkill,
 };
