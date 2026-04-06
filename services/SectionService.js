@@ -131,7 +131,7 @@ async function getAllSection(req) {
 
 async function createSection(req) {
   try {
-    const { Name, SkillID } = req.body;
+    const { Name, SkillID, Status } = req.body;
     if (!Name || !SkillID) {
       return {
         status: 400,
@@ -148,6 +148,7 @@ async function createSection(req) {
     const newSection = await Section.create({
       Name,
       SkillID,
+      Status: Status || 'draft',
     });
 
     const userIdFromReq = req.user?.userId || null;
@@ -844,10 +845,125 @@ async function getSectionDetail(req) {
   }
 }
 
+async function createDraftSection(req) {
+  try {
+    const { skillName } = req.body;
+    if (!skillName) {
+      return { status: 400, message: 'skillName is required' };
+    }
+    const skill = await Skill.findOne({ where: { Name: skillName.toUpperCase() } });
+    if (!skill) {
+      return { status: 404, message: `Skill "${skillName}" not found` };
+    }
+
+    // Check if user already has a draft for this skill
+    const userId = req.user?.userId;
+    const existingDraft = await Section.findOne({
+      where: { SkillID: skill.ID, Status: 'draft', Name: 'Untitled Draft' },
+      order: [['createdAt', 'DESC']],
+    });
+
+    if (existingDraft) {
+      return {
+        status: 200,
+        message: 'Existing draft found',
+        data: existingDraft,
+        isExisting: true,
+      };
+    }
+
+    const newSection = await Section.create({
+      Name: 'Untitled Draft',
+      SkillID: skill.ID,
+      Status: 'draft',
+    });
+
+    return {
+      status: 201,
+      message: 'Draft section created',
+      data: newSection,
+      isExisting: false,
+    };
+  } catch (error) {
+    throw new Error(`Error creating draft section: ${error.message}`);
+  }
+}
+
+async function getDraftBySkill(req) {
+  try {
+    const { skillName } = req.params;
+    if (!skillName) {
+      return { status: 400, message: 'skillName is required' };
+    }
+    const skill = await Skill.findOne({ where: { Name: skillName.toUpperCase() } });
+    if (!skill) {
+      return { status: 404, message: `Skill "${skillName}" not found` };
+    }
+
+    const draft = await Section.findOne({
+      where: { SkillID: skill.ID, Status: 'draft', Name: 'Untitled Draft' },
+      order: [['createdAt', 'DESC']],
+    });
+
+    if (!draft) {
+      return { status: 404, message: 'No draft found' };
+    }
+
+    return { status: 200, message: 'Draft found', data: draft };
+  } catch (error) {
+    throw new Error(`Error fetching draft: ${error.message}`);
+  }
+}
+
+async function updateSectionStatus(req) {
+  try {
+    const { id } = req.params;
+    const { Status } = req.body;
+
+    if (!id) {
+      return { status: 400, message: 'Section ID is required' };
+    }
+
+    if (!Status || !['draft', 'published'].includes(Status)) {
+      return { status: 400, message: 'Invalid status. Must be "draft" or "published"' };
+    }
+
+    const section = await Section.findByPk(id);
+    if (!section) {
+      return { status: 404, message: `Section with id ${id} not found` };
+    }
+
+    const oldStatus = section.Status;
+    section.Status = Status;
+    await section.save();
+
+    const userIdFromReq = req.user?.userId || null;
+    logActivity({
+      userId: userIdFromReq,
+      action: 'update_status',
+      entityType: 'section',
+      entityID: section.ID,
+      entityName: section.Name,
+      details: `Section status changed from "${oldStatus}" to "${Status}"`,
+    });
+
+    return {
+      status: 200,
+      message: 'Section status updated successfully',
+      data: section,
+    };
+  } catch (error) {
+    throw new Error(`Error updating section status: ${error.message}`);
+  }
+}
+
 module.exports = {
   getAllSection,
   updateSection,
   deleteSection,
   createSection,
   getSectionDetail,
+  updateSectionStatus,
+  createDraftSection,
+  getDraftBySkill,
 };

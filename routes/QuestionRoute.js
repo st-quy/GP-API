@@ -4,6 +4,7 @@ const { authorize } = require('../middleware/AuthMiddleware');
 
 const {
   createQuestionGroup,
+  createSpeakingGroup,
   getQuestionsByPartID,
   getQuestionsByTopicID,
   getQuestionByID,
@@ -20,6 +21,7 @@ router.get('/part/:partId', getQuestionsByPartID);
 router.get('/topic/:topicId', getQuestionsByTopicID);
 // router.get('/:questionId', getQuestionByID);
 router.post('/', authorize(['teacher', 'admin']), createQuestionGroup);
+router.post('/speaking', authorize(['teacher', 'admin']), createSpeakingGroup);
 router.get('/detail', getQuestionGroupDetail);
 router.put('/update/:sectionId', authorize(['teacher', 'admin']), updateQuestionGroup);
 router.put('/:questionId', authorize(['teacher', 'admin']), updateQuestion);
