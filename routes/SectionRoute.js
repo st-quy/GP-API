@@ -12,6 +12,7 @@ const {
   getSectionDetail,
   createDraftSection,
   getDraftBySkill,
+  duplicateSection,
 } = require('../controller/SectionController');
 
 router.get('/', getAllSection);
@@ -23,5 +24,6 @@ router.get('/:id', getSectionDetail);
 router.post('/', authorize(['teacher', 'admin']), createSection);
 router.post('/draft', authorize(['teacher', 'admin']), createDraftSection);
 router.get('/draft/:skillName', authorize(['teacher', 'admin']), getDraftBySkill);
+router.post('/:id/duplicate', authorize(['teacher', 'admin']), duplicateSection);
 
 module.exports = router;
