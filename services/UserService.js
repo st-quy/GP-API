@@ -24,6 +24,7 @@ const buildUniqueFieldMessage = (fieldName) => {
 async function registerUser(data) {
   try {
     const { email, password, teacherCode, phone, role } = data;
+    const normalizedPhone = phone ? String(phone).replace(/\D/g, '') : null;
 
     // --- Validate email format ---
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -35,12 +36,12 @@ async function registerUser(data) {
     }
 
     // --- Validate phone ---
-    if (phone) {
-      const phoneRegex = /^\d{10}$/;
-      if (!phoneRegex.test(phone)) {
+    if (normalizedPhone) {
+      const phoneRegex = /^0\d{9}$/;
+      if (!phoneRegex.test(normalizedPhone)) {
         return {
           status: 400,
-          message: `Invalid phone format: ${phone}`,
+          message: `Invalid phone format: ${normalizedPhone}`,
         };
       }
     }
@@ -55,7 +56,7 @@ async function registerUser(data) {
     // --- Create User ---
     const newUser = await User.create({
       ...data,
-      phone: phone ? String(phone) : null,
+      phone: normalizedPhone,
       teacherCode: teacherCode ? String(teacherCode) : null,
       password: hashedPassword,
     });
@@ -294,14 +295,15 @@ async function updateUser(userId, data) {
     }
 
     if (data.phone) {
-      const phoneRegex = /^\d{10}$/;
-      if (!phoneRegex.test(data.phone)) {
-        throw new Error(`Invalid phone format: ${data.phone}`);
+      const normalizedPhone = String(data.phone).replace(/\D/g, '');
+      const phoneRegex = /^0\d{9}$/;
+      if (!phoneRegex.test(normalizedPhone)) {
+        throw new Error(`Invalid phone format: ${normalizedPhone}`);
       }
 
       const existingPhone = await User.findOne({
         where: {
-          phone: data.phone,
+          phone: normalizedPhone,
           ID: { [Op.ne]: userId },
         },
       });
@@ -309,6 +311,8 @@ async function updateUser(userId, data) {
       if (existingPhone) {
         throw new Error('Phone already exists');
       }
+
+      data.phone = normalizedPhone;
     }
 
     await user.update(data);
