@@ -340,27 +340,32 @@ async function calculatePoints(req) {
     let totalPoints = 0;
     const logs = [];
 
+    // Define normalizeKey function for consistent key normalization
+    const normalizeKey = (k) => {
+      return String(k).trim().split('.')[0];
+    };
+
     answers.forEach((answer) => {
-      if (!answer.AnswerText) return;
+       if (!answer.AnswerText) return;
 
-      const questionId = answer.QuestionID;
-      const type = answer.Question.Type;
-      const skillType = answer.Question.Part.Skill.Name;
+       const questionId = answer.QuestionID;
+       const type = answer.Question.Type;
+       const skillType = answer.Question.Part.Skill.Name;
 
-      if (skillType !== skillName) return;
+       if (skillType !== skillName) return;
 
-      const correctContent = answer.Question.AnswerContent;
-      const rawStudentAnswer = answer.AnswerText;
-      let isCorrect = false;
+       const correctContent = answer.Question.AnswerContent;
+       const rawStudentAnswer = answer.AnswerText;
+       let isCorrect = false;
 
-      const logItem = {
-        questionId,
-        type,
-        studentAnswer: null,
-        correctAnswer: null,
-        result: 'incorrect',
-        pointAdded: 0,
-      };
+       const logItem = {
+         questionId,
+         type,
+         studentAnswer: null,
+         correctAnswer: null,
+         result: 'incorrect',
+         pointAdded: 0,
+       };
 
       // ================================
       // MULTIPLE CHOICE
@@ -378,87 +383,132 @@ async function calculatePoints(req) {
         }
       }
 
-      // ================================
-      // MATCHING
-      // ================================
-      else if (type === 'matching') {
-        const studentAnswers = JSON.parse(rawStudentAnswer);
-        const correctAnswers = correctContent.correctAnswer;
+        // ================================
+        // MATCHING
+        // ================================
+        else if (type === 'matching') {
+          let studentAnswers = [];
+          try {
+            studentAnswers = JSON.parse(rawStudentAnswer);
+          } catch (e) {
+            console.error('Error parsing matching answer:', e);
+          }
+          const correctAnswers = correctContent.correctAnswer;
 
-        logItem.studentAnswer = studentAnswers;
-        logItem.correctAnswer = correctAnswers;
+          logItem.studentAnswer = studentAnswers;
+          logItem.correctAnswer = correctAnswers;
 
-        // Check if ALL pairs match (All-or-Nothing logic to match checkCorrectness)
-        const allMatched = correctAnswers.every((correct) => {
-          return studentAnswers.some(
-            (s) =>
-              s.left.trim() === correct.left.trim() &&
-              s.right.trim() === correct.right.trim()
-          );
-        });
+          // Build student answers map for direct lookup (matching frontend logic)
+          const studentAnswersMap = {};
+          studentAnswers.forEach(sa => {
+            const key = normalizeKey(sa.left || sa.key || sa.id);
+            if (key) {
+              // Take value if exists, otherwise right (matching frontend: item.value || item.right)
+              studentAnswersMap[key] = sa.right || sa.value || sa.answerText || String(sa);
+            }
+          });
+          
+          // Check if ALL pairs match (All-or-Nothing logic) - matching frontend logic
+          const allMatched = correctAnswers.every((correct) => {
+            const correctKey = normalizeKey(correct.left || correct.key || correct.id);
+            const correctVal = correct.right || correct.value; // Matching frontend: item.value || item.right
+            const userVal = studentAnswersMap[correctKey];
+            return (
+              String(userVal || '').trim().toLowerCase() === String(correctVal || '').trim().toLowerCase()
+            );
+          });
 
-        if (allMatched && correctAnswers.length > 0) {
-          isCorrect = true;
-          totalPoints += pointPerQuestion;
-        }
+          if (allMatched && correctAnswers.length > 0) {
+            isCorrect = true;
+            totalPoints += pointPerQuestion;
+          }
         }
 
         // ================================
         // ORDERING
         // ================================
         else if (type === 'ordering') {
-        const studentAnswers = JSON.parse(rawStudentAnswer).sort(
-          (a, b) => a.value - b.value
-        );
-        const correctAnswers = correctContent.correctAnswer;
-
-        logItem.studentAnswer = studentAnswers;
-        logItem.correctAnswer = correctAnswers;
-
-        // Check if ALL items are in correct order (All-or-Nothing)
-        let allCorrect = studentAnswers.length === correctAnswers.length;
-        if (allCorrect) {
-          for (let i = 0; i < correctAnswers.length; i++) {
-            if (studentAnswers[i].key.trim() !== correctAnswers[i].key.trim()) {
-              allCorrect = false;
-              break;
-            }
+          let studentAnswers = [];
+          try {
+            studentAnswers = JSON.parse(rawStudentAnswer);
+          } catch (e) {
+            console.error('Error parsing ordering answer:', e);
           }
-        }
+          const correctAnswers = correctContent.correctAnswer;
 
-        if (allCorrect && correctAnswers.length > 0) {
-          isCorrect = true;
-          totalPoints += pointPerQuestion;
-        }
-      } else if (type === 'dropdown-list') {
-        let studentAnswers = [];
-        try {
-          studentAnswers = JSON.parse(answer.AnswerText);
-        } catch (e) {
-          console.error('Error parsing dropdown answer:', e);
-        }
-        const correctAnswers = correctContent.correctAnswer.filter(
-          (item) => item.key !== '0'
-        );
+          logItem.studentAnswer = studentAnswers;
+          logItem.correctAnswer = correctAnswers;
 
-        const normalizeKey = (k) => {
-          return String(k).trim().split('.')[0];
-        };
-        correctAnswers.forEach((correct) => {
-          const correctKey = normalizeKey(correct.key);
+          // Build student answers map for direct lookup (matching frontend logic)
+          const studentAnswersMap = {};
+          studentAnswers.forEach(sa => {
+            const key = normalizeKey(sa.key || sa.left || sa.id);
+            if (key) {
+              // For ordering, frontend joins as "key.value", so we need to check both
+              // But since we're comparing keys only for ordering, we just store the key
+              studentAnswersMap[key] = sa.key || sa.left || sa.id || String(sa);
+            }
+          });
+          
+          // Check if ALL items are in correct order (All-or-Nothing) - matching frontend logic
+          // Frontend creates string like "key.value" for both user and correct answers
+          const allMatched = correctAnswers.every((correct) => {
+            const correctKey = normalizeKey(correct.key || correct.left || correct.id);
+            const correctValue = correct.value || correct.right;
+            const userVal = studentAnswersMap[correctKey];
+            // For ordering, we check if the sequence matches by comparing the joined strings
+            // But simpler: just check if keys match in correct order (as frontend does)
+            return (
+              String(userVal || '').trim() === String(correctKey || '').trim()
+            );
+          });
 
-          const match = studentAnswers.find(
-            (sa) => normalizeKey(sa.key) === correctKey
-          );
+          // Additional check: all correct answers must be present in user answers
+          const allPresent = correctAnswers.every((correct) => {
+            const correctKey = normalizeKey(correct.key || correct.left || correct.id);
+            return studentAnswersMap[correctKey] !== undefined;
+          });
 
-          if (
-            match &&
-            String(match.value).trim() === String(correct.value).trim()
-          ) {
+          if (allMatched && allPresent && correctAnswers.length > 0) {
+            isCorrect = true;
             totalPoints += pointPerQuestion;
           }
-        });
-      } else if (type === 'listening-questions-group') {
+        } else if (type === 'dropdown-list') {
+          let studentAnswers = [];
+          try {
+            studentAnswers = JSON.parse(answer.AnswerText);
+          } catch (e) {
+            console.error('Error parsing dropdown answer:', e);
+          }
+          const correctAnswers = correctContent.correctAnswer.filter(
+            (item) => item.key !== '0'
+           );
+           
+           // Build student answers map for direct lookup (matching frontend logic)
+           const studentAnswersMap = {};
+           studentAnswers.forEach(sa => {
+             const key = normalizeKey(sa.key || sa.left || sa.id || sa.questionId);
+             if (key) {
+               // Take value if exists, otherwise right (matching frontend: item.value || item.right)
+               studentAnswersMap[key] = sa.value || sa.right || sa.answerText || String(sa);
+             }
+           });
+           
+           // Check if ALL pairs match (All-or-Nothing logic) - matching frontend logic
+           const allMatched = correctAnswers.every((correct) => {
+             const correctKey = normalizeKey(correct.key || correct.left || correct.id || correct.questionId);
+             const correctVal = correct.value || correct.right; // Matching frontend: item.value || item.right
+             const userVal = studentAnswersMap[correctKey];
+             return (
+               String(userVal || '').trim().toLowerCase() === String(correctVal || '').trim().toLowerCase()
+             );
+           });
+
+          if (allMatched && correctAnswers.length > 0) {
+            isCorrect = true;
+            totalPoints += pointPerQuestion;
+          }
+       } else if (type === 'listening-questions-group') {
         const studentAnswers = JSON.parse(rawStudentAnswer);
         const correctList = correctContent.groupContent.listContent;
 
@@ -738,7 +788,20 @@ async function getFullExamReview(sessionParticipantId, user) {
       userAnswerText,
       correctAnswerContent
     ) => {
-      if (!userAnswerText) return false;
+      if (!userAnswerText || !correctAnswerContent) return false;
+
+      const normalizeKey = (k) => {
+        return String(k || '').trim().split('.')[0];
+      };
+
+      const safeParse = (str) => {
+        if (typeof str === 'object' && str !== null) return str;
+        try {
+          return JSON.parse(str);
+        } catch {
+          return null;
+        }
+      };
 
       let userAnsObj = userAnswerText;
       if (typeof userAnswerText === 'string') {
@@ -746,57 +809,66 @@ async function getFullExamReview(sessionParticipantId, user) {
       }
 
       try {
-        if (questionType === 'multiple-choice') {
-          const correctVal =
-            typeof correctAnswerContent?.correctAnswer === 'string'
-              ? correctAnswerContent.correctAnswer
-              : correctAnswerContent?.correctAnswer?.value;
-          return (
-            String(userAnswerText).trim().toLowerCase() ===
-            String(correctVal).trim().toLowerCase()
-          );
+        const type = (questionType || '').toLowerCase();
+
+        // 1) MULTIPLE CHOICE
+        if (type === 'multiple-choice') {
+          const correctVal = typeof correctAnswerContent.correctAnswer === 'string'
+            ? correctAnswerContent.correctAnswer
+            : correctAnswerContent.correctAnswer?.value || '';
+          
+          return String(userAnswerText).trim().toLowerCase() === String(correctVal).trim().toLowerCase();
         }
 
-        if (['dropdown-list', 'matching', 'ordering'].includes(questionType)) {
-          if (
-            !Array.isArray(userAnsObj) ||
-            !Array.isArray(correctAnswerContent?.correctAnswer)
-          )
-            return false;
+        // 2) DROPDOWN / MATCHING / ORDERING (All-or-Nothing)
+        if (['dropdown-list', 'matching', 'ordering', 'dropdown-matching', 'full-matching'].includes(type)) {
+          const correctAnswers = Array.isArray(correctAnswerContent.correctAnswer)
+            ? correctAnswerContent.correctAnswer
+            : [];
+          
+          if (correctAnswers.length === 0) return false;
+          if (!Array.isArray(userAnsObj)) return false;
 
-          return correctAnswerContent.correctAnswer.every((correctItem) => {
-            const match = userAnsObj.find(
-              (u) =>
-                String(u.key) === String(correctItem.key) ||
-                String(u.left) === String(correctItem.left)
-            );
-            if (!match) return false;
-            return (
-              String(match.value).trim().toLowerCase() ===
-                String(correctItem.value).trim().toLowerCase() ||
-              String(match.right).trim().toLowerCase() ===
-                String(correctItem.right).trim().toLowerCase()
-            );
+          const studentAnswersMap = {};
+          userAnsObj.forEach(sa => {
+            const key = normalizeKey(sa.left || sa.key || sa.id || sa.questionId);
+            if (key) {
+              studentAnswersMap[key] = sa.right || sa.value || sa.answerText || String(sa);
+            }
+          });
+
+          return correctAnswers.every((correct) => {
+            const correctKey = normalizeKey(correct.left || correct.key || correct.id || correct.questionId);
+            if (correctKey === '0') return true; // Skip "done for you" items if any
+
+            const correctVal = correct.right || correct.value;
+            const userVal = studentAnswersMap[correctKey];
+            
+            return String(userVal || '').trim().toLowerCase() === String(correctVal || '').trim().toLowerCase();
           });
         }
 
-        if (questionType === 'listening-questions-group') {
-          const correctList =
-            correctAnswerContent?.groupContent?.listContent || [];
+        // 3) LISTENING GROUP (All-or-Nothing for the group)
+        if (type === 'listening-questions-group') {
+          const correctList = correctAnswerContent.groupContent?.listContent || [];
+          if (correctList.length === 0) return false;
           if (!Array.isArray(userAnsObj)) return false;
+
           return correctList.every((subQ) => {
             const userSubAns = userAnsObj.find(
               (u) => String(u.ID || u.id) === String(subQ.ID)
             );
             return (
               userSubAns &&
-              String(userSubAns.answer).trim().toLowerCase() ===
+              String(userSubAns.answer || userSubAns.value).trim().toLowerCase() ===
                 String(subQ.correctAnswer).trim().toLowerCase()
             );
           });
         }
+
         return false;
       } catch (e) {
+        console.error('Error in checkCorrectness review:', e);
         return false;
       }
     };
