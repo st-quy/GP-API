@@ -670,7 +670,8 @@ async function getFullExamReview(sessionParticipantId, user) {
       return { status: 404, message: 'Session participant not found' };
     }
 
-    if (user && user.role === 'student') {
+    const userRoles = Array.isArray(user?.role) ? user.role : [user?.role];
+    if (user && userRoles.includes('student')) {
       const session = sessionParticipant.Session;
       const now = new Date();
       
@@ -680,7 +681,7 @@ async function getFullExamReview(sessionParticipantId, user) {
 
       if (
         session.status !== 'COMPLETE' || 
-        !sessionParticipant.IsPublished || 
+        !session.isPublished || 
         new Date(session.endTime) >= now
       ) {
         return { 
