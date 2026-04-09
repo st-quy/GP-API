@@ -8,6 +8,7 @@ const {
   Topic,
 } = require('../models');
 const { Op } = require('sequelize');
+const { logActivity } = require('./ActivityLogService');
 
 async function resolveSkill({ skillId, skillName }) {
   if (!skillId && !skillName) {
@@ -33,7 +34,7 @@ async function resolveSkill({ skillId, skillName }) {
 
 async function getAllSection(req) {
   try {
-    const { skillId, skillName, searchName } = req.query || {};
+    const { skillId, skillName, searchName, status } = req.query || {};
 
     const page = Number(req.query.page) || 1;
     const pageSize = Number(req.query.pageSize) || 10;
@@ -41,6 +42,10 @@ async function getAllSection(req) {
     const limit = pageSize;
 
     let where = {};
+
+    if (status) {
+      where.Status = status;
+    }
 
     // Filter skill
     if (skillId || skillName) {
@@ -130,7 +135,7 @@ async function getAllSection(req) {
 
 async function createSection(req) {
   try {
-    const { Name, SkillID } = req.body;
+    const { Name, SkillID, Status } = req.body;
     if (!Name || !SkillID) {
       return {
         status: 400,
@@ -147,7 +152,19 @@ async function createSection(req) {
     const newSection = await Section.create({
       Name,
       SkillID,
+      Status: Status || 'draft',
     });
+
+    const userIdFromReq = req.user?.userId || null;
+    logActivity({
+      userId: userIdFromReq,
+      action: 'create',
+      entityType: 'section',
+      entityID: newSection.ID,
+      entityName: Name,
+      details: `Section "${Name}" created`,
+    });
+
     return {
       status: 201,
       message: 'Section created successfully',
@@ -196,6 +213,16 @@ async function updateSection(req) {
     // 3) Update fields
     section.Name = name || section.Name;
     section.SkillID = updatedSkillId;
+
+    const userIdFromReq = req.user?.userId || null;
+    logActivity({
+      userId: userIdFromReq,
+      action: 'update',
+      entityType: 'section',
+      entityID: id,
+      entityName: name || section.Name,
+      details: `Section "${name || section.Name}" updated`,
+    });
 
     await section.save();
 
@@ -246,7 +273,7 @@ async function deleteSection(req) {
       return {
         status: 400,
         message:
-          'Cannot delete section because it is already used in one or more Topics',
+          'This question cannot be deleted because it is linked to one or more exams. Please remove the question from all exams first.',
         usedByTopics: usageCount,
       };
     }
@@ -280,7 +307,18 @@ async function deleteSection(req) {
     });
 
     // 7) Xóa Section
+    const sectionName = section.Name;
+    const userIdFromReq = req.user?.userId || null;
     await section.destroy({ transaction: t });
+
+    logActivity({
+      userId: userIdFromReq,
+      action: 'delete',
+      entityType: 'section',
+      entityID: id,
+      entityName: sectionName,
+      details: `Section "${sectionName}" deleted`,
+    });
 
     await t.commit();
 
@@ -811,10 +849,507 @@ async function getSectionDetail(req) {
   }
 }
 
+async function createDraftSection(req) {
+  try {
+    const { skillName } = req.body;
+    if (!skillName) {
+      return { status: 400, message: 'skillName is required' };
+    }
+    const skill = await Skill.findOne({ where: { Name: skillName.toUpperCase() } });
+    if (!skill) {
+      return { status: 404, message: `Skill "${skillName}" not found` };
+    }
+
+    // Check if user already has a draft for this skill
+    const userId = req.user?.userId;
+    const existingDraft = await Section.findOne({
+      where: { SkillID: skill.ID, Status: 'draft', Name: 'Untitled Draft' },
+      order: [['createdAt', 'DESC']],
+    });
+
+    if (existingDraft) {
+      return {
+        status: 200,
+        message: 'Existing draft found',
+        data: existingDraft,
+        isExisting: true,
+      };
+    }
+
+    const newSection = await Section.create({
+      Name: 'Untitled Draft',
+      SkillID: skill.ID,
+      Status: 'draft',
+    });
+
+    return {
+      status: 201,
+      message: 'Draft section created',
+      data: newSection,
+      isExisting: false,
+    };
+  } catch (error) {
+    throw new Error(`Error creating draft section: ${error.message}`);
+  }
+}
+
+async function getDraftBySkill(req) {
+  try {
+    const { skillName } = req.params;
+    if (!skillName) {
+      return { status: 400, message: 'skillName is required' };
+    }
+    const skill = await Skill.findOne({ where: { Name: skillName.toUpperCase() } });
+    if (!skill) {
+      return { status: 404, message: `Skill "${skillName}" not found` };
+    }
+
+    const draft = await Section.findOne({
+      where: { SkillID: skill.ID, Status: 'draft', Name: 'Untitled Draft' },
+      order: [['createdAt', 'DESC']],
+    });
+
+    if (!draft) {
+      return { status: 404, message: 'No draft found' };
+    }
+
+    return { status: 200, message: 'Draft found', data: draft };
+  } catch (error) {
+    throw new Error(`Error fetching draft: ${error.message}`);
+  }
+}
+
+async function updateSectionStatus(req) {
+  try {
+    const { id } = req.params;
+    const { Status } = req.body;
+
+    if (!id) {
+      return { status: 400, message: 'Section ID is required' };
+    }
+
+    if (!Status || !['draft', 'published', 'archived'].includes(Status)) {
+      return { status: 400, message: 'Invalid status. Must be "draft", "published", or "archived"' };
+    }
+
+    const section = await Section.findByPk(id);
+    if (!section) {
+      return { status: 404, message: `Section with id ${id} not found` };
+    }
+
+    const oldStatus = section.Status;
+    section.Status = Status;
+    await section.save();
+
+    const userIdFromReq = req.user?.userId || null;
+    logActivity({
+      userId: userIdFromReq,
+      action: 'update_status',
+      entityType: 'section',
+      entityID: section.ID,
+      entityName: section.Name,
+      details: `Section status changed from "${oldStatus}" to "${Status}"`,
+    });
+
+    return {
+      status: 200,
+      message: 'Section status updated successfully',
+      data: section,
+    };
+  } catch (error) {
+    throw new Error(`Error updating section status: ${error.message}`);
+  }
+}
+
+async function archiveSection(req) {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return { status: 400, message: 'Section ID is required' };
+    }
+
+    const section = await Section.findByPk(id);
+    if (!section) {
+      return { status: 404, message: `Section with id ${id} not found` };
+    }
+
+    if (section.Status === 'archived') {
+      return { status: 400, message: 'Section is already archived' };
+    }
+
+    const oldStatus = section.Status;
+    section.Status = 'archived';
+    await section.save();
+
+    const userIdFromReq = req.user?.userId || null;
+    logActivity({
+      userId: userIdFromReq,
+      action: 'archive',
+      entityType: 'section',
+      entityID: section.ID,
+      entityName: section.Name,
+      details: `Section status changed from "${oldStatus}" to "archived"`,
+    });
+
+    return {
+      status: 200,
+      message: 'Section archived successfully',
+      data: section,
+    };
+  } catch (error) {
+    throw new Error(`Error archiving section: ${error.message}`);
+  }
+}
+
+function validateSectionForPublish(section) {
+  const parts = section.Parts || [];
+  const skillName = section.Skill?.Name || '';
+
+  if (skillName === 'GRAMMAR AND VOCABULARY') {
+    return parts.some((p) => {
+      const qs = p.Questions || [];
+      return qs.some((q) => {
+        if (q.Content?.trim()) return true;
+        const ac = q.AnswerContent || {};
+        if (ac.options?.some((o) => o.value?.trim())) return true;
+        if (ac.leftItems?.length > 0 && ac.rightItems?.length > 0) return true;
+        return false;
+      });
+    });
+  } else if (skillName === 'WRITING') {
+    return parts.some((p) => {
+      const qs = p.Questions || [];
+      return qs.some((q) => q.Content?.trim());
+    });
+  } else {
+    return parts.some((p) => {
+      const qs = p.Questions || [];
+      return qs.some((q) => q.Content?.trim() || q.Value?.trim());
+    });
+  }
+}
+
+async function bulkPublishSections(req) {
+  try {
+    const { ids } = req.body;
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return { status: 400, message: 'IDs array is required' };
+    }
+
+    const sections = await Section.findAll({
+      where: { ID: ids },
+      include: [
+        {
+          model: Part,
+          as: 'Parts',
+          include: [{ model: Question, as: 'Questions' }],
+        },
+        {
+          model: Skill,
+          as: 'Skill',
+        },
+      ],
+    });
+
+    if (sections.length === 0) {
+      return { status: 404, message: 'No sections found with the provided IDs' };
+    }
+
+    const userId = req.user?.userId || null;
+    const publishedSections = [];
+    const skippedSections = [];
+
+    for (const section of sections) {
+      if (section.Status !== 'draft') {
+        skippedSections.push({
+          name: section.Name,
+          reason: `Status is '${section.Status}', only draft sections can be published`,
+        });
+        continue;
+      }
+
+      const hasValidContent = validateSectionForPublish(section);
+      if (!hasValidContent) {
+        skippedSections.push({
+          name: section.Name,
+          reason: 'Section has no valid questions with content',
+        });
+        continue;
+      }
+
+      const oldStatus = section.Status;
+      section.Status = 'published';
+      await section.save();
+
+      publishedSections.push(section.Name);
+
+      logActivity({
+        userId,
+        action: 'bulk_update_status',
+        entityType: 'section',
+        entityID: section.ID,
+        entityName: section.Name,
+        details: `Section "${section.Name}" bulk published (status changed from "${oldStatus}" to "published")`,
+      });
+    }
+
+    if (skippedSections.length > 0 && publishedSections.length === 0) {
+      return {
+        status: 400,
+        message: `No sections were published. ${skippedSections.length} section(s) could not be published: ${skippedSections.map(s => `"${s.name}" (${s.reason})`).join('; ')}`,
+      };
+    }
+
+    if (skippedSections.length > 0) {
+      return {
+        status: 200,
+        message: `${publishedSections.length} section(s) published successfully. ${skippedSections.length} section(s) skipped: ${skippedSections.map(s => `"${s.name}" (${s.reason})`).join('; ')}`,
+        partialSuccess: true,
+        skipped: skippedSections,
+      };
+    }
+
+    return {
+      status: 200,
+      message: `${publishedSections.length} section(s) published successfully`,
+    };
+  } catch (error) {
+    return { status: 500, message: `Error bulk publishing sections: ${error.message}` };
+  }
+}
+
+async function bulkDeleteSections(req) {
+  const t = await Section.sequelize.transaction();
+
+  try {
+    const { ids } = req.body;
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return { status: 400, message: 'IDs array is required' };
+    }
+
+    const sections = await Section.findAll({
+      where: { ID: ids },
+      include: [{ model: Topic, as: 'Topics', through: { attributes: [] } }],
+      transaction: t,
+    });
+
+    if (sections.length === 0) {
+      await t.rollback();
+      return { status: 404, message: 'No sections found with the provided IDs' };
+    }
+
+    const userId = req.user?.userId || null;
+    const deletedSections = [];
+    const restrictedSections = [];
+
+    for (const section of sections) {
+      const linkedTopics = section.Topics || [];
+      if (linkedTopics.length > 0) {
+        restrictedSections.push({
+          name: section.Name,
+          topics: linkedTopics.map(t => t.Name),
+        });
+        continue;
+      }
+
+      const sectionParts = await SectionPart.findAll({
+        where: { SectionID: section.ID },
+        transaction: t,
+      });
+
+      const partIDs = sectionParts.map((sp) => sp.PartID);
+
+      if (partIDs.length > 0) {
+        await Question.destroy({
+          where: { PartID: partIDs },
+          transaction: t,
+        });
+
+        await Part.destroy({
+          where: { ID: partIDs },
+          transaction: t,
+        });
+      }
+
+      await SectionPart.destroy({
+        where: { SectionID: section.ID },
+        transaction: t,
+      });
+
+      const sectionName = section.Name;
+      await section.destroy({ transaction: t });
+
+      deletedSections.push(sectionName);
+
+      logActivity({
+        userId,
+        action: 'delete',
+        entityType: 'section',
+        entityID: section.ID,
+        entityName: sectionName,
+        details: `Section "${sectionName}" deleted (bulk delete)`,
+      });
+    }
+
+    await t.commit();
+
+    if (restrictedSections.length > 0 && deletedSections.length === 0) {
+      return {
+        status: 400,
+        message: `No sections were deleted. ${restrictedSections.length} section(s) are linked to exams and cannot be deleted: ${restrictedSections.map(s => `"${s.name}" (linked to: ${s.topics.join(', ')})`).join('; ')}`,
+      };
+    }
+
+    if (restrictedSections.length > 0) {
+      return {
+        status: 200,
+        message: `${deletedSections.length} section(s) deleted successfully. ${restrictedSections.length} section(s) skipped (linked to exams): ${restrictedSections.map(s => `"${s.name}"`).join(', ')}`,
+        partialSuccess: true,
+        skipped: restrictedSections,
+      };
+    }
+
+    return {
+      status: 200,
+      message: `${deletedSections.length} section(s) deleted successfully`,
+    };
+  } catch (error) {
+    await t.rollback();
+    return { status: 500, message: `Error bulk deleting sections: ${error.message}` };
+  }
+}
+
+async function bulkDuplicateSections(req) {
+  const t = await Section.sequelize.transaction();
+  try {
+    const { ids } = req.body;
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return { status: 400, message: 'IDs array is required' };
+    }
+
+    const sections = await Section.findAll({
+      where: { ID: ids },
+      include: [
+        {
+          model: Part,
+          as: 'Parts',
+          include: [{ model: Question, as: 'Questions' }],
+        },
+        {
+          model: Skill,
+          as: 'Skill',
+        },
+      ],
+    });
+
+    if (sections.length === 0) {
+      await t.rollback();
+      return { status: 404, message: 'No sections found with the provided IDs' };
+    }
+
+    const userId = req.user?.userId || null;
+    const duplicatedNames = [];
+    const newSections = [];
+
+    for (const originalSection of sections) {
+      let newName = `${originalSection.Name} (Copy)`;
+      let counter = 1;
+
+      let nameExists = true;
+      while (nameExists) {
+        const existing = await Section.findOne({
+          where: { Name: { [Op.iLike]: newName } }
+        });
+        if (!existing) {
+          nameExists = false;
+        } else {
+          newName = `${originalSection.Name} (Copy ${counter++})`;
+        }
+      }
+
+      const newSection = await Section.create({
+        Name: newName,
+        Description: originalSection.Description,
+        SkillID: originalSection.SkillID,
+        Status: 'draft',
+      }, { transaction: t });
+
+      const sortedParts = (originalSection.Parts || []).sort((a, b) => (a.Sequence ?? 0) - (b.Sequence ?? 0));
+
+      for (const originalPart of sortedParts) {
+        const newPart = await Part.create({
+          Content: originalPart.Content,
+          SubContent: originalPart.SubContent,
+          Sequence: originalPart.Sequence,
+          SkillID: originalPart.SkillID,
+        }, { transaction: t });
+
+        await SectionPart.create({
+          SectionID: newSection.ID,
+          PartID: newPart.ID,
+        }, { transaction: t });
+
+        const sortedQuestions = (originalPart.Questions || []).sort((a, b) => (a.Sequence ?? 0) - (b.Sequence ?? 0));
+
+        for (const originalQuestion of sortedQuestions) {
+          await Question.create({
+            Type: originalQuestion.Type,
+            AudioKeys: originalQuestion.AudioKeys,
+            ImageKeys: originalQuestion.ImageKeys,
+            PartID: newPart.ID,
+            Sequence: originalQuestion.Sequence,
+            Content: originalQuestion.Content,
+            SubContent: originalQuestion.SubContent,
+            GroupContent: originalQuestion.GroupContent,
+            AnswerContent: originalQuestion.AnswerContent,
+            Tags: originalQuestion.Tags,
+            CreatedBy: userId,
+            UpdatedBy: userId,
+          }, { transaction: t });
+        }
+      }
+
+      duplicatedNames.push(newName);
+      newSections.push(newSection);
+
+      logActivity({
+        userId,
+        action: 'create',
+        entityType: 'section',
+        entityID: newSection.ID,
+        entityName: newName,
+        details: `Question Bank "${newName}" created by bulk duplicating "${originalSection.Name}"`,
+      });
+    }
+
+    await t.commit();
+
+    return {
+      status: 201,
+      message: `${duplicatedNames.length} question banks duplicated successfully: ${duplicatedNames.join(', ')}`,
+      data: newSections,
+    };
+  } catch (error) {
+    await t.rollback();
+    return { status: 500, message: `Error bulk duplicating sections: ${error.message}` };
+  }
+}
+
 module.exports = {
   getAllSection,
   updateSection,
   deleteSection,
   createSection,
   getSectionDetail,
+  updateSectionStatus,
+  archiveSection,
+  createDraftSection,
+  getDraftBySkill,
+  bulkPublishSections,
+  bulkDeleteSections,
+  bulkDuplicateSections,
 };

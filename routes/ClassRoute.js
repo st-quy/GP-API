@@ -8,6 +8,7 @@ const {
   updateClass,
   getClassById,
   deleteClass,
+  deleteMultipleClasses,
 } = require("../controller/ClassController");
 
 /**
@@ -93,7 +94,7 @@ router.get("/", getAllClasses);
  *       500:
  *         description: Internal server error
  */
-router.post("/", createClass);
+router.post("/", authorize(['teacher', 'admin']), createClass);
 
 /**
  * @swagger
@@ -122,7 +123,7 @@ router.post("/", createClass);
  *       500:
  *         description: Internal server error
  */
-router.put("/:classId", updateClass);
+router.put("/:classId", authorize(['teacher', 'admin']), updateClass);
 
 /**
  * @swagger
@@ -172,6 +173,8 @@ router.get("/:classId", getClassById);
  *       500:
  *         description: Internal server error
  */
-router.delete("/:classId", deleteClass);
+router.delete("/:classId", authorize(['teacher', 'admin']), deleteClass);
+router.delete("/", authorize(['teacher', 'admin']), deleteMultipleClasses);
+router.delete("/", authorize(['teacher', 'admin']), deleteMultipleClasses);
 
 module.exports = router;

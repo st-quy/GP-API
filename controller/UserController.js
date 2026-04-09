@@ -99,6 +99,16 @@ const getAllUsersByRoleTeacher = async (req, res) => {
   }
 };
 
+const getAllUsersByRoleStudent = async (req, res) => {
+  try {
+    const result = await userService.getAllUsersByRoleStudent(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    console.error('Error fetching users with role student:', error);
+    return res.status(400).json({ message: error.message });
+  }
+};
+
 const deleteUserAccount = async (req, res) => {
   try {
     const userId = req.params.userId;
@@ -107,6 +117,16 @@ const deleteUserAccount = async (req, res) => {
   } catch (error) {
     console.error('Error deleting user account:', error);
     return res.status(400).json({ message: error.message });
+  }
+};
+
+const bulkDeleteUsers = async (req, res) => {
+  try {
+    const result = await userService.bulkDeleteUsers(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    console.error('Error bulk deleting users:', error);
+    return res.status(500).json({ message: error.message });
   }
 };
 
@@ -120,5 +140,7 @@ module.exports = {
   resetPassword,
   logoutUser,
   getAllUsersByRoleTeacher,
+  getAllUsersByRoleStudent,
   deleteUserAccount,
+  bulkDeleteUsers,
 };

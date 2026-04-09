@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { authorize } = require('../middleware/AuthMiddleware');
 const {
   getTopicWithRelations,
   getTopicByName,
@@ -10,6 +11,10 @@ const {
   removePartFromTopic,
   deleteTopic,
   updateTopic,
+  duplicateTopic,
+  bulkUpdateTopicsStatus,
+  deleteMultipleTopics,
+  bulkDuplicateTopics,
 } = require('../controller/TopicController');
 /**
  * @swagger
@@ -58,7 +63,7 @@ const {
  *       500:
  *         description: Internal server error
  */
-router.post('', createTopic);
+router.post('', authorize(), createTopic);
 
 /**
  * @swagger
@@ -164,6 +169,12 @@ router.post('/remove-part', removePartFromTopic);
 
 router.get('/detail', getTopicByName);
 
+router.patch('/bulk-status', authorize(['admin']), bulkUpdateTopicsStatus);
+
+router.delete('/bulk', authorize(['teacher', 'admin']), deleteMultipleTopics);
+
+router.post('/bulk-duplicate', authorize(['teacher', 'admin']), bulkDuplicateTopics);
+
 /**
  * @swagger
  * /topics/{id}:
@@ -185,7 +196,7 @@ router.get('/detail', getTopicByName);
  *       500:
  *         description: Internal server error
  */
-router.delete('/:id', deleteTopic);
+router.delete('/:id', authorize(['teacher', 'admin']), deleteTopic);
 
 router.get('/:id', getTopicWithRelations);
 
@@ -229,7 +240,30 @@ router.get('/:id', getTopicWithRelations);
  *       500:
  *         description: Internal server error
  */
-router.put('/:id', updateTopic);
+router.put('/:id', authorize(), updateTopic);
+
+/**
+ * @swagger
+ * /topics/{id}/duplicate:
+ *   post:
+ *     summary: Duplicate a topic by ID
+ *     tags: [Topic]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID of the topic to duplicate
+ *     responses:
+ *       201:
+ *         description: Topic duplicated successfully
+ *       404:
+ *         description: Topic not found
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/:id/duplicate', authorize(['teacher', 'admin']), duplicateTopic);
 
 
 module.exports = router;

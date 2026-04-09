@@ -1,4 +1,5 @@
 const SectionService = require('../services/SectionService');
+const QuestionService = require('../services/QuestionService');
 
 const getAllSection = async (req, res) => {
   try {
@@ -34,6 +35,19 @@ const updateSection = async (req, res) => {
 };
 
 /* ============================================
+   UPDATE SECTION STATUS
+============================================ */
+const updateSectionStatus = async (req, res) => {
+  try {
+    const result = await SectionService.updateSectionStatus(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    console.error('Error updating section status:', error.message);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+/* ============================================
    DELETE SECTION
 ============================================ */
 const deleteSection = async (req, res) => {
@@ -59,10 +73,91 @@ const getSectionDetail = async (req, res) => {
   }
 };
 
+const createDraftSection = async (req, res) => {
+  try {
+    const result = await SectionService.createDraftSection(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    console.error('Error creating draft section:', error.message);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+const getDraftBySkill = async (req, res) => {
+  try {
+    const result = await SectionService.getDraftBySkill(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    console.error('Error fetching draft:', error.message);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+const archiveSection = async (req, res) => {
+  try {
+    const result = await SectionService.archiveSection(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    console.error('Error archiving section:', error.message);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+/* ============================================
+   DUPLICATE SECTION
+============================================ */
+const duplicateSection = async (req, res) => {
+  try {
+    const result = await QuestionService.duplicateSection(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    console.error('Error duplicating section:', error.message);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+const bulkPublishSections = async (req, res) => {
+  try {
+    const result = await SectionService.bulkPublishSections(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    console.error('Error bulk publishing sections:', error.message);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+const bulkDeleteSections = async (req, res) => {
+  try {
+    const result = await SectionService.bulkDeleteSections(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    console.error('Error bulk deleting sections:', error.message);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+const bulkDuplicateSections = async (req, res) => {
+  try {
+    const result = await SectionService.bulkDuplicateSections(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    console.error('Error bulk duplicating sections:', error.message);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 module.exports = {
   getAllSection,
   createSection,
   updateSection,
+  updateSectionStatus,
+  archiveSection,
   deleteSection,
   getSectionDetail,
+  createDraftSection,
+  getDraftBySkill,
+  duplicateSection,
+  bulkPublishSections,
+  bulkDeleteSections,
+  bulkDuplicateSections,
 };

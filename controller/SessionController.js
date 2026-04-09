@@ -130,6 +130,15 @@ async function batchExportReport(req, res) {
   }
 }
 
+async function batchDelete(req, res) {
+  try {
+    const result = await SessionsService.batchDelete(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
 module.exports = {
   getAllSessions,
   getAllSessionsByClass,
@@ -143,4 +152,5 @@ module.exports = {
   batchUpdateStatus,
   batchClone,
   batchExportReport,
+  batchDelete,
 };

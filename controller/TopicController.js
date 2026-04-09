@@ -90,6 +90,42 @@ const updateTopic = async (req, res) => {
   }
 };
 
+const duplicateTopic = async (req, res) => {
+  try {
+    const result = await topicService.duplicateTopic(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+const bulkUpdateTopicsStatus = async (req, res) => {
+  try {
+    const result = await topicService.bulkUpdateStatus(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+const deleteMultipleTopics = async (req, res) => {
+  try {
+    const result = await topicService.deleteMultipleTopics(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+const bulkDuplicateTopics = async (req, res) => {
+  try {
+    const result = await topicService.bulkDuplicateTopics(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+};
+
 module.exports = {
   getTopicWithRelations,
   getTopicByName,
@@ -100,4 +136,8 @@ module.exports = {
   getQuestionsByQuestionSetId,
   deleteTopic,
   updateTopic,
+  duplicateTopic,
+  bulkUpdateTopicsStatus,
+  deleteMultipleTopics,
+  bulkDuplicateTopics,
 };

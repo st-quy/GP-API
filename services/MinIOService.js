@@ -81,7 +81,7 @@ const uploadAudioToMinIO = async (filename) => {
     let uploadUrl = await externalMinioClient.presignedPutObject(BUCKET, objectKey);
     
     // Map internal docker host to localhost for browser accessibility (Local Development Only)
-    if (MINIO_HOST === 'minio.local' || process.env.NODE_ENV === 'development') {
+    if (MINIO_URL_BASE.includes('127.0.0.1') || MINIO_URL_BASE.includes('localhost')) {
       uploadUrl = uploadUrl.replace('minio.local', '127.0.0.1');
     }
 
@@ -107,7 +107,7 @@ const uploadToMinIO = async (type = 'images', originalFileName) => {
     let uploadUrl = await externalMinioClient.presignedPutObject(BUCKET, objectKey);
 
     // Map internal docker host to localhost for browser accessibility (Local Development Only)
-    if (MINIO_HOST === 'minio.local' || process.env.NODE_ENV === 'development') {
+    if (MINIO_URL_BASE.includes('127.0.0.1') || MINIO_URL_BASE.includes('localhost')) {
       uploadUrl = uploadUrl.replace('minio.local', '127.0.0.1');
     }
 

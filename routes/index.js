@@ -28,5 +28,6 @@ router.use('/questions', require('./QuestionRoute'));
 router.use('/parts', require('./PartRoute'));
 router.use('/topicsections', require('./TopicSectionRoute'));
 router.use('/sections', require('./SectionRoute'));
+router.use('/activities', require('./ActivityLogRoute'));
 
 module.exports = router;

@@ -22,6 +22,11 @@ module.exports = (sequelize, DataTypes) => {
         key: 'ID',
       },
     },
+    Status: {
+      type: DataTypes.ENUM(['draft', 'published', 'archived']),
+      allowNull: true,
+      defaultValue: 'draft',
+    },
   });
 
   return Section;

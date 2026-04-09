@@ -3,6 +3,7 @@ const cron = require("node-cron");
 const { Session, SessionParticipant, Class, Topic, sequelize } = require("../models");
 const { removeMinIOAudio } = require("./StudentAnswerService");
 const { SESSION_STATUS, SESSION_STATUS_TRANSITIONS } = require("../helpers/constants");
+const { logActivity } = require("./ActivityLogService");
 
 async function getAllSessions(req) {
   try {
@@ -255,6 +256,17 @@ async function createSession(req) {
       ClassID,
       status,
     });
+
+    const userIdFromReq = req.user?.userId || null;
+    logActivity({
+      userId: userIdFromReq,
+      action: 'create',
+      entityType: 'session',
+      entityID: newSession.ID,
+      entityName: sessionName,
+      details: `Session "${sessionName}" created`,
+    });
+
     return {
       status: 201,
       data: newSession,
@@ -278,6 +290,15 @@ async function updateSession(req) {
       minioAudioRemoved
     } = req.body;
 
+    // Prevent clients from mutating system-managed fields
+    if (typeof isPublished !== "undefined" || typeof minioAudioRemoved !== "undefined") {
+      return {
+        status: 400,
+        message:
+          "The fields 'isPublished' and 'minioAudioRemoved' are system-managed and cannot be updated via this endpoint",
+      };
+    }
+
     const session = await Session.findByPk(sessionId);
     if (!session) {
       return {
@@ -286,30 +307,38 @@ async function updateSession(req) {
       };
     }
 
-    let now = new Date();
-    const isOngoingByTime =
-      session.isPublished &&
-      session.startTime &&
-      session.endTime &&
-      now >= session.startTime &&
-      now <= session.endTime;
+    // Derive whether the session is currently ON_GOING from time and isPublished,
+    // instead of relying solely on the persisted session.status, which may be stale.
+    const now = new Date();
+    const effectiveStartTime = startTime ? new Date(startTime) : session.startTime;
+    const effectiveEndTime = endTime ? new Date(endTime) : session.endTime;
+    const effectiveIsPublished =
+      typeof isPublished === "boolean" ? isPublished : session.isPublished;
 
-    if (session.status === "ON_GOING" || isOngoingByTime) {
+    const isOngoingByTime =
+      effectiveIsPublished &&
+      effectiveStartTime &&
+      effectiveEndTime &&
+      now >= effectiveStartTime &&
+      now <= effectiveEndTime;
+
+    if (isOngoingByTime) {
       return {
         status: 403,
         message: "Cannot edit a session that is currently ON_GOING",
       };
     }
 
-    // Validate examSet if provided (even if null/empty)
-    if (typeof examSet !== "undefined") {
-      // Reject null or empty values explicitly since Session.examSet is allowNull: false
+    // Validate examSet if provided (treat undefined as "not provided")
+    if (examSet !== undefined) {
+      // Explicitly reject null or empty values for non-nullable column
       if (examSet === null || examSet === "") {
         return {
           status: 400,
-          message: "Invalid exam set value",
+          message: "examSet cannot be null or empty",
         };
       }
+
       const checkExistTopic = await Topic.findByPk(examSet);
       if (!checkExistTopic) {
         return {
@@ -319,14 +348,16 @@ async function updateSession(req) {
       }
     }
 
-    // Validate ClassID if provided
+    // Validate ClassID if provided (treat undefined as "not provided")
     if (ClassID !== undefined) {
+      // Explicitly reject null or empty values for non-nullable column
       if (ClassID === null || ClassID === "") {
         return {
           status: 400,
           message: "ClassID cannot be null or empty",
         };
       }
+
       const checkExistClass = await Class.findByPk(ClassID);
       if (!checkExistClass) {
         return {
@@ -350,9 +381,12 @@ async function updateSession(req) {
     }
 
     // Check unique sessionName within the same class (excluding current session)
-    const resolvedClassID = ClassID !== undefined ? ClassID : session.ClassID;
+    const resolvedClassID =
+      ClassID !== undefined ? ClassID : session.ClassID;
     const resolvedSessionName = sessionName || session.sessionName;
-    if (resolvedClassID !== session.ClassID || resolvedSessionName !== session.sessionName) {
+    const sessionNameChanged = sessionName && sessionName !== session.sessionName;
+    const classIdChanged = ClassID && ClassID !== session.ClassID;
+    if (sessionNameChanged || classIdChanged) {
       const duplicate = await Session.findOne({
         where: {
           sessionName: resolvedSessionName,
@@ -369,21 +403,29 @@ async function updateSession(req) {
     }
 
     // Validate and recalculate status when time fields change
-    const resolvedStartTime = startTime ? new Date(startTime) : session.startTime;
-    const resolvedEndTime = endTime ? new Date(endTime) : session.endTime;
+    let resolvedStartTime = session.startTime;
+    let resolvedEndTime = session.endTime;
 
-    // Ensure provided time values are valid dates
-    if (startTime && isNaN(resolvedStartTime.getTime())) {
-      return {
-        status: 400,
-        message: "Invalid start time",
-      };
+    if (startTime !== undefined) {
+      const parsedStart = new Date(startTime);
+      if (Number.isNaN(parsedStart.getTime())) {
+        return {
+          status: 400,
+          message: "Invalid start time",
+        };
+      }
+      resolvedStartTime = parsedStart;
     }
-    if (endTime && isNaN(resolvedEndTime.getTime())) {
-      return {
-        status: 400,
-        message: "Invalid end time",
-      };
+
+    if (endTime !== undefined) {
+      const parsedEnd = new Date(endTime);
+      if (Number.isNaN(parsedEnd.getTime())) {
+        return {
+          status: 400,
+          message: "Invalid end time",
+        };
+      }
+      resolvedEndTime = parsedEnd;
     }
 
     if (resolvedStartTime >= resolvedEndTime) {
@@ -393,11 +435,8 @@ async function updateSession(req) {
       };
     }
 
-    now = new Date();
-    // Determine the effective isPublished value for this update
     const resolvedIsPublished =
-      typeof isPublished === "boolean" ? isPublished : session.isPublished;
-
+      isPublished !== undefined ? isPublished : session.isPublished;
     let newStatus;
     if (resolvedStartTime > now) {
       newStatus = "NOT_STARTED";
@@ -407,16 +446,23 @@ async function updateSession(req) {
       newStatus = "COMPLETE";
     }
 
-    // Enforce invariant: published sessions must be COMPLETE
-    if (resolvedIsPublished) {
+    if (resolvedIsPublished === true) {
       newStatus = "COMPLETE";
     }
+
+    const oldSessionName = session.sessionName;
+    const oldSessionKey = session.sessionKey;
+    const oldStartTime = session.startTime;
+    const oldEndTime = session.endTime;
+    const oldExamSet = session.examSet;
+    const oldClassID = session.ClassID;
+    const oldStatus = session.status;
 
     const updateFields = {
       ...(sessionName !== undefined && { sessionName }),
       ...(sessionKey !== undefined && { sessionKey }),
-      ...(startTime !== undefined && { startTime: resolvedStartTime }),
-      ...(endTime !== undefined && { endTime: resolvedEndTime }),
+      ...(startTime !== undefined && { startTime }),
+      ...(endTime !== undefined && { endTime }),
       ...(examSet !== undefined && { examSet }),
       ...(ClassID !== undefined && { ClassID }),
       ...(isPublished !== undefined && { isPublished }),
@@ -425,6 +471,35 @@ async function updateSession(req) {
     };
 
     await session.update(updateFields);
+
+    const userIdFromReq = req.user?.userId || null;
+
+    const actuallyChanged = [];
+    if (sessionName !== undefined && sessionName !== oldSessionName) actuallyChanged.push('name');
+    if (sessionKey !== undefined && sessionKey !== oldSessionKey) actuallyChanged.push('key');
+    if (startTime !== undefined && new Date(startTime).getTime() !== new Date(oldStartTime).getTime()) actuallyChanged.push('start time');
+    if (endTime !== undefined && new Date(endTime).getTime() !== new Date(oldEndTime).getTime()) actuallyChanged.push('end time');
+    if (examSet !== undefined && examSet !== oldExamSet) actuallyChanged.push('exam set');
+    if (ClassID !== undefined && ClassID !== oldClassID) actuallyChanged.push('class');
+    if (newStatus !== oldStatus) actuallyChanged.push('status');
+
+    let details;
+    if (sessionName !== undefined && sessionName !== oldSessionName) {
+      details = `Session "${oldSessionName}" renamed to "${sessionName}"`;
+    } else if (actuallyChanged.length > 0) {
+      details = `Session "${oldSessionName}" updated: ${actuallyChanged.join(', ')}`;
+    } else {
+      details = `Session "${oldSessionName}" status changed to ${newStatus}`;
+    }
+
+    logActivity({
+      userId: userIdFromReq,
+      action: 'update',
+      entityType: 'session',
+      entityID: sessionId,
+      entityName: sessionName || oldSessionName,
+      details,
+    });
 
     return {
       status: 200,
@@ -441,6 +516,16 @@ async function getSessionDetailById(req) {
 
     const session = await Session.findOne({
       where: { ID: sessionId },
+      attributes: {
+        include: [
+          [
+            sequelize.literal(
+              '(SELECT COUNT(*) FROM "SessionParticipants" WHERE "SessionParticipants"."SessionID" = "Session"."ID")'
+            ),
+            'participantCount',
+          ],
+        ],
+      },
       include: [
         {
           model: SessionParticipant,
@@ -476,6 +561,9 @@ async function getSessionDetailById(req) {
 async function removeSession(req) {
   try {
     const { sessionId } = req.params;
+    const session = await Session.findByPk(sessionId);
+    const sessionName = session ? session.sessionName : sessionId;
+    
     const deletedCount = await Session.destroy({
       where: { ID: sessionId },
     });
@@ -486,6 +574,16 @@ async function removeSession(req) {
         message: "Session not found",
       };
     }
+
+    const userIdFromReq = req.user?.userId || null;
+    logActivity({
+      userId: userIdFromReq,
+      action: 'delete',
+      entityType: 'session',
+      entityID: sessionId,
+      entityName: sessionName,
+      details: `Session "${sessionName}" deleted`,
+    });
 
     return {
       status: 200,
@@ -920,6 +1018,79 @@ async function batchExportReport(req) {
   };
 }
 
+async function batchDelete(req) {
+  const { sessionIds } = req.body;
+
+  if (!sessionIds || !Array.isArray(sessionIds) || sessionIds.length === 0) {
+    return {
+      status: 400,
+      message: "sessionIds must be a non-empty array",
+    };
+  }
+
+  const results = { success: [], failed: [] };
+
+  for (const sessionId of sessionIds) {
+    try {
+      const session = await Session.findByPk(sessionId);
+      if (!session) {
+        results.failed.push({
+          sessionId,
+          reason: "Session not found",
+        });
+        continue;
+      }
+
+      const participantCount = await SessionParticipant.count({
+        where: { SessionID: sessionId },
+      });
+
+      if (participantCount > 0) {
+        results.failed.push({
+          sessionId,
+          sessionName: session.sessionName,
+          reason: `Cannot delete: session has ${participantCount} participant(s)`,
+        });
+        continue;
+      }
+
+      await Session.destroy({
+        where: { ID: sessionId },
+      });
+
+      const userIdFromReq = req.user?.userId || null;
+      logActivity({
+        userId: userIdFromReq,
+        action: 'delete',
+        entityType: 'session',
+        entityID: sessionId,
+        entityName: session.sessionName,
+        details: `Session "${session.sessionName}" deleted`,
+      });
+
+      results.success.push(sessionId);
+    } catch (error) {
+      results.failed.push({
+        sessionId,
+        reason: error.message,
+      });
+    }
+  }
+
+  const httpStatus = results.failed.length === sessionIds.length ? 400
+    : results.failed.length > 0 ? 207
+    : 200;
+
+  const partialSuccess = results.failed.length > 0 && results.success.length > 0;
+
+  return {
+    status: httpStatus,
+    message: `${results.success.length}/${sessionIds.length} sessions deleted`,
+    partialSuccess,
+    data: results,
+  };
+}
+
 module.exports = {
   getAllSessions,
   getSessionByClass,
@@ -934,4 +1105,5 @@ module.exports = {
   batchUpdateStatus,
   batchClone,
   batchExportReport,
+  batchDelete,
 };

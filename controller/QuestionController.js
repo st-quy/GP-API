@@ -174,6 +174,15 @@ async function updateQuestionGroup(req, res) {
   }
 }
 
+async function duplicateSection(req, res) {
+  try {
+    const result = await QuestionService.duplicateSection(req);
+    res.status(result.status).json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
 module.exports = {
   createQuestion,
   createQuestionGroup,
@@ -188,4 +197,5 @@ module.exports = {
   createQuestionReading,
   getQuestionGroupDetail,
   updateQuestionGroup,
+  duplicateSection,
 };

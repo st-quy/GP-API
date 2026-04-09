@@ -5,10 +5,26 @@ const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
 const { Op } = require('sequelize');
 
+const buildUniqueFieldMessage = (fieldName) => {
+  switch (fieldName) {
+    case 'email':
+      return 'Email already exists';
+    case 'phone':
+      return 'Phone already exists';
+    case 'studentCode':
+      return 'Student ID already exists';
+    case 'teacherCode':
+      return 'Teacher Code already exists';
+    default:
+      return `${fieldName} already exists`;
+  }
+};
+
 // Logic for user registration
 async function registerUser(data) {
   try {
     const { email, password, teacherCode, phone, role } = data;
+    const normalizedPhone = phone ? String(phone).replace(/\D/g, '') : null;
 
     // --- Validate email format ---
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -20,12 +36,12 @@ async function registerUser(data) {
     }
 
     // --- Validate phone ---
-    if (phone) {
-      const phoneRegex = /^\d{10}$/;
-      if (!phoneRegex.test(phone)) {
+    if (normalizedPhone) {
+      const phoneRegex = /^0\d{9}$/;
+      if (!phoneRegex.test(normalizedPhone)) {
         return {
           status: 400,
-          message: `Invalid phone format: ${phone}`,
+          message: `Invalid phone format: ${normalizedPhone}`,
         };
       }
     }
@@ -40,7 +56,7 @@ async function registerUser(data) {
     // --- Create User ---
     const newUser = await User.create({
       ...data,
-      phone: phone ? String(phone) : null,
+      phone: normalizedPhone,
       teacherCode: teacherCode ? String(teacherCode) : null,
       password: hashedPassword,
     });
@@ -79,7 +95,7 @@ async function registerUser(data) {
           case 'phone':
             return 'Phone already exists';
           case 'studentCode':
-            return 'Student Code already exists';
+            return 'Student ID already exists';
           case 'teacherCode':
             return 'Teacher Code already exists';
           default:
@@ -215,6 +231,7 @@ async function updateUser(userId, data) {
     if (data.firstName) data.firstName = data.firstName.trim();
     if (data.lastName) data.lastName = data.lastName.trim();
     if (data.email) data.email = data.email.trim();
+    if (data.teacherCode) data.teacherCode = data.teacherCode.trim();
     if (data.address) data.address = data.address.trim();
     if (data.phone) data.phone = data.phone.trim();
 
@@ -228,6 +245,9 @@ async function updateUser(userId, data) {
     if (data.email && data.email.length > 100) {
       throw new Error('Email must not exceed 100 characters');
     }
+    if (data.teacherCode && data.teacherCode.length > 20) {
+      throw new Error('Teacher Code must not exceed 20 characters');
+    }
     if (data.address && data.address.length > 200) {
       throw new Error('Address must not exceed 200 characters');
     }
@@ -239,20 +259,60 @@ async function updateUser(userId, data) {
     if (data.lastName !== undefined && data.lastName.length === 0) {
       throw new Error('Last name is required');
     }
+    if (data.teacherCode !== undefined && data.teacherCode.length === 0) {
+      throw new Error('Teacher Code is required');
+    }
+
+    if (data.email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(data.email)) {
+        throw new Error(`Invalid email format: ${data.email}`);
+      }
+
+      const existingEmail = await User.findOne({
+        where: {
+          email: data.email,
+          ID: { [Op.ne]: userId },
+        },
+      });
+
+      if (existingEmail) {
+        throw new Error('Email already exists');
+      }
+    }
+
+    if (data.teacherCode) {
+      const existingTeacherCode = await User.findOne({
+        where: {
+          teacherCode: data.teacherCode,
+          ID: { [Op.ne]: userId },
+        },
+      });
+
+      if (existingTeacherCode) {
+        throw new Error('Teacher Code already exists');
+      }
+    }
 
     if (data.phone) {
-      const phoneRegex = /^\d{9,20}$/;
-      if (!phoneRegex.test(data.phone)) {
-        throw new Error(`Invalid phone format: ${data.phone}. Phone must contain 9-20 digits only.`);
+      const normalizedPhone = String(data.phone).replace(/\D/g, '');
+      const phoneRegex = /^0\d{9}$/;
+      if (!phoneRegex.test(normalizedPhone)) {
+        throw new Error(`Invalid phone format: ${normalizedPhone}`);
       }
 
       const existingPhone = await User.findOne({
-        where: { phone: data.phone },
+        where: {
+          phone: normalizedPhone,
+          ID: { [Op.ne]: userId },
+        },
       });
 
-      if (existingPhone && existingPhone.ID !== userId) {
-        throw new Error('Phone number already exists');
+      if (existingPhone) {
+        throw new Error('Phone already exists');
       }
+
+      data.phone = normalizedPhone;
     }
 
     await user.update(data);
@@ -262,6 +322,14 @@ async function updateUser(userId, data) {
       data: user,
     };
   } catch (error) {
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      const messages = error.errors.map((err) =>
+        buildUniqueFieldMessage(err.path)
+      );
+
+      throw new Error(messages.join(', '));
+    }
+
     console.log(error);
     throw new Error(`Error updating user: ${error.message}`);
   }
@@ -309,28 +377,6 @@ async function sendResetPasswordEmail(email, host) {
       throw new Error('User with this email does not exist');
     }
 
-    // const resetToken = await jwt.sign({ userId: user.ID }, process.env.JWT_SECRET, {
-    //   expiresIn: "15m",
-    // });
-
-    // const resetLink = `${host}/reset-password?token=${resetToken}`;
-
-    // const mailOptions = {
-    //   from: process.env.EMAIL_USER,
-    //   to: user.email,
-    //   subject: "🔑 Reset Your Password",
-    //   html: `
-    //     <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ddd;">
-    //       <h2 style="color: #333;">🔑 Reset Your Password</h2>
-    //       <p>Hello <strong>${user.firstName} ${user.lastName}</strong>,</p>
-    //       <p>Click the link below to reset your password:</p>
-    //       <a href="${resetLink}" style="display: inline-block; padding: 10px 15px; background-color: #28a745; color: #fff; text-decoration: none; border-radius: 5px;">
-    //         Reset Password
-    //       </a>
-    //       <p style="color: #777; font-size: 12px;">This link will expire in 15 minutes.</p>
-    //     </div>
-    //   `,
-    // };
     // 1. Tạo Token bảo mật (Hết hạn sau 15 phút)
     const resetToken = jwt.sign({ userId: user.ID }, process.env.JWT_SECRET, {
       expiresIn: '15m',
@@ -460,6 +506,62 @@ async function getAllUsersByRoleTeacher(req) {
   }
 }
 
+async function getAllUsersByRoleStudent(req) {
+  try {
+    const { page = 1, limit = 10, search = '', status } = req.query;
+
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const searchTerms = search.trim().split(' ').filter(Boolean);
+
+    const whereClause = {};
+
+    if (searchTerms.length > 0) {
+      whereClause[Op.and] = searchTerms.map((term) => ({
+        [Op.or]: [
+          { firstName: { [Op.iLike]: `%${term}%` } },
+          { lastName: { [Op.iLike]: `%${term}%` } },
+          { studentCode: { [Op.iLike]: `%${term}%` } },
+        ],
+      }));
+    }
+
+    if (status !== undefined) {
+      whereClause.status = status;
+    }
+
+    const { rows: students, count: total } = await User.findAndCountAll({
+      where: whereClause,
+      include: [
+        {
+          model: Role,
+          where: { Name: 'student' },
+          through: { attributes: [] },
+        },
+      ],
+      offset,
+      limit: parseInt(limit),
+      order: [['updatedAt', 'DESC']],
+      distinct: true,
+    });
+
+    return {
+      status: 200,
+      message: 'Students fetched successfully',
+      data: {
+        students,
+        pagination: {
+          total,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          totalPages: Math.ceil(total / parseInt(limit)),
+        },
+      },
+    };
+  } catch (error) {
+    throw new Error(`Error fetching students: ${error.message}`);
+  }
+}
+
 async function deleteUser(userId) {
   try {
     const user = await User.findByPk(userId);
@@ -477,6 +579,48 @@ async function deleteUser(userId) {
   }
 }
 
+async function bulkDeleteUsers(req) {
+  try {
+    const { ids } = req.body;
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return {
+        status: 400,
+        message: 'IDs array is required',
+      };
+    }
+
+    const users = await User.findAll({
+      where: { ID: ids },
+    });
+
+    if (users.length === 0) {
+      return {
+        status: 404,
+        message: 'No users found with the provided IDs',
+      };
+    }
+
+    const userId = req.user?.userId || null;
+    const deletedNames = [];
+
+    for (const user of users) {
+      deletedNames.push(`${user.firstName} ${user.lastName}`);
+      await user.destroy();
+    }
+
+    return {
+      status: 200,
+      message: `${deletedNames.length} teacher(s) deleted successfully`,
+    };
+  } catch (error) {
+    return {
+      status: 500,
+      message: `Error deleting users: ${error.message}`,
+    };
+  }
+}
+
 module.exports = {
   registerUser,
   loginUser,
@@ -487,5 +631,7 @@ module.exports = {
   resetPassword,
   logoutUser,
   getAllUsersByRoleTeacher,
+  getAllUsersByRoleStudent,
   deleteUser,
+  bulkDeleteUsers,
 };

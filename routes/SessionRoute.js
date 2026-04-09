@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const { authorize } = require("../middleware/AuthMiddleware");
 
 const {
   getAllSessionsByClass,
@@ -14,6 +15,7 @@ const {
   batchUpdateStatus,
   batchClone,
   batchExportReport,
+  batchDelete,
 } = require("../controller/SessionController");
 /**
  * @swagger
@@ -188,7 +190,7 @@ router.get("/", getAllSessionsByClass);
  *       500:
  *         description: Internal server error
  */
-router.post("/", createSession);
+router.post("/", authorize(['teacher', 'admin']), createSession);
 
 /**
  * @swagger
@@ -232,7 +234,7 @@ router.patch("/:sessionId/status", updateSessionStatus);
  * @swagger
  * /sessions/{sessionId}:
  *   put:
- *     summary: Update a session by class ID
+ *     summary: Update a session (blocked if status is ON_GOING)
  *     tags: [Session]
  *     parameters:
  *       - in: path
@@ -240,13 +242,36 @@ router.patch("/:sessionId/status", updateSessionStatus);
  *         schema:
  *           type: string
  *         required: true
- *         description: The ID of the class
+ *         description: The ID of the session to update
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/Session'
+ *             type: object
+ *             properties:
+ *               sessionName:
+ *                 type: string
+ *               sessionKey:
+ *                 type: string
+ *               startTime:
+ *                 type: string
+ *                 format: date-time
+ *               endTime:
+ *                 type: string
+ *                 format: date-time
+ *               examSet:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Topic ID representing the question set
+ *               ClassID:
+ *                 type: string
+ *                 format: uuid
+ *               isPublished:
+ *                 type: boolean
+ *               minioAudioRemoved:
+ *                 type: boolean
+ *                 description: Indicates whether the session's MinIO audio assets have been removed
  *     responses:
  *       200:
  *         description: Session updated successfully
@@ -254,12 +279,16 @@ router.patch("/:sessionId/status", updateSessionStatus);
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Session'
+ *       400:
+ *         description: Validation error (duplicate key/name, invalid examSet/ClassID, invalid time range)
+ *       403:
+ *         description: Cannot edit a session that is currently ON_GOING
  *       404:
  *         description: Session not found
  *       500:
  *         description: Internal server error
  */
-router.put("/:sessionId", updateSession);
+router.put("/:sessionId", authorize(['teacher', 'admin']), updateSession);
 
 /**
  * @swagger
@@ -355,6 +384,36 @@ router.post("/batch/clone", batchClone);
  */
 router.post("/batch/export-report", batchExportReport);
 
+/**
+ * @swagger
+ * /sessions/batch/delete:
+ *   post:
+ *     summary: Batch delete multiple sessions (only sessions without participants)
+ *     tags: [Session]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - sessionIds
+ *             properties:
+ *               sessionIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: uuid
+ *     responses:
+ *       200:
+ *         description: All sessions deleted successfully
+ *       207:
+ *         description: Partial success - some sessions failed to delete (have participants)
+ *       400:
+ *         description: All sessions failed to delete or invalid input
+ */
+router.post("/batch/delete", authorize(['teacher', 'admin']), batchDelete);
+
 router.get("/:sessionId", getSessionDetailById);
 
 /**
@@ -378,7 +437,7 @@ router.get("/:sessionId", getSessionDetailById);
  *       500:
  *         description: Internal server error
  */
-router.delete("/:sessionId", removeSession);
+router.delete("/:sessionId", authorize(['teacher', 'admin']), removeSession);
 
 /**
  * @swagger
