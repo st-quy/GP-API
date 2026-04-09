@@ -56,6 +56,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      avatarUrl: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
     },
     {
       getterMethods: {
