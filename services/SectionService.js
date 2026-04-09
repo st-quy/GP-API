@@ -1002,6 +1002,343 @@ async function archiveSection(req) {
   }
 }
 
+function validateSectionForPublish(section) {
+  const parts = section.Parts || [];
+  const skillName = section.Skill?.Name || '';
+
+  if (skillName === 'GRAMMAR AND VOCABULARY') {
+    return parts.some((p) => {
+      const qs = p.Questions || [];
+      return qs.some((q) => {
+        if (q.Content?.trim()) return true;
+        const ac = q.AnswerContent || {};
+        if (ac.options?.some((o) => o.value?.trim())) return true;
+        if (ac.leftItems?.length > 0 && ac.rightItems?.length > 0) return true;
+        return false;
+      });
+    });
+  } else if (skillName === 'WRITING') {
+    return parts.some((p) => {
+      const qs = p.Questions || [];
+      return qs.some((q) => q.Content?.trim());
+    });
+  } else {
+    return parts.some((p) => {
+      const qs = p.Questions || [];
+      return qs.some((q) => q.Content?.trim() || q.Value?.trim());
+    });
+  }
+}
+
+async function bulkPublishSections(req) {
+  try {
+    const { ids } = req.body;
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return { status: 400, message: 'IDs array is required' };
+    }
+
+    const sections = await Section.findAll({
+      where: { ID: ids },
+      include: [
+        {
+          model: Part,
+          as: 'Parts',
+          include: [{ model: Question, as: 'Questions' }],
+        },
+        {
+          model: Skill,
+          as: 'Skill',
+        },
+      ],
+    });
+
+    if (sections.length === 0) {
+      return { status: 404, message: 'No sections found with the provided IDs' };
+    }
+
+    const userId = req.user?.userId || null;
+    const publishedSections = [];
+    const skippedSections = [];
+
+    for (const section of sections) {
+      if (section.Status !== 'draft') {
+        skippedSections.push({
+          name: section.Name,
+          reason: `Status is '${section.Status}', only draft sections can be published`,
+        });
+        continue;
+      }
+
+      const hasValidContent = validateSectionForPublish(section);
+      if (!hasValidContent) {
+        skippedSections.push({
+          name: section.Name,
+          reason: 'Section has no valid questions with content',
+        });
+        continue;
+      }
+
+      const oldStatus = section.Status;
+      section.Status = 'published';
+      await section.save();
+
+      publishedSections.push(section.Name);
+
+      logActivity({
+        userId,
+        action: 'bulk_update_status',
+        entityType: 'section',
+        entityID: section.ID,
+        entityName: section.Name,
+        details: `Section "${section.Name}" bulk published (status changed from "${oldStatus}" to "published")`,
+      });
+    }
+
+    if (skippedSections.length > 0 && publishedSections.length === 0) {
+      return {
+        status: 400,
+        message: `No sections were published. ${skippedSections.length} section(s) could not be published: ${skippedSections.map(s => `"${s.name}" (${s.reason})`).join('; ')}`,
+      };
+    }
+
+    if (skippedSections.length > 0) {
+      return {
+        status: 200,
+        message: `${publishedSections.length} section(s) published successfully. ${skippedSections.length} section(s) skipped: ${skippedSections.map(s => `"${s.name}" (${s.reason})`).join('; ')}`,
+        partialSuccess: true,
+        skipped: skippedSections,
+      };
+    }
+
+    return {
+      status: 200,
+      message: `${publishedSections.length} section(s) published successfully`,
+    };
+  } catch (error) {
+    return { status: 500, message: `Error bulk publishing sections: ${error.message}` };
+  }
+}
+
+async function bulkDeleteSections(req) {
+  const t = await Section.sequelize.transaction();
+
+  try {
+    const { ids } = req.body;
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return { status: 400, message: 'IDs array is required' };
+    }
+
+    const sections = await Section.findAll({
+      where: { ID: ids },
+      include: [{ model: Topic, as: 'Topics', through: { attributes: [] } }],
+      transaction: t,
+    });
+
+    if (sections.length === 0) {
+      await t.rollback();
+      return { status: 404, message: 'No sections found with the provided IDs' };
+    }
+
+    const userId = req.user?.userId || null;
+    const deletedSections = [];
+    const restrictedSections = [];
+
+    for (const section of sections) {
+      const linkedTopics = section.Topics || [];
+      if (linkedTopics.length > 0) {
+        restrictedSections.push({
+          name: section.Name,
+          topics: linkedTopics.map(t => t.Name),
+        });
+        continue;
+      }
+
+      const sectionParts = await SectionPart.findAll({
+        where: { SectionID: section.ID },
+        transaction: t,
+      });
+
+      const partIDs = sectionParts.map((sp) => sp.PartID);
+
+      if (partIDs.length > 0) {
+        await Question.destroy({
+          where: { PartID: partIDs },
+          transaction: t,
+        });
+
+        await Part.destroy({
+          where: { ID: partIDs },
+          transaction: t,
+        });
+      }
+
+      await SectionPart.destroy({
+        where: { SectionID: section.ID },
+        transaction: t,
+      });
+
+      const sectionName = section.Name;
+      await section.destroy({ transaction: t });
+
+      deletedSections.push(sectionName);
+
+      logActivity({
+        userId,
+        action: 'delete',
+        entityType: 'section',
+        entityID: section.ID,
+        entityName: sectionName,
+        details: `Section "${sectionName}" deleted (bulk delete)`,
+      });
+    }
+
+    await t.commit();
+
+    if (restrictedSections.length > 0 && deletedSections.length === 0) {
+      return {
+        status: 400,
+        message: `No sections were deleted. ${restrictedSections.length} section(s) are linked to exams and cannot be deleted: ${restrictedSections.map(s => `"${s.name}" (linked to: ${s.topics.join(', ')})`).join('; ')}`,
+      };
+    }
+
+    if (restrictedSections.length > 0) {
+      return {
+        status: 200,
+        message: `${deletedSections.length} section(s) deleted successfully. ${restrictedSections.length} section(s) skipped (linked to exams): ${restrictedSections.map(s => `"${s.name}"`).join(', ')}`,
+        partialSuccess: true,
+        skipped: restrictedSections,
+      };
+    }
+
+    return {
+      status: 200,
+      message: `${deletedSections.length} section(s) deleted successfully`,
+    };
+  } catch (error) {
+    await t.rollback();
+    return { status: 500, message: `Error bulk deleting sections: ${error.message}` };
+  }
+}
+
+async function bulkDuplicateSections(req) {
+  const t = await Section.sequelize.transaction();
+  try {
+    const { ids } = req.body;
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return { status: 400, message: 'IDs array is required' };
+    }
+
+    const sections = await Section.findAll({
+      where: { ID: ids },
+      include: [
+        {
+          model: Part,
+          as: 'Parts',
+          include: [{ model: Question, as: 'Questions' }],
+        },
+        {
+          model: Skill,
+          as: 'Skill',
+        },
+      ],
+    });
+
+    if (sections.length === 0) {
+      await t.rollback();
+      return { status: 404, message: 'No sections found with the provided IDs' };
+    }
+
+    const userId = req.user?.userId || null;
+    const duplicatedNames = [];
+    const newSections = [];
+
+    for (const originalSection of sections) {
+      let newName = `${originalSection.Name} (Copy)`;
+      let counter = 1;
+
+      let nameExists = true;
+      while (nameExists) {
+        const existing = await Section.findOne({
+          where: { Name: { [Op.iLike]: newName } }
+        });
+        if (!existing) {
+          nameExists = false;
+        } else {
+          newName = `${originalSection.Name} (Copy ${counter++})`;
+        }
+      }
+
+      const newSection = await Section.create({
+        Name: newName,
+        Description: originalSection.Description,
+        SkillID: originalSection.SkillID,
+        Status: 'draft',
+      }, { transaction: t });
+
+      const sortedParts = (originalSection.Parts || []).sort((a, b) => (a.Sequence ?? 0) - (b.Sequence ?? 0));
+
+      for (const originalPart of sortedParts) {
+        const newPart = await Part.create({
+          Content: originalPart.Content,
+          SubContent: originalPart.SubContent,
+          Sequence: originalPart.Sequence,
+          SkillID: originalPart.SkillID,
+        }, { transaction: t });
+
+        await SectionPart.create({
+          SectionID: newSection.ID,
+          PartID: newPart.ID,
+        }, { transaction: t });
+
+        const sortedQuestions = (originalPart.Questions || []).sort((a, b) => (a.Sequence ?? 0) - (b.Sequence ?? 0));
+
+        for (const originalQuestion of sortedQuestions) {
+          await Question.create({
+            Type: originalQuestion.Type,
+            AudioKeys: originalQuestion.AudioKeys,
+            ImageKeys: originalQuestion.ImageKeys,
+            PartID: newPart.ID,
+            Sequence: originalQuestion.Sequence,
+            Content: originalQuestion.Content,
+            SubContent: originalQuestion.SubContent,
+            GroupContent: originalQuestion.GroupContent,
+            AnswerContent: originalQuestion.AnswerContent,
+            Tags: originalQuestion.Tags,
+            CreatedBy: userId,
+            UpdatedBy: userId,
+          }, { transaction: t });
+        }
+      }
+
+      duplicatedNames.push(newName);
+      newSections.push(newSection);
+
+      logActivity({
+        userId,
+        action: 'create',
+        entityType: 'section',
+        entityID: newSection.ID,
+        entityName: newName,
+        details: `Question Bank "${newName}" created by bulk duplicating "${originalSection.Name}"`,
+      });
+    }
+
+    await t.commit();
+
+    return {
+      status: 201,
+      message: `${duplicatedNames.length} question banks duplicated successfully: ${duplicatedNames.join(', ')}`,
+      data: newSections,
+    };
+  } catch (error) {
+    await t.rollback();
+    return { status: 500, message: `Error bulk duplicating sections: ${error.message}` };
+  }
+}
+
 module.exports = {
   getAllSection,
   updateSection,
@@ -1012,4 +1349,7 @@ module.exports = {
   archiveSection,
   createDraftSection,
   getDraftBySkill,
+  bulkPublishSections,
+  bulkDeleteSections,
+  bulkDuplicateSections,
 };

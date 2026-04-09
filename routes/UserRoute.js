@@ -15,6 +15,7 @@ const {
   getAllUsersByRoleTeacher,
   getAllUsersByRoleStudent,
   deleteUserAccount,
+  bulkDeleteUsers,
 } = require("../controller/UserController");
 const storage = multer.memoryStorage();
 /**
@@ -155,6 +156,7 @@ const storage = multer.memoryStorage();
  */
 router.get("/teachers", getAllUsersByRoleTeacher);
 router.get("/students", getAllUsersByRoleStudent);
+router.post("/bulk-delete", authorize(['admin']), bulkDeleteUsers);
 
 /**
  * @swagger

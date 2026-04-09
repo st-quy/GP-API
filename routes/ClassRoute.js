@@ -8,6 +8,7 @@ const {
   updateClass,
   getClassById,
   deleteClass,
+  deleteMultipleClasses,
 } = require("../controller/ClassController");
 
 /**
@@ -173,5 +174,7 @@ router.get("/:classId", getClassById);
  *         description: Internal server error
  */
 router.delete("/:classId", authorize(['teacher', 'admin']), deleteClass);
+router.delete("/", authorize(['teacher', 'admin']), deleteMultipleClasses);
+router.delete("/", authorize(['teacher', 'admin']), deleteMultipleClasses);
 
 module.exports = router;

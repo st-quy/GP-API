@@ -272,10 +272,51 @@ async function remove(req) {
   }
 }
 
+async function removeMultiple(req) {
+  try {
+    const { classIds } = req.body;
+    
+    if (!classIds || !Array.isArray(classIds) || classIds.length === 0) {
+      throw new Error('classIds must be a non-empty array');
+    }
+
+    const classesWithSessions = await Class.findAll({
+      where: { ID: classIds },
+      include: [{
+        association: 'Sessions',
+        attributes: [],
+        required: true,
+      }],
+    });
+
+    if (classesWithSessions.length > 0) {
+      const classNames = classesWithSessions.map(c => c.className).join(', ');
+      throw new Error(`Cannot delete class(es) that contain sessions: ${classNames}. Please remove all sessions first.`);
+    }
+
+    const deletedCount = await Class.destroy({ where: { ID: classIds } });
+
+    const userIdFromReq = req.user?.userId || null;
+    logActivity({
+      userId: userIdFromReq,
+      action: 'delete',
+      entityType: 'class',
+      entityID: classIds.join(', '),
+      entityName: `Multiple classes (${deletedCount} items)`,
+      details: `Bulk deleted ${deletedCount} classes`,
+    });
+
+    return `${deletedCount} classes deleted successfully`;
+  } catch (error) {
+    throw new Error(`Error deleting classes: ${error.message}`);
+  }
+}
+
 module.exports = {
   findAll,
   createClass,
   updateClass,
   getClassDetailById,
   remove,
+  removeMultiple,
 };
