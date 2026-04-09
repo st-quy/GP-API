@@ -134,11 +134,13 @@ async function getAllParticipantsGroupedByUser(req) {
 }
 
 const getParticipantsByUserId = async (userId, req) => {
-  const { searchKeyword } = req.query;
-  const whereClause = { 
-      UserID: userId,
-      Reading: { [Op.ne]: null } 
-    };
+  const { searchKeyword, page = 1, limit = 10 } = req.query;
+  const offset = (page - 1) * limit;
+
+  const whereClause = {
+    UserID: userId,
+    Reading: { [Op.ne]: null }
+  };
   const includeClause = [
     {
       model: Session,
@@ -156,20 +158,40 @@ const getParticipantsByUserId = async (userId, req) => {
     },
   ];
 
-  const participants = await SessionParticipant.findAll({
+  const { count, rows: participants } = await SessionParticipant.findAndCountAll({
     where: whereClause,
     include: includeClause,
-    order: [["createdAt", "DESC"]]
+    order: [["createdAt", "DESC"]],
+    limit: parseInt(limit),
+    offset: parseInt(offset),
   });
 
+  const totalPages = Math.ceil(count / limit);
+
   if (!participants.length) {
-    return { status: 404, message: "No participants found for the given user" };
+    return {
+      status: 200,
+      message: "No participants found for the given user",
+      data: [],
+      pagination: {
+        currentPage: parseInt(page),
+        pageSize: parseInt(limit),
+        totalPages,
+        totalItems: count,
+      },
+    };
   }
 
   return {
     status: 200,
     message: "Participants retrieved successfully",
     data: participants,
+    pagination: {
+      currentPage: parseInt(page),
+      pageSize: parseInt(limit),
+      totalPages,
+      totalItems: count,
+    },
   };
 };
 
