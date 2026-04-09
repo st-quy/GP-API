@@ -165,7 +165,7 @@ const getAllTopics = async (req) => {
       where: whereClause,
       offset,
       limit: pageSize,
-      order: [['Name', 'ASC']],
+      order: [['createdAt', 'DESC']],
       include: [
         {
           model: User,
@@ -408,7 +408,251 @@ async function deleteTopic(req) {
   } catch (error) {
     throw new Error(`Error deleting topic: ${error.message}`);
   }
-};
+}
+
+async function bulkUpdateStatus(req) {
+  try {
+    const { ids, status } = req.body;
+    
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return {
+        status: 400,
+        message: 'IDs array is required',
+      };
+    }
+
+    if (!status || !Object.values(TOPIC_STATUS).includes(status)) {
+      return {
+        status: 400,
+        message: 'Valid status is required',
+      };
+    }
+
+    const topics = await Topic.findAll({
+      where: { ID: ids },
+    });
+
+    if (topics.length === 0) {
+      return {
+        status: 404,
+        message: 'No topics found with the provided IDs',
+      };
+    }
+
+    if (status === 'approved' || status === 'rejected') {
+      const invalidTopics = topics.filter(t => t.Status !== 'submited');
+      if (invalidTopics.length > 0) {
+        return {
+          status: 400,
+          message: `Only submitted exams can be approved or rejected. ${invalidTopics.length} selected exam(s) have invalid status: ${invalidTopics.map(t => `"${t.Name}" (${t.Status})`).join(', ')}`,
+        };
+      }
+    }
+
+    if (status === 'archived') {
+      const invalidTopics = topics.filter(t => !['approved', 'rejected'].includes(t.Status));
+      if (invalidTopics.length > 0) {
+        return {
+          status: 400,
+          message: `Only approved or rejected exams can be archived. ${invalidTopics.length} selected exam(s) have invalid status.`,
+        };
+      }
+    }
+
+    const userId = req.user?.userId || null;
+    const topicNames = [];
+
+    for (const topic of topics) {
+      topicNames.push(topic.Name);
+      await topic.update({
+        Status: status,
+        UpdatedBy: userId,
+      });
+    }
+
+    logActivity({
+      userId,
+      action: 'bulk_update',
+      entityType: 'topic',
+      entityID: ids.join(','),
+      entityName: topicNames.join(', '),
+      details: `Bulk ${status} of ${ids.length} exam set(s): ${topicNames.join(', ')}`,
+    });
+
+    return {
+      status: 200,
+      message: `${ids.length} topics updated to '${status}' successfully`,
+    };
+  } catch (error) {
+    return {
+      status: 500,
+      message: `Error bulk updating topics: ${error.message}`,
+    };
+  }
+}
+
+async function deleteMultipleTopics(req) {
+  try {
+    const { ids } = req.body;
+    
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return {
+        status: 400,
+        message: 'IDs array is required',
+      };
+    }
+
+    const topics = await Topic.findAll({
+      where: { ID: ids },
+    });
+
+    if (topics.length === 0) {
+      return {
+        status: 404,
+        message: 'No topics found with the provided IDs',
+      };
+    }
+
+    const userId = req.user?.userId || null;
+    const deletableTopics = [];
+    const restrictedTopics = [];
+
+    for (const topic of topics) {
+      if (['approved', 'submited'].includes(topic.Status)) {
+        restrictedTopics.push(topic.Name);
+      } else {
+        deletableTopics.push(topic);
+      }
+    }
+
+    for (const topic of deletableTopics) {
+      await topic.destroy();
+
+      logActivity({
+        userId,
+        action: 'delete',
+        entityType: 'topic',
+        entityID: topic.ID,
+        entityName: topic.Name,
+        details: `Exam Set "${topic.Name}" deleted (bulk delete)`,
+      });
+    }
+
+    if (restrictedTopics.length > 0) {
+      return {
+        status: 200,
+        message: `${deletableTopics.length} topics deleted successfully. ${restrictedTopics.length} topics with 'approved' or 'submited' status were skipped: ${restrictedTopics.join(', ')}`,
+        partialSuccess: true,
+      };
+    }
+
+    return {
+      status: 200,
+      message: `${deletableTopics.length} topics deleted successfully`,
+    };
+  } catch (error) {
+    return {
+      status: 500,
+      message: `Error deleting topics: ${error.message}`,
+    };
+  }
+}
+
+async function bulkDuplicateTopics(req) {
+  try {
+    const { ids } = req.body;
+    
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return {
+        status: 400,
+        message: 'IDs array is required',
+      };
+    }
+
+    const topics = await Topic.findAll({
+      where: { ID: ids },
+      include: [
+        {
+          model: Section,
+          as: 'Sections',
+          through: { attributes: ['ScoreConfig'] },
+        },
+      ],
+    });
+
+    if (topics.length === 0) {
+      return {
+        status: 404,
+        message: 'No topics found with the provided IDs',
+      };
+    }
+
+    const userId = req.user?.userId || null;
+    const duplicatedNames = [];
+    const newTopics = [];
+
+    for (const originalTopic of topics) {
+      let newName = `${originalTopic.Name} (Copy)`;
+      let counter = 1;
+
+      let nameExists = true;
+      while (nameExists) {
+        const existing = await Topic.findOne({
+          where: { Name: { [Op.iLike]: newName } }
+        });
+        if (!existing) {
+          nameExists = false;
+        } else {
+          newName = `${originalTopic.Name} (Copy ${counter++})`;
+        }
+      }
+
+      const newTopic = await Topic.create({
+        Name: newName,
+        Status: TOPIC_STATUS.DRAFT,
+        Duration: originalTopic.Duration,
+        ShuffleQuestions: originalTopic.ShuffleQuestions,
+        ShuffleAnswers: originalTopic.ShuffleAnswers,
+        CreatedBy: userId,
+        UpdatedBy: userId,
+      });
+
+      if (originalTopic.Sections && originalTopic.Sections.length > 0) {
+        for (const section of originalTopic.Sections) {
+          const { TopicSection: tsData } = section;
+          await sequelize.models.TopicSection.create({
+            TopicID: newTopic.ID,
+            SectionID: section.ID,
+            ScoreConfig: tsData ? tsData.ScoreConfig : null,
+          });
+        }
+      }
+
+      duplicatedNames.push(newName);
+      newTopics.push(newTopic);
+
+      logActivity({
+        userId,
+        action: 'create',
+        entityType: 'topic',
+        entityID: newTopic.ID,
+        entityName: newName,
+        details: `Exam Set "${newName}" created by bulk duplicating "${originalTopic.Name}"`,
+      });
+    }
+
+    return {
+      status: 201,
+      message: `${duplicatedNames.length} exams duplicated successfully: ${duplicatedNames.join(', ')}`,
+      data: newTopics,
+    };
+  } catch (error) {
+    return {
+      status: 500,
+      message: `Error duplicating topics: ${error.message}`,
+    };
+  }
+}
 
 async function updateTopic(req) {
   try {
@@ -581,4 +825,7 @@ module.exports = {
   deleteTopic,
   updateTopic,
   duplicateTopic,
+  bulkUpdateStatus,
+  deleteMultipleTopics,
+  bulkDuplicateTopics,
 };

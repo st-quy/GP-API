@@ -120,6 +120,16 @@ const deleteUserAccount = async (req, res) => {
   }
 };
 
+const bulkDeleteUsers = async (req, res) => {
+  try {
+    const result = await userService.bulkDeleteUsers(req);
+    return res.status(result.status).json(result);
+  } catch (error) {
+    console.error('Error bulk deleting users:', error);
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
@@ -132,4 +142,5 @@ module.exports = {
   getAllUsersByRoleTeacher,
   getAllUsersByRoleStudent,
   deleteUserAccount,
+  bulkDeleteUsers,
 };

@@ -12,6 +12,9 @@ const {
   deleteTopic,
   updateTopic,
   duplicateTopic,
+  bulkUpdateTopicsStatus,
+  deleteMultipleTopics,
+  bulkDuplicateTopics,
 } = require('../controller/TopicController');
 /**
  * @swagger
@@ -165,6 +168,12 @@ router.post('/remove-part', removePartFromTopic);
 // router.get('/', getQuestionsByQuestionSetId);
 
 router.get('/detail', getTopicByName);
+
+router.patch('/bulk-status', authorize(['admin']), bulkUpdateTopicsStatus);
+
+router.delete('/bulk', authorize(['teacher', 'admin']), deleteMultipleTopics);
+
+router.post('/bulk-duplicate', authorize(['teacher', 'admin']), bulkDuplicateTopics);
 
 /**
  * @swagger

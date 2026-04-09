@@ -15,6 +15,7 @@ const {
   batchUpdateStatus,
   batchClone,
   batchExportReport,
+  batchDelete,
 } = require("../controller/SessionController");
 /**
  * @swagger
@@ -382,6 +383,36 @@ router.post("/batch/clone", batchClone);
  *         description: All reports failed to generate or invalid input
  */
 router.post("/batch/export-report", batchExportReport);
+
+/**
+ * @swagger
+ * /sessions/batch/delete:
+ *   post:
+ *     summary: Batch delete multiple sessions (only sessions without participants)
+ *     tags: [Session]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - sessionIds
+ *             properties:
+ *               sessionIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: uuid
+ *     responses:
+ *       200:
+ *         description: All sessions deleted successfully
+ *       207:
+ *         description: Partial success - some sessions failed to delete (have participants)
+ *       400:
+ *         description: All sessions failed to delete or invalid input
+ */
+router.post("/batch/delete", authorize(['teacher', 'admin']), batchDelete);
 
 router.get("/:sessionId", getSessionDetailById);
 

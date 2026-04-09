@@ -575,6 +575,48 @@ async function deleteUser(userId) {
   }
 }
 
+async function bulkDeleteUsers(req) {
+  try {
+    const { ids } = req.body;
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return {
+        status: 400,
+        message: 'IDs array is required',
+      };
+    }
+
+    const users = await User.findAll({
+      where: { ID: ids },
+    });
+
+    if (users.length === 0) {
+      return {
+        status: 404,
+        message: 'No users found with the provided IDs',
+      };
+    }
+
+    const userId = req.user?.userId || null;
+    const deletedNames = [];
+
+    for (const user of users) {
+      deletedNames.push(`${user.firstName} ${user.lastName}`);
+      await user.destroy();
+    }
+
+    return {
+      status: 200,
+      message: `${deletedNames.length} teacher(s) deleted successfully`,
+    };
+  } catch (error) {
+    return {
+      status: 500,
+      message: `Error deleting users: ${error.message}`,
+    };
+  }
+}
+
 module.exports = {
   registerUser,
   loginUser,
@@ -587,4 +629,5 @@ module.exports = {
   getAllUsersByRoleTeacher,
   getAllUsersByRoleStudent,
   deleteUser,
+  bulkDeleteUsers,
 };

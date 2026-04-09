@@ -13,9 +13,15 @@ const {
   createDraftSection,
   getDraftBySkill,
   duplicateSection,
+  bulkPublishSections,
+  bulkDeleteSections,
+  bulkDuplicateSections,
 } = require('../controller/SectionController');
 
 router.get('/', getAllSection);
+router.post('/bulk-publish', authorize(['teacher', 'admin']), bulkPublishSections);
+router.delete('/bulk', authorize(['teacher', 'admin']), bulkDeleteSections);
+router.post('/bulk-duplicate', authorize(['teacher', 'admin']), bulkDuplicateSections);
 router.put('/:id', authorize(['teacher', 'admin']), updateSection);
 router.put('/:id/status', authorize(['teacher', 'admin']), updateSectionStatus);
 router.put('/:id/archive', authorize(['teacher', 'admin']), archiveSection);

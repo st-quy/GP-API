@@ -1018,6 +1018,79 @@ async function batchExportReport(req) {
   };
 }
 
+async function batchDelete(req) {
+  const { sessionIds } = req.body;
+
+  if (!sessionIds || !Array.isArray(sessionIds) || sessionIds.length === 0) {
+    return {
+      status: 400,
+      message: "sessionIds must be a non-empty array",
+    };
+  }
+
+  const results = { success: [], failed: [] };
+
+  for (const sessionId of sessionIds) {
+    try {
+      const session = await Session.findByPk(sessionId);
+      if (!session) {
+        results.failed.push({
+          sessionId,
+          reason: "Session not found",
+        });
+        continue;
+      }
+
+      const participantCount = await SessionParticipant.count({
+        where: { SessionID: sessionId },
+      });
+
+      if (participantCount > 0) {
+        results.failed.push({
+          sessionId,
+          sessionName: session.sessionName,
+          reason: `Cannot delete: session has ${participantCount} participant(s)`,
+        });
+        continue;
+      }
+
+      await Session.destroy({
+        where: { ID: sessionId },
+      });
+
+      const userIdFromReq = req.user?.userId || null;
+      logActivity({
+        userId: userIdFromReq,
+        action: 'delete',
+        entityType: 'session',
+        entityID: sessionId,
+        entityName: session.sessionName,
+        details: `Session "${session.sessionName}" deleted`,
+      });
+
+      results.success.push(sessionId);
+    } catch (error) {
+      results.failed.push({
+        sessionId,
+        reason: error.message,
+      });
+    }
+  }
+
+  const httpStatus = results.failed.length === sessionIds.length ? 400
+    : results.failed.length > 0 ? 207
+    : 200;
+
+  const partialSuccess = results.failed.length > 0 && results.success.length > 0;
+
+  return {
+    status: httpStatus,
+    message: `${results.success.length}/${sessionIds.length} sessions deleted`,
+    partialSuccess,
+    data: results,
+  };
+}
+
 module.exports = {
   getAllSessions,
   getSessionByClass,
@@ -1032,4 +1105,5 @@ module.exports = {
   batchUpdateStatus,
   batchClone,
   batchExportReport,
+  batchDelete,
 };
