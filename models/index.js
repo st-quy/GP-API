@@ -63,6 +63,12 @@ db.Section.belongsToMany(db.Topic, {
   as: 'Topics',
 });
 
+// Direct relationships for TopicSection (for accessing ScoreConfig easily)
+db.Topic.hasMany(db.TopicSection, { foreignKey: 'TopicID', as: 'TopicSections' });
+db.TopicSection.belongsTo(db.Topic, { foreignKey: 'TopicID' });
+db.Section.hasMany(db.TopicSection, { foreignKey: 'SectionID', as: 'TopicSections' });
+db.TopicSection.belongsTo(db.Section, { foreignKey: 'SectionID' });
+
 // Section <-> Part (M:N) qua SectionPart
 db.Section.belongsToMany(db.Part, {
   through: db.SectionPart,
