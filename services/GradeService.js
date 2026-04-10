@@ -673,20 +673,17 @@ async function getFullExamReview(sessionParticipantId, user) {
     const userRoles = Array.isArray(user?.role) ? user.role : [user?.role];
     if (user && userRoles.includes('student')) {
       const session = sessionParticipant.Session;
-      const now = new Date();
       
-      if (sessionParticipant.UserID !== user.id) {
+      if (sessionParticipant.UserID !== user.userId) {
         return { status: 403, message: 'Unauthorized access to this review.' };
       }
 
       if (
-        session.status !== 'COMPLETE' || 
-        !session.isPublished || 
-        new Date(session.endTime) >= now
+        !sessionParticipant.IsPublished 
       ) {
         return { 
           status: 403, 
-          message: 'Chưa thể xem lại bài làm lúc này. Kỳ thi chưa kết thúc hoặc điểm chưa được công bố.' 
+          message: 'Chưa thể xem lại bài làm lúc này. Điểm chưa được công bố cho bạn.' 
         };
       }
     }
