@@ -34,7 +34,7 @@ async function resolveSkill({ skillId, skillName }) {
 
 async function getAllSection(req) {
   try {
-    const { skillId, skillName, searchName, status } = req.query || {};
+    const { skillId, skillName, searchName, status, tags } = req.query || {};
 
     const page = Number(req.query.page) || 1;
     const pageSize = Number(req.query.pageSize) || 10;
@@ -62,6 +62,13 @@ async function getAllSection(req) {
 
     if (searchName) {
       where.Name = { [Op.iLike]: `%${searchName}%` };
+    }
+
+    // Tag filter - need to filter at Question level and join
+    let questionWhere = {};
+    if (tags) {
+      const tagArray = Array.isArray(tags) ? tags : [tags];
+      questionWhere.Tags = { [Op.overlap]: tagArray };
     }
 
     const total = await Section.count({ where });
@@ -98,7 +105,8 @@ async function getAllSection(req) {
             {
               model: Question,
               as: 'Questions',
-              required: false,
+              required: Object.keys(questionWhere).length > 0,
+              where: Object.keys(questionWhere).length > 0 ? questionWhere : undefined,
               order: [['createdAt', 'DESC']],
             },
           ],
@@ -116,7 +124,16 @@ async function getAllSection(req) {
           .slice()
           .sort((a, b) => a.Sequence - b.Sequence);
       });
-      return { ...section.toJSON(), Parts: parts };
+
+      // Collect tags from all questions in this section
+      const allTags = new Set();
+      parts.forEach((part) => {
+        (part.Questions || []).forEach((q) => {
+          (q.Tags || []).forEach((tag) => allTags.add(tag));
+        });
+      });
+
+      return { ...section.toJSON(), Parts: parts, Tags: Array.from(allTags) };
     });
 
     return {
@@ -1339,6 +1356,32 @@ async function bulkDuplicateSections(req) {
   }
 }
 
+async function getAllTags() {
+  try {
+    const questions = await Question.findAll({
+      attributes: ['Tags'],
+      where: {
+        Tags: { [Op.ne]: null },
+      },
+      raw: true,
+    });
+
+    const allTags = new Set();
+    questions.forEach((q) => {
+      if (q.Tags && Array.isArray(q.Tags)) {
+        q.Tags.forEach((tag) => allTags.add(tag));
+      }
+    });
+
+    return {
+      status: 200,
+      data: Array.from(allTags).sort(),
+    };
+  } catch (error) {
+    return { status: 500, message: `Error fetching tags: ${error.message}` };
+  }
+}
+
 module.exports = {
   getAllSection,
   updateSection,
@@ -1352,4 +1395,5 @@ module.exports = {
   bulkPublishSections,
   bulkDeleteSections,
   bulkDuplicateSections,
+  getAllTags,
 };
