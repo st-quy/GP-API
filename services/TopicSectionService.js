@@ -2,7 +2,7 @@ const { Topic, Section, TopicSection } = require("../models");
 
 const createTopicSection = async (req) => {
   try {
-    const { TopicID, SectionID } = req.body;
+    const { TopicID, SectionID, ScoreConfig } = req.body;
     if (!TopicID || !SectionID ) {
       return {
         status: 400,
@@ -55,6 +55,7 @@ const createTopicSection = async (req) => {
     const newTopicSection = await TopicSection.create({
       TopicID,
       SectionID,
+      ScoreConfig: ScoreConfig || null,
     });
     return {
       status: 201,
@@ -102,22 +103,43 @@ const deleteTopicSectionbyTopicID = async (topicId) => {
 
 const updateTopicSectionByTopicID = async (topicId, data) => {
   try {
-    const { sectionIds, scoreConfig } = data;
+    const { sectionIds, sections, scoreConfig } = data;
     await TopicSection.destroy({ where: { TopicID: topicId } });
 
     const newTopicSections = [];
-    for (const sectionId of sectionIds) {
-      const section = await Section.findByPk(sectionId);
-      if (!section || section.Status === 'draft') {
-        throw new Error(`Cannot add draft or non-existent question set (ID: ${sectionId}) to an exam.`);
-      }
 
-      const newTopicSection = await TopicSection.create({
-        TopicID: topicId,
-        SectionID: sectionId,
-        ScoreConfig: scoreConfig || null // Lưu cấu hình điểm số
-      });
-      newTopicSections.push(newTopicSection);
+    // Handle array of section objects (more flexible)
+    if (sections && Array.isArray(sections)) {
+      for (const sectionItem of sections) {
+        const sid = sectionItem.sectionId || sectionItem.ID;
+        const section = await Section.findByPk(sid);
+        if (!section || section.Status === 'draft') {
+          throw new Error(`Cannot add draft or non-existent question set (ID: ${sid}) to an exam.`);
+        }
+
+        const newTopicSection = await TopicSection.create({
+          TopicID: topicId,
+          SectionID: sid,
+          ScoreConfig: sectionItem.scoreConfig || scoreConfig || null
+        });
+        newTopicSections.push(newTopicSection);
+      }
+    } 
+    // Handle array of IDs (legacy/simple support)
+    else if (sectionIds && Array.isArray(sectionIds)) {
+      for (const sectionId of sectionIds) {
+        const section = await Section.findByPk(sectionId);
+        if (!section || section.Status === 'draft') {
+          throw new Error(`Cannot add draft or non-existent question set (ID: ${sectionId}) to an exam.`);
+        }
+
+        const newTopicSection = await TopicSection.create({
+          TopicID: topicId,
+          SectionID: sectionId,
+          ScoreConfig: scoreConfig || null
+        });
+        newTopicSections.push(newTopicSection);
+      }
     }
 
     return {

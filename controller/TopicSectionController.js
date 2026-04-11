@@ -43,10 +43,10 @@ async function deleteTopicSectionbyTopicID(req, res) {
 async function updateTopicSectionByTopicID(req, res) {
   try {
     const { topicId } = req.params;
-    const { sectionIds } = req.body; 
+    const { sectionIds, sections } = req.body; 
 
-    if (!sectionIds || !Array.isArray(sectionIds)) {
-      return res.status(400).json({ message: "sectionIds must be an array" });
+    if ((!sectionIds || !Array.isArray(sectionIds)) && (!sections || !Array.isArray(sections))) {
+      return res.status(400).json({ message: "Either sectionIds or sections must be an array" });
     }
 
     const result = await TopicSectionService.updateTopicSectionByTopicID(topicId, req.body);
