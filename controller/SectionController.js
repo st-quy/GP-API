@@ -139,20 +139,28 @@ const bulkDeleteSections = async (req, res) => {
 const bulkDuplicateSections = async (req, res) => {
   try {
     const result = await SectionService.bulkDuplicateSections(req);
-    return res.status(result.status).json(result);
+    res.status(result.status === 201 ? 201 : 200).json(result);
   } catch (error) {
-    console.error('Error bulk duplicating sections:', error.message);
-    return res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ status: 500, message: error.message });
+  }
+};
+
+const getAllTags = async (req, res) => {
+  try {
+    const result = await SectionService.getAllTags();
+    res.status(result.status).json(result);
+  } catch (error) {
+    res.status(500).json({ status: 500, message: error.message });
   }
 };
 
 module.exports = {
   getAllSection,
-  createSection,
   updateSection,
   updateSectionStatus,
   archiveSection,
   deleteSection,
+  createSection,
   getSectionDetail,
   createDraftSection,
   getDraftBySkill,
@@ -160,4 +168,5 @@ module.exports = {
   bulkPublishSections,
   bulkDeleteSections,
   bulkDuplicateSections,
+  getAllTags,
 };

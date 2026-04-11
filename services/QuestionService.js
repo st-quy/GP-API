@@ -318,7 +318,7 @@ async function createQuestionGroup(req) {
             SubContent: q.SubContent || null,
             GroupContent: q.GroupContent || null,
             AnswerContent: answerContent,
-            Tags: normalizeTags(q.Tags || q.tags),
+            Tags: normalizeTags([...(q.Tags || q.tags || []), ...(normalizedTags || [])]),
             CreatedBy: userId || null,
             UpdatedBy: userId || null,
           },
@@ -344,7 +344,8 @@ async function createQuestionGroup(req) {
 
 async function createSpeakingGroup(req) {
   try {
-    const { SkillName, SectionName, Description, parts, Status } = req.body;
+    const { SkillName, SectionName, Description, parts, Status, tags, Tags } = req.body;
+    const normalizedTags = tags || Tags;
     const userId = req.user?.userId;
 
     // For drafts, be more lenient with validation
@@ -561,7 +562,8 @@ async function createSpeakingGroup(req) {
 
 async function createReadingGroup(req) {
   try {
-    const { SkillName, SectionName, Description, parts, Status } = req.body;
+    const { SkillName, SectionName, Description, parts, Status, tags, Tags } = req.body;
+    const normalizedTags = tags || Tags;
     const userId = req.user?.userId;
 
     if (!SkillName || !parts || !SectionName) {
@@ -664,7 +666,7 @@ async function createReadingGroup(req) {
             ImageKeys: null,
             AudioKeys: null,
             GroupContent: null,
-            Tags: normalizeTags(p.Tags || p.tags),
+            Tags: normalizeTags([...(p.Tags || p.tags || []), ...(normalizedTags || [])]),
             CreatedBy: userId,
             UpdatedBy: userId,
           },
@@ -718,7 +720,8 @@ async function createWritingGroup(req) {
   const t = await sequelize.transaction();
 
   try {
-    const { SectionName, Description, parts } = req.body;
+    const { SectionName, Description, parts, tags, Tags } = req.body;
+    const normalizedTags = tags || Tags;
     const userId = req.user?.userId;
 
     if (!SectionName || !parts) {
@@ -822,9 +825,9 @@ async function createWritingGroup(req) {
           SubContent: null,
           GroupContent: null,
           AudioKeys: null,
-          ImageKeys: null,
+ImageKeys: null,
           AnswerContent: null,
-          Tags: normalizeTags(q.Tags || q.tags || parts.part1?.Tags || parts.part1?.tags),
+          Tags: normalizeTags([...(c.Tags || c.tags || []), ...(normalizedTags || [])]),
           CreatedBy: userId,
           UpdatedBy: userId,
         });
@@ -960,7 +963,8 @@ async function createWritingGroup(req) {
 
 async function createListeningGroup(req) {
   try {
-    const { SkillName, SectionName, Description, parts, Status } = req.body;
+    const { SkillName, SectionName, Description, parts, Status, tags, Tags } = req.body;
+    const normalizedTags = tags || Tags;
     const userId = req.user?.userId;
 
     if (!SkillName || !SectionName || !parts) {
@@ -1105,7 +1109,7 @@ async function createListeningGroup(req) {
             GroupContent: q.GroupContent || null,
             ImageKeys: q.ImageKeys || null,
             AudioKeys: q.AudioKeys || null,
-            Tags: normalizeTags(q.Tags || q.tags),
+            Tags: normalizeTags([...(q.Tags || q.tags || []), ...(normalizedTags || [])]),
             AnswerContent: q.AnswerContent || null, // Không stringify → Sequelize JSON column tự nhận
             CreatedBy: userId,
             UpdatedBy: userId,
@@ -1162,7 +1166,8 @@ async function createListeningGroup(req) {
 
 async function createGrammarAndVocabGroup(req) {
   try {
-    const { SkillName, SectionName, Description, parts, Status } = req.body;
+    const { SkillName, SectionName, Description, parts, Status, tags, Tags } = req.body;
+    const normalizedTags = tags || Tags;
     const userId = req.user?.userId;
 
     if (!SkillName || !SectionName || !parts) {
@@ -1288,7 +1293,7 @@ async function createGrammarAndVocabGroup(req) {
             GroupContent: q.GroupContent || null,
             AudioKeys: q.AudioKeys || null,
             ImageKeys: q.ImageKeys || null,
-            Tags: normalizeTags(q.Tags || q.tags),
+            Tags: normalizeTags([...(q.Tags || q.tags || []), ...(normalizedTags || [])]),
             AnswerContent: q.AnswerContent, // FE đã build chuẩn → không stringify
             CreatedBy: userId,
             UpdatedBy: userId,
@@ -1789,7 +1794,8 @@ async function updateSpeakingGroup(sectionId, payload) {
       return { status: 403, message: 'Cannot update an archived section' };
     }
 
-    const { SectionName, Description, parts, userId, Status } = payload;
+    const { SectionName, Description, parts, userId, Status, tags, Tags } = payload;
+    const normalizedTags = tags || Tags;
 
     const isDraft = Status === 'draft';
     if (!isDraft) {
@@ -1937,7 +1943,7 @@ async function updateSpeakingGroup(sectionId, payload) {
           Sequence: qSequence,
           Content: qContent,
           ImageKeys: imageKeys,
-          Tags: normalizeTags(q.Tags || q.tags),
+          Tags: normalizeTags([...(q.Tags || q.tags || []), ...(normalizedTags || [])]),
         };
 
         if (questionRow) {
@@ -1994,7 +2000,8 @@ async function updateReadingGroup(sectionId, payload) {
       return { status: 403, message: 'Cannot update an archived section' };
     }
 
-    const { SectionName, Description, parts, userId, Status } = payload;
+    const { SectionName, Description, parts, userId, Status, tags, Tags } = payload;
+    const normalizedTags = tags || Tags;
 
     const isDraft = Status === 'draft';
 
@@ -2380,7 +2387,7 @@ async function updateWritingGroup(sectionId, payload) {
           AudioKeys: null,
           ImageKeys: null,
           AnswerContent: null,
-          Tags: normalizeTags(q.Tags || q.tags || parts.part1?.Tags || parts.part1?.tags),
+          Tags: normalizeTags([...(q.Tags || q.tags || []), ...(normalizedTags || [])]),
           CreatedBy: userId,
           UpdatedBy: userId,
         });
@@ -2403,7 +2410,7 @@ async function updateWritingGroup(sectionId, payload) {
           AudioKeys: null,
           ImageKeys: null,
           AnswerContent: null,
-          Tags: normalizeTags(parts.part2?.Tags || parts.part2?.tags),
+          Tags: normalizeTags([...(parts.part2?.Tags || parts.part2?.tags || []), ...(normalizedTags || [])]),
           CreatedBy: userId,
           UpdatedBy: userId,
         });
@@ -2451,7 +2458,7 @@ async function updateWritingGroup(sectionId, payload) {
             AudioKeys: null,
             ImageKeys: null,
             AnswerContent: null,
-            Tags: normalizeTags(parts.part4?.q1_tags || parts.part4?.q1Tags || parts.part4?.Tags || parts.part4?.tags),
+            Tags: normalizeTags([...(parts.part4?.q1_tags || parts.part4?.q1Tags || parts.part4?.Tags || parts.part4?.tags || []), ...(normalizedTags || [])]),
             CreatedBy: userId,
             UpdatedBy: userId,
           });
@@ -2473,7 +2480,7 @@ async function updateWritingGroup(sectionId, payload) {
             AudioKeys: null,
             ImageKeys: null,
             AnswerContent: null,
-            Tags: normalizeTags(parts.part4?.q2_tags || parts.part4?.q2Tags || parts.part4?.Tags || parts.part4?.tags),
+            Tags: normalizeTags([...(parts.part4?.q2_tags || parts.part4?.q2Tags || parts.part4?.Tags || parts.part4?.tags || []), ...(normalizedTags || [])]),
             CreatedBy: userId,
             UpdatedBy: userId,
           });
@@ -2528,7 +2535,8 @@ async function updateListeningGroup(sectionId, payload) {
       return { status: 403, message: 'Cannot update an archived section' };
     }
 
-    const { SkillName, SectionName, Description, parts, userId, Status } = payload;
+    const { SkillName, SectionName, Description, parts, userId, Status, tags, Tags } = payload;
+    const normalizedTags = tags || Tags;
 
     const isDraft = Status === 'draft';
 
@@ -2699,7 +2707,7 @@ async function updateListeningGroup(sectionId, payload) {
               AudioKeys: q.AudioKeys || null,
               ImageKeys: q.ImageKeys || null,
               AnswerContent: q.AnswerContent || null,
-              Tags: normalizeTags(q.Tags || q.tags),
+              Tags: normalizeTags([...(q.Tags || q.tags || []), ...(normalizedTags || [])]),
               Sequence: i + 1,
               UpdatedBy: userId,
             },
@@ -2720,7 +2728,7 @@ async function updateListeningGroup(sectionId, payload) {
               AudioKeys: q.AudioKeys,
               ImageKeys: q.ImageKeys || null,
               AnswerContent: q.AnswerContent || null,
-              Tags: normalizeTags(q.Tags || q.tags),
+              Tags: normalizeTags([...(q.Tags || q.tags || []), ...(normalizedTags || [])]),
               CreatedBy: userId,
               UpdatedBy: userId,
             },
