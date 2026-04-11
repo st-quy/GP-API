@@ -342,7 +342,7 @@ async function calculatePoints(req) {
 
     // Define normalizeKey function for consistent key normalization
     const normalizeKey = (k) => {
-      return String(k).trim().split('.')[0];
+      return String(k || '').trim().split('.')[0];
     };
 
     answers.forEach((answer) => {
@@ -367,6 +367,8 @@ async function calculatePoints(req) {
          pointAdded: 0,
        };
 
+      let pointsForThisQuestion = 0;
+
       // ================================
       // MULTIPLE CHOICE
       // ================================
@@ -379,7 +381,7 @@ async function calculatePoints(req) {
 
         if (stu === cor) {
           isCorrect = true;
-          totalPoints += pointPerQuestion;
+          pointsForThisQuestion += pointPerQuestion;
         }
       }
 
@@ -398,30 +400,26 @@ async function calculatePoints(req) {
           logItem.studentAnswer = studentAnswers;
           logItem.correctAnswer = correctAnswers;
 
-          // Build student answers map for direct lookup (matching frontend logic)
+          // Build student answers map for direct lookup
           const studentAnswersMap = {};
           studentAnswers.forEach(sa => {
             const key = normalizeKey(sa.left || sa.key || sa.id);
             if (key) {
-              // Take value if exists, otherwise right (matching frontend: item.value || item.right)
               studentAnswersMap[key] = sa.right || sa.value || sa.answerText || String(sa);
             }
           });
           
-          // Check if ALL pairs match (All-or-Nothing logic) - matching frontend logic
-          const allMatched = correctAnswers.every((correct) => {
+          // Count points for each correct pair (APTIS-180 Partial Credit)
+          correctAnswers.forEach((correct) => {
             const correctKey = normalizeKey(correct.left || correct.key || correct.id);
-            const correctVal = correct.right || correct.value; // Matching frontend: item.value || item.right
+            const correctVal = correct.right || correct.value;
             const userVal = studentAnswersMap[correctKey];
-            return (
-              String(userVal || '').trim().toLowerCase() === String(correctVal || '').trim().toLowerCase()
-            );
+            
+            if (String(userVal || '').trim().toLowerCase() === String(correctVal || '').trim().toLowerCase()) {
+              isCorrect = true;
+              pointsForThisQuestion += pointPerQuestion;
+            }
           });
-
-          if (allMatched && correctAnswers.length > 0) {
-            isCorrect = true;
-            totalPoints += pointPerQuestion;
-          }
         }
 
         // ================================
@@ -439,40 +437,25 @@ async function calculatePoints(req) {
           logItem.studentAnswer = studentAnswers;
           logItem.correctAnswer = correctAnswers;
 
-          // Build student answers map for direct lookup (matching frontend logic)
+          // Build student answers map for direct lookup
           const studentAnswersMap = {};
           studentAnswers.forEach(sa => {
             const key = normalizeKey(sa.key || sa.left || sa.id);
             if (key) {
-              // For ordering, frontend joins as "key.value", so we need to check both
-              // But since we're comparing keys only for ordering, we just store the key
               studentAnswersMap[key] = sa.key || sa.left || sa.id || String(sa);
             }
           });
           
-          // Check if ALL items are in correct order (All-or-Nothing) - matching frontend logic
-          // Frontend creates string like "key.value" for both user and correct answers
-          const allMatched = correctAnswers.every((correct) => {
+          // Count points for each correct position (APTIS-180 Partial Credit)
+          correctAnswers.forEach((correct, index) => {
             const correctKey = normalizeKey(correct.key || correct.left || correct.id);
-            const correctValue = correct.value || correct.right;
             const userVal = studentAnswersMap[correctKey];
-            // For ordering, we check if the sequence matches by comparing the joined strings
-            // But simpler: just check if keys match in correct order (as frontend does)
-            return (
-              String(userVal || '').trim() === String(correctKey || '').trim()
-            );
+            
+            if (String(userVal || '').trim() === String(correctKey || '').trim()) {
+              isCorrect = true;
+              pointsForThisQuestion += pointPerQuestion;
+            }
           });
-
-          // Additional check: all correct answers must be present in user answers
-          const allPresent = correctAnswers.every((correct) => {
-            const correctKey = normalizeKey(correct.key || correct.left || correct.id);
-            return studentAnswersMap[correctKey] !== undefined;
-          });
-
-          if (allMatched && allPresent && correctAnswers.length > 0) {
-            isCorrect = true;
-            totalPoints += pointPerQuestion;
-          }
         } else if (type === 'dropdown-list') {
           let studentAnswers = [];
           try {
@@ -484,30 +467,26 @@ async function calculatePoints(req) {
             (item) => item.key !== '0'
            );
            
-           // Build student answers map for direct lookup (matching frontend logic)
+           // Build student answers map for direct lookup
            const studentAnswersMap = {};
            studentAnswers.forEach(sa => {
              const key = normalizeKey(sa.key || sa.left || sa.id || sa.questionId);
              if (key) {
-               // Take value if exists, otherwise right (matching frontend: item.value || item.right)
                studentAnswersMap[key] = sa.value || sa.right || sa.answerText || String(sa);
              }
            });
            
-           // Check if ALL pairs match (All-or-Nothing logic) - matching frontend logic
-           const allMatched = correctAnswers.every((correct) => {
+           // Count points for each correct choice (APTIS-180 Partial Credit)
+           correctAnswers.forEach((correct) => {
              const correctKey = normalizeKey(correct.key || correct.left || correct.id || correct.questionId);
-             const correctVal = correct.value || correct.right; // Matching frontend: item.value || item.right
+             const correctVal = correct.value || correct.right;
              const userVal = studentAnswersMap[correctKey];
-             return (
-               String(userVal || '').trim().toLowerCase() === String(correctVal || '').trim().toLowerCase()
-             );
+             
+             if (String(userVal || '').trim().toLowerCase() === String(correctVal || '').trim().toLowerCase()) {
+               isCorrect = true;
+               pointsForThisQuestion += pointPerQuestion;
+             }
            });
-
-          if (allMatched && correctAnswers.length > 0) {
-            isCorrect = true;
-            totalPoints += pointPerQuestion;
-          }
        } else if (type === 'listening-questions-group') {
         const studentAnswers = JSON.parse(rawStudentAnswer);
         const correctList = correctContent.groupContent.listContent;
@@ -518,9 +497,13 @@ async function calculatePoints(req) {
         correctList.forEach((q) => {
           const stu = studentAnswers.find((x) => x.ID === q.ID);
 
-          if (stu && stu.answer.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase()) {
+          if (
+            stu &&
+            stu.answer.trim().toLowerCase() ===
+              q.correctAnswer.trim().toLowerCase()
+          ) {
             isCorrect = true;
-            totalPoints += pointPerQuestion;
+            pointsForThisQuestion += pointPerQuestion;
           }
         });
       }
@@ -528,8 +511,9 @@ async function calculatePoints(req) {
       // ================================
       // Finalize tracking
       // ================================
+      totalPoints += pointsForThisQuestion;
       logItem.result = isCorrect ? 'correct' : 'incorrect';
-      logItem.pointAdded = isCorrect ? pointPerQuestion : 0;
+      logItem.pointAdded = pointsForThisQuestion;
 
       logs.push(logItem);
     });
