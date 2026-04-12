@@ -13,6 +13,30 @@ const { Op } = require('sequelize');
 const { TOPIC_STATUS } = require('../helpers/constants');
 const { logActivity } = require('./ActivityLogService');
 
+const shuffleArray = (array) => {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+};
+
+const shuffleByGroup = (questions) => {
+  const groups = {};
+  questions.forEach(q => {
+    const partId = q.PartID || 'default';
+    if (!groups[partId]) groups[partId] = [];
+    groups[partId].push(q);
+  });
+  Object.keys(groups).forEach(key => {
+    groups[key] = shuffleArray(groups[key]);
+  });
+  return questions.map(q => {
+    const partId = q.PartID || 'default';
+    return groups[partId].shift();
+  });
+};
+
 const getQuestionsByQuestionSetId = async (req) => {
   try {
     const { questionSetId } = req.params;
@@ -45,21 +69,21 @@ const getQuestionsByQuestionSetId = async (req) => {
       Sequence: item.Sequence,
     }));
 
-    // if (questionSet.ShuffleQuestions) {
-    //   questions = shuffleByGroup(questions);
-    // } else {
-    //   questions = _.sortBy(questions, ["Sequence"]);
-    // }
+    if (questionSet.ShuffleQuestions) {
+      questions = shuffleByGroup(questions);
+    } else {
+      questions = _.sortBy(questions, ["Sequence"]);
+    }
 
-    // if (questionSet.ShuffleAnswers) {
-    //   questions = questions.map((q) => ({
-    //     ...q,
-    //     AnswerContent: {
-    //       ...q.AnswerContent,
-    //       options: _.shuffle(q.AnswerContent?.options || []),
-    //     },
-    //   }));
-    // }
+    if (questionSet.ShuffleAnswers) {
+      questions = questions.map((q) => ({
+        ...q,
+        AnswerContent: {
+          ...q.AnswerContent,
+          options: _.shuffle(q.AnswerContent?.options || []),
+        },
+      }));
+    }
 
     return {
       questionSetId,
@@ -290,7 +314,30 @@ const getTopicWithRelations = async (req, res) => {
       return res.status(404).json({ message: 'Topic not found' });
     }
 
-    return topic.get({ plain: true });
+    const plainTopic = topic.get({ plain: true });
+
+    if (plainTopic.ShuffleQuestions || plainTopic.ShuffleAnswers) {
+      for (const section of plainTopic.Sections || []) {
+        for (const part of section.Parts || []) {
+          let questions = part.Questions || [];
+          if (plainTopic.ShuffleQuestions) {
+            questions = shuffleByGroup(questions);
+          }
+          if (plainTopic.ShuffleAnswers) {
+            questions = questions.map(q => ({
+              ...q,
+              AnswerContent: q.AnswerContent ? {
+                ...q.AnswerContent,
+                options: shuffleArray([...(q.AnswerContent.options || [])]),
+              } : null,
+            }));
+          }
+          part.Questions = questions;
+        }
+      }
+    }
+
+    return plainTopic;
   } catch (error) {
     console.error('Error fetching topic with relations:', error);
 
