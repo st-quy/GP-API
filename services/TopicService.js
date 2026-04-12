@@ -324,13 +324,26 @@ const getTopicWithRelations = async (req, res) => {
             questions = shuffleByGroup(questions);
           }
           if (plainTopic.ShuffleAnswers) {
-            questions = questions.map(q => ({
-              ...q,
-              AnswerContent: q.AnswerContent ? {
-                ...q.AnswerContent,
-                options: shuffleArray([...(q.AnswerContent.options || [])]),
-              } : null,
-            }));
+            questions = questions.map(q => {
+              let answerContent = q.AnswerContent;
+              if (typeof answerContent === 'string') {
+                try {
+                  answerContent = JSON.parse(answerContent);
+                } catch (e) {
+                  return q;
+                }
+              }
+              if (answerContent && answerContent.options) {
+                return {
+                  ...q,
+                  AnswerContent: {
+                    ...answerContent,
+                    options: shuffleArray([...(answerContent.options || [])]),
+                  },
+                };
+              }
+              return q;
+            });
           }
           part.Questions = questions;
         }
