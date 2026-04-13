@@ -11,7 +11,7 @@ const {
 } = require('../models');
 const { Op } = require('sequelize');
 const { TOPIC_STATUS } = require('../helpers/constants');
-const { logActivity } = require('./ActivityLogService');
+const { sanitizeQuestion } = require('../utils/security');
 
 const shuffleArray = (array) => {
   for (let i = array.length - 1; i > 0; i--) {
@@ -316,35 +316,38 @@ const getTopicWithRelations = async (req, res) => {
 
     const plainTopic = topic.get({ plain: true });
 
-    if (plainTopic.ShuffleQuestions || plainTopic.ShuffleAnswers) {
+    // Check if user is student to sanitize answers
+    const userRoles = req.user?.role ? (Array.isArray(req.user.role) ? req.user.role : [req.user.role]) : [];
+    const isStudent = userRoles.some(r => r.toLowerCase() === 'student');
+
+    if (plainTopic.ShuffleQuestions || plainTopic.ShuffleAnswers || isStudent) {
       for (const section of plainTopic.Sections || []) {
         for (const part of section.Parts || []) {
           let questions = part.Questions || [];
+          
           if (plainTopic.ShuffleQuestions) {
             questions = shuffleByGroup(questions);
           }
-          if (plainTopic.ShuffleAnswers) {
-            questions = questions.map(q => {
-              let answerContent = q.AnswerContent;
-              if (typeof answerContent === 'string') {
-                try {
-                  answerContent = JSON.parse(answerContent);
-                } catch (e) {
-                  return q;
-                }
-              }
-              if (answerContent && answerContent.options) {
-                return {
-                  ...q,
-                  AnswerContent: {
-                    ...answerContent,
-                    options: shuffleArray([...(answerContent.options || [])]),
-                  },
-                };
-              }
-              return q;
-            });
-          }
+          
+          questions = questions.map(q => {
+            let answerContent = q.AnswerContent;
+            if (typeof answerContent === 'string') {
+              try {
+                answerContent = JSON.parse(answerContent);
+              } catch (e) {}
+            }
+
+            if (plainTopic.ShuffleAnswers && answerContent && answerContent.options) {
+              answerContent = {
+                ...answerContent,
+                options: shuffleArray([...(answerContent.options || [])]),
+              };
+              q.AnswerContent = answerContent;
+            }
+
+            return sanitizeQuestion(q, isStudent);
+          });
+          
           part.Questions = questions;
         }
       }

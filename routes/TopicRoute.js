@@ -198,7 +198,7 @@ router.post('/bulk-duplicate', authorize(['teacher', 'admin']), bulkDuplicateTop
  */
 router.delete('/:id', authorize(['teacher', 'admin']), deleteTopic);
 
-router.get('/:id', getTopicWithRelations);
+router.get('/:id', authorize(), getTopicWithRelations);
 
 /**
  * @swagger

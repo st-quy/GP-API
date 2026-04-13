@@ -17,6 +17,7 @@ const {
   level,
   skillMappingLevel,
 } = require('../helpers/constants');
+const { sanitizeQuestion } = require('../utils/security');
 
 async function getParticipantExamBySession(req) {
   try {
@@ -135,15 +136,19 @@ async function getParticipantExamBySession(req) {
     studentAnswers.forEach((a) => answerMap.set(a.QuestionID, a));
 
     // =============================
-    // 5) MERGE STUDENT ANSWERS → QUESTIONS
+    // 5) MERGE STUDENT ANSWERS → QUESTIONS & SANITIZE
     // =============================
+    const userRoles = req.user?.role ? (Array.isArray(req.user.role) ? req.user.role : [req.user.role]) : [];
+    const isStudent = userRoles.some(r => r.toLowerCase() === 'student');
+
     topic.dataValues.Parts = topic.dataValues.Parts.map((part) => {
       part.Questions = part.Questions.map((question) => {
         const stdAnswer = answerMap.get(question.ID);
         if (stdAnswer) {
           question.dataValues.studentAnswer = stdAnswer;
         }
-        return question;
+
+        return sanitizeQuestion(question, isStudent);
       });
 
       return part;
@@ -880,6 +885,12 @@ async function getFullExamReview(sessionParticipantId, user) {
 
             const studentAnswer = answerMap.get(question.ID);
             const answerContent = safeParse(question.AnswerContent);
+            
+            // Security logic: Students NEVER see ground-truth correct answers, even after publication.
+            // Publication only controls whether they can access the review page itself.
+            const userRoles = user?.role ? (Array.isArray(user.role) ? user.role : [user.role]) : [];
+            const isStudent = userRoles.some(r => r.toLowerCase() === 'student');
+            const canSeeAnswers = !isStudent; // Strict: Only non-students (Teachers/Admins) see answers.
 
             const questionDetail = {
               id: question.ID,
@@ -906,9 +917,21 @@ async function getFullExamReview(sessionParticipantId, user) {
                     comment: studentAnswer.Comment,
                   }
                 : null,
-              correctAnswer: answerContent ? answerContent.correctAnswer : null,
+              correctAnswer: null,
               isCorrect: false,
             };
+
+            // Sanitize question data if user is a student
+            if (isStudent) {
+              sanitizeQuestion(questionDetail.resources, true);
+            }
+            
+            // Set top-level correctAnswer only if authorized (Teachers/Admins)
+            if (canSeeAnswers) {
+              questionDetail.correctAnswer = answerContent ? answerContent.correctAnswer : null;
+            } else if (isStudent) {
+              questionDetail.correctAnswer = "hidden";
+            }
 
             if (studentAnswer) {
               if (['speaking', 'writing'].includes(skillKey)) {
