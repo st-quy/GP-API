@@ -436,39 +436,82 @@ async function removePartFromTopic(req, res) {
 }
 
 async function deleteTopic(req) {
+  const t = await sequelize.transaction();
   try {
     const { id } = req.params;
-    const topic = await Topic.findByPk(id);
+    const topic = await Topic.findByPk(id, { transaction: t });
     if (!topic) {
+      await t.rollback();
       return {
         status: 404,
         message: `Topic with id ${id} not found`,
       };
     }
+
     if (topic.Status !== 'draft' && topic.Status !== 'rejected' && topic.Status !== 'archived') {
+      await t.rollback();
       return {
         status: 400,
-        message: `Cannot delete topic with status '${topic.Status}'`,
+        message: `Cannot delete exam set "${topic.Name}" with status '${topic.Status}'. Only draft, rejected, or archived exams can be deleted.`,
       };
     }
+
+    const sessionCount = await sequelize.models.Session.count({
+      where: { examSet: id },
+      transaction: t
+    });
+
+    if (sessionCount > 0) {
+      await t.rollback();
+      return {
+        status: 400,
+        message: `Cannot delete exam set "${topic.Name}" because it is currently assigned to ${sessionCount} session(s).`,
+      };
+    }
+
     const topicName = topic.Name;
     const userId = req.user?.userId || null;
-    await topic.destroy();
 
-    logActivity({
-      userId,
-      action: 'delete',
-      entityType: 'topic',
-      entityID: id,
-      entityName: topicName,
-      details: `Exam Set "${topicName}" deleted`,
+    await sequelize.models.TopicSection.destroy({
+      where: { TopicID: id },
+      transaction: t
     });
+
+    await sequelize.models.StudentAnswer.destroy({
+      where: { TopicID: id },
+      transaction: t
+    });
+
+    await sequelize.models.StudentAnswerDraft.destroy({
+      where: { TopicID: id },
+      transaction: t
+    });
+
+    await topic.destroy({ transaction: t });
+
+    await t.commit();
+
+    try {
+      await logActivity({
+        userId,
+        action: 'delete',
+        entityType: 'topic',
+        entityID: id,
+        entityName: topicName,
+        details: `Exam Set "${topicName}" deleted`,
+      });
+    } catch (logError) {
+      console.error('Failed to log activity (non-critical):', logError.message);
+    }
 
     return {
       status: 200,
       message: 'Topic deleted successfully',
     };
   } catch (error) {
+    if (t && t.finished !== 'commit' && t.finished !== 'rollback') {
+      await t.rollback();
+    }
     throw new Error(`Error deleting topic: ${error.message}`);
   }
 }
@@ -555,10 +598,12 @@ async function bulkUpdateStatus(req) {
 }
 
 async function deleteMultipleTopics(req) {
+  const t = await sequelize.transaction();
   try {
     const { ids } = req.body;
     
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      await t.rollback();
       return {
         status: 400,
         message: 'IDs array is required',
@@ -567,9 +612,11 @@ async function deleteMultipleTopics(req) {
 
     const topics = await Topic.findAll({
       where: { ID: ids },
+      transaction: t
     });
 
     if (topics.length === 0) {
+      await t.rollback();
       return {
         status: 404,
         message: 'No topics found with the provided IDs',
@@ -579,41 +626,87 @@ async function deleteMultipleTopics(req) {
     const userId = req.user?.userId || null;
     const deletableTopics = [];
     const restrictedTopics = [];
+    const inUseTopics = [];
 
     for (const topic of topics) {
       if (['approved', 'submited'].includes(topic.Status)) {
-        restrictedTopics.push(topic.Name);
-      } else {
-        deletableTopics.push(topic);
+        restrictedTopics.push(`${topic.Name} (status: ${topic.Status})`);
+        continue;
       }
+
+      const sessionCount = await sequelize.models.Session.count({
+        where: { examSet: topic.ID },
+        transaction: t
+      });
+
+      if (sessionCount > 0) {
+        inUseTopics.push(`${topic.Name} (used in ${sessionCount} session(s))`);
+        continue;
+      }
+
+      deletableTopics.push(topic);
     }
 
     for (const topic of deletableTopics) {
-      await topic.destroy();
+      const id = topic.ID;
 
-      logActivity({
-        userId,
-        action: 'delete',
-        entityType: 'topic',
-        entityID: topic.ID,
-        entityName: topic.Name,
-        details: `Exam Set "${topic.Name}" deleted (bulk delete)`,
+      await sequelize.models.TopicSection.destroy({
+        where: { TopicID: id },
+        transaction: t
       });
+
+      await sequelize.models.StudentAnswer.destroy({
+        where: { TopicID: id },
+        transaction: t
+      });
+
+      await sequelize.models.StudentAnswerDraft.destroy({
+        where: { TopicID: id },
+        transaction: t
+      });
+
+      await topic.destroy({ transaction: t });
     }
 
-    if (restrictedTopics.length > 0) {
+    await t.commit();
+
+    for (const topic of deletableTopics) {
+      try {
+        await logActivity({
+          userId,
+          action: 'delete',
+          entityType: 'topic',
+          entityID: topic.ID,
+          entityName: topic.Name,
+          details: `Exam Set "${topic.Name}" deleted (bulk delete)`,
+        });
+      } catch (logError) {
+        console.error('Failed to log activity (non-critical):', logError.message);
+      }
+    }
+
+    let message = `${deletableTopics.length} topics deleted successfully.`;
+    const skipped = [];
+    if (restrictedTopics.length > 0) skipped.push(`Status restrictions: ${restrictedTopics.join(', ')}`);
+    if (inUseTopics.length > 0) skipped.push(`Currently in use: ${inUseTopics.join(', ')}`);
+    
+    if (skipped.length > 0) {
+      message += ` The following were skipped: ${skipped.join('; ')}`;
       return {
         status: 200,
-        message: `${deletableTopics.length} topics deleted successfully. ${restrictedTopics.length} topics with 'approved' or 'submited' status were skipped: ${restrictedTopics.join(', ')}`,
+        message,
         partialSuccess: true,
       };
     }
 
     return {
       status: 200,
-      message: `${deletableTopics.length} topics deleted successfully`,
+      message,
     };
   } catch (error) {
+    if (t && t.finished !== 'commit' && t.finished !== 'rollback') {
+      await t.rollback();
+    }
     return {
       status: 500,
       message: `Error deleting topics: ${error.message}`,

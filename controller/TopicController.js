@@ -77,6 +77,7 @@ const deleteTopic = async (req, res) => {
     const result = await topicService.deleteTopic(req);
     return res.status(result.status).json(result);
   } catch (error) {
+    console.error('Error in deleteTopic controller:', error);
     return res.status(500).json({ error: error.message });
   }
 };

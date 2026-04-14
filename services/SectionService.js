@@ -877,24 +877,31 @@ async function createDraftSection(req) {
       return { status: 404, message: `Skill "${skillName}" not found` };
     }
 
-    // Check if user already has a draft for this skill
-    const userId = req.user?.userId;
-    const existingDraft = await Section.findOne({
-      where: { SkillID: skill.ID, Status: 'draft', Name: 'Untitled Draft' },
+    const baseName = `Untitled Draft ${skillName.charAt(0) + skillName.slice(1).toLowerCase()}`;
+    const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`^${escapeRegExp(baseName)}(\\s*\\(\\d+\\))?$`);
+
+    const existingDrafts = await Section.findAll({
+      where: {
+        SkillID: skill.ID,
+        Status: 'draft',
+      },
       order: [['createdAt', 'DESC']],
     });
 
-    if (existingDraft) {
-      return {
-        status: 200,
-        message: 'Existing draft found',
-        data: existingDraft,
-        isExisting: true,
-      };
+    let finalName = baseName;
+    const existingNames = new Set(existingDrafts.map((d) => d.Name));
+
+    if (existingNames.has(baseName)) {
+      let counter = 1;
+      while (existingNames.has(`${baseName} (${counter})`)) {
+        counter++;
+      }
+      finalName = `${baseName} (${counter})`;
     }
 
     const newSection = await Section.create({
-      Name: 'Untitled Draft',
+      Name: finalName,
       SkillID: skill.ID,
       Status: 'draft',
     });
@@ -921,10 +928,16 @@ async function getDraftBySkill(req) {
       return { status: 404, message: `Skill "${skillName}" not found` };
     }
 
-    const draft = await Section.findOne({
-      where: { SkillID: skill.ID, Status: 'draft', Name: 'Untitled Draft' },
+    const baseName = `Untitled Draft ${skillName.charAt(0) + skillName.slice(1).toLowerCase()}`;
+    const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`^${escapeRegExp(baseName)}(\\s*\\(\\d+\\))?$`);
+
+    const drafts = await Section.findAll({
+      where: { SkillID: skill.ID, Status: 'draft' },
       order: [['createdAt', 'DESC']],
     });
+
+    const draft = drafts.find((d) => pattern.test(d.Name)) || drafts[0];
 
     if (!draft) {
       return { status: 404, message: 'No draft found' };

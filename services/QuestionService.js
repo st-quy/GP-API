@@ -213,7 +213,8 @@ async function createQuestionGroup(req) {
   const t = await sequelize.transaction();
 
   try {
-    const { SkillName, parts, Status } = req.body;
+    const { SkillName, parts, Status, tags, Tags } = req.body;
+    const normalizedTags = tags || Tags;
     const userId = req?.user?.userId;
 
     if (!SkillName || !Array.isArray(parts) || parts.length === 0) {
@@ -850,7 +851,7 @@ ImageKeys: null,
         AudioKeys: null,
         ImageKeys: null,
         AnswerContent: null,
-        Tags: normalizeTags(parts.part2?.Tags || parts.part2?.tags),
+        Tags: normalizeTags([...(parts.part2?.Tags || parts.part2?.tags || []), ...(normalizedTags || [])]),
         CreatedBy: userId,
         UpdatedBy: userId,
       });
@@ -873,7 +874,7 @@ ImageKeys: null,
           AudioKeys: null,
           ImageKeys: null,
           AnswerContent: null,
-          Tags: normalizeTags(c.Tags || c.tags || parts.part3?.Tags || parts.part3?.tags),
+          Tags: normalizeTags([...(c.Tags || c.tags || []), ...(normalizedTags || [])]),
           CreatedBy: userId,
           UpdatedBy: userId,
         });
@@ -896,7 +897,7 @@ ImageKeys: null,
         AudioKeys: null,
         ImageKeys: null,
         AnswerContent: null,
-        Tags: normalizeTags(parts.part4?.q1_tags || parts.part4?.q1Tags || parts.part4?.Tags || parts.part4?.tags),
+        Tags: normalizeTags([...(parts.part4?.q1_tags || parts.part4?.q1Tags || parts.part4?.Tags || parts.part4?.tags || []), ...(normalizedTags || [])]),
         CreatedBy: userId,
         UpdatedBy: userId,
       });
@@ -915,7 +916,7 @@ ImageKeys: null,
         AudioKeys: null,
         ImageKeys: null,
         AnswerContent: null,
-        Tags: normalizeTags(parts.part4?.q2_tags || parts.part4?.q2Tags || parts.part4?.Tags || parts.part4?.tags),
+        Tags: normalizeTags([...(parts.part4?.q2_tags || parts.part4?.q2Tags || parts.part4?.Tags || parts.part4?.tags || []), ...(normalizedTags || [])]),
         CreatedBy: userId,
         UpdatedBy: userId,
       });
@@ -2153,9 +2154,7 @@ async function updateReadingGroup(sectionId, payload) {
           AnswerContent: p.AnswerContent,
         };
 
-        if ('Tags' in p || 'tags' in p) {
-          updatePayload.Tags = normalizeTags(p.Tags || p.tags);
-        }
+        updatePayload.Tags = normalizeTags([...(p.Tags || p.tags || []), ...(normalizedTags || [])]);
 
         await oldQ.update(updatePayload, { transaction: t });
       } else {
@@ -2168,9 +2167,7 @@ async function updateReadingGroup(sectionId, payload) {
           AnswerContent: p.AnswerContent,
         };
 
-        if ('Tags' in p || 'tags' in p) {
-          createPayload.Tags = normalizeTags(p.Tags || p.tags);
-        }
+        createPayload.Tags = normalizeTags([...(p.Tags || p.tags || []), ...(normalizedTags || [])]);
 
         await Question.create(createPayload, { transaction: t });
       }
@@ -2221,7 +2218,8 @@ async function updateWritingGroup(sectionId, payload) {
       return { status: 403, message: 'Cannot update an archived section' };
     }
 
-    const { SectionName, Description, parts, userId, Status } = payload;
+    const { SectionName, Description, parts, userId, Status, tags, Tags } = payload;
+    const normalizedTags = tags || Tags;
 
     const isDraft = Status === 'draft';
 
@@ -2434,7 +2432,7 @@ async function updateWritingGroup(sectionId, payload) {
           AudioKeys: null,
           ImageKeys: null,
           AnswerContent: null,
-          Tags: normalizeTags(c.Tags || c.tags || parts.part3?.Tags || parts.part3?.tags),
+          Tags: normalizeTags([...(c.Tags || c.tags || []), ...(normalizedTags || [])]),
           CreatedBy: userId,
           UpdatedBy: userId,
         });
@@ -2777,7 +2775,8 @@ async function updateGrammarAndVocabGroup(sectionId, payload) {
       return { status: 403, message: 'Cannot update an archived section' };
     }
 
-    const { SkillName, SectionName, Description, parts, userId, Status } = payload;
+    const { SkillName, SectionName, Description, parts, userId, Status, tags, Tags } = payload;
+    const normalizedTags = tags || Tags;
 
     const isDraft = Status === 'draft';
 
@@ -2914,7 +2913,7 @@ async function updateGrammarAndVocabGroup(sectionId, payload) {
           ImageKeys: q.ImageKeys || null,
           AudioKeys: null,
           AnswerContent: q.AnswerContent || null,
-          Tags: normalizeTags(q.Tags || q.tags),
+          Tags: normalizeTags([...(q.Tags || q.tags || []), ...(normalizedTags || [])]),
           CreatedBy: userId,
           UpdatedBy: userId,
         });
@@ -2937,7 +2936,7 @@ async function updateGrammarAndVocabGroup(sectionId, payload) {
           ImageKeys: q.ImageKeys || null,
           AudioKeys: null,
           AnswerContent: q.AnswerContent || null,
-          Tags: normalizeTags(q.Tags || q.tags),
+          Tags: normalizeTags([...(q.Tags || q.tags || []), ...(normalizedTags || [])]),
           CreatedBy: userId,
           UpdatedBy: userId,
         });
