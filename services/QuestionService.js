@@ -1617,7 +1617,6 @@ function extractWordLimit(text) {
 async function getQuestionGroupDetail(req) {
   try {
     const { skillName, sectionId } = req.query;
-    console.info(`[GetDetail] Fetching detail for Skill: ${skillName}, Section: ${sectionId}`);
 
     if (!skillName || !sectionId) {
       return Response.badRequest('skillName and sectionId are required');
@@ -1644,11 +1643,8 @@ async function getQuestionGroupDetail(req) {
     });
 
     if (!section) {
-      console.warn(`[GetDetail] Section ${sectionId} not found`);
       return Response.notFound('Section not found');
     }
-
-    console.info(`[GetDetail] Found section: ${section.Name} with ${section.Parts?.length || 0} parts`);
 
     const sortedParts = (section.Parts || []).sort((a, b) => (a.Sequence || 0) - (b.Sequence || 0));
 
@@ -1682,18 +1678,8 @@ async function getQuestionGroupDetail(req) {
         payload[`part${idx + 1}`] = {
           id: p.ID,
           name: p.Content,
-          sequence: p.SectionPart.Sequence,
-          questions: p.Questions.map((q) => ({
-            ID: q.ID,
-            Type: q.Type,
-            Content: q.Content,
-            SubContent: q.SubContent,
-            AudioKeys: q.AudioKeys,
-            ImageKeys: q.ImageKeys,
-            GroupContent: q.GroupContent,
-            AnswerContent: q.AnswerContent,
-            Tags: q.Tags,
-          })),
+          sequence: p.SectionPart?.Sequence || p.Sequence || (idx + 1),
+          questions: p.Questions || [],
         };
       });
 
@@ -1702,7 +1688,9 @@ async function getQuestionGroupDetail(req) {
 
     if (skillLower === 'reading') {
       sortedParts.forEach((p, idx) => {
-        const q = p.Questions[0];
+        const questions = p.Questions || [];
+        const q = questions[0];
+        if (!q) return;
         payload[`part${idx + 1}`] = {
           PartID: p.ID,
           PartName: p.Content,
@@ -3055,15 +3043,6 @@ async function duplicateSection(req) {
         }, { transaction: t });
       }
     }
-
-    await logActivity({
-      userId,
-      action: 'create',
-      entityType: 'section',
-      entityID: newSection.ID,
-      entityName: newName,
-      details: `Question Bank "${newName}" created by duplicating "${originalSection.Name}"`,
-    });
 
     await t.commit();
 
