@@ -770,6 +770,90 @@ async function getFullExamReview(sessionParticipantId, user) {
       }
     };
 
+    const getCorrectnessMap = (
+      questionType,
+      userAnswerText,
+      correctAnswerContent
+    ) => {
+      if (!userAnswerText || !correctAnswerContent) return null;
+
+      const normalizeKey = (k) => String(k || '').trim().split('.')[0];
+      const safeParse = (str) => {
+        if (typeof str === 'object' && str !== null) return str;
+        try { return JSON.parse(str); } catch { return null; }
+      };
+
+      let userAnsObj = userAnswerText;
+      if (typeof userAnswerText === 'string') {
+        userAnsObj = safeParse(userAnswerText);
+      }
+
+      try {
+        const type = (questionType || '').toLowerCase();
+        const map = {};
+
+        // 1) MULTIPLE CHOICE
+        if (type === 'multiple-choice') {
+          const correctVal = typeof correctAnswerContent.correctAnswer === 'string'
+            ? correctAnswerContent.correctAnswer
+            : correctAnswerContent.correctAnswer?.value || '';
+          
+          const isCorrect = String(userAnswerText).trim().toLowerCase() === String(correctVal).trim().toLowerCase();
+          map['default'] = isCorrect;
+          return map;
+        }
+
+        // 2) DROPDOWN / MATCHING / ORDERING
+        if (['dropdown-list', 'matching', 'ordering', 'dropdown-matching', 'full-matching'].includes(type)) {
+          const correctAnswers = Array.isArray(correctAnswerContent.correctAnswer)
+            ? correctAnswerContent.correctAnswer
+            : [];
+          
+          if (!Array.isArray(userAnsObj)) return null;
+
+          const studentAnswersMap = {};
+          userAnsObj.forEach(sa => {
+            const key = normalizeKey(sa.left || sa.key || sa.id || sa.questionId);
+            if (key) {
+              studentAnswersMap[key] = sa.right || sa.value || sa.answerText || String(sa);
+            }
+          });
+
+          correctAnswers.forEach((correct) => {
+            const correctKey = normalizeKey(correct.left || correct.key || correct.id || correct.questionId);
+            if (correctKey === '0') return;
+
+            const correctVal = correct.right || correct.value;
+            const userVal = studentAnswersMap[correctKey];
+            
+            map[correctKey] = String(userVal || '').trim().toLowerCase() === String(correctVal || '').trim().toLowerCase();
+          });
+          return map;
+        }
+
+        // 3) LISTENING GROUP
+        if (type === 'listening-questions-group') {
+          const correctList = correctAnswerContent.groupContent?.listContent || [];
+          if (!Array.isArray(userAnsObj)) return null;
+
+          correctList.forEach((subQ) => {
+            const subID = String(subQ.ID || subQ.id);
+            const userSubAns = userAnsObj.find(
+              (u) => String(u.ID || u.id) === subID
+            );
+            const userVal = userSubAns ? (userSubAns.answer || userSubAns.value) : null;
+            map[subID] = String(userVal || '').trim().toLowerCase() === String(subQ.correctAnswer || '').trim().toLowerCase();
+          });
+          return map;
+        }
+
+        return null;
+      } catch (e) {
+        console.error('Error in getCorrectnessMap:', e);
+        return null;
+      }
+    };
+
     const checkCorrectness = (
       questionType,
       userAnswerText,
@@ -918,6 +1002,7 @@ async function getFullExamReview(sessionParticipantId, user) {
                   }
                 : null,
               correctAnswer: null,
+              correctnessMap: null,
               isCorrect: false,
             };
 
@@ -938,6 +1023,13 @@ async function getFullExamReview(sessionParticipantId, user) {
                 questionDetail.isCorrect = true;
               } else {
                 questionDetail.isCorrect = checkCorrectness(
+                  question.Type,
+                  studentAnswer.AnswerText,
+                  answerContent
+                );
+                
+                // Provide granular correctness map for multi-part questions
+                questionDetail.correctnessMap = getCorrectnessMap(
                   question.Type,
                   studentAnswer.AnswerText,
                   answerContent
