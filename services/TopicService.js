@@ -12,6 +12,7 @@ const {
 const { Op } = require('sequelize');
 const { TOPIC_STATUS } = require('../helpers/constants');
 const { sanitizeQuestion } = require('../utils/security');
+const { logActivity } = require('./ActivityLogService');
 
 const shuffleArray = (array) => {
   for (let i = array.length - 1; i > 0; i--) {
