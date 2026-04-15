@@ -237,6 +237,8 @@ async function calculateTotalPoints(
       };
     }
 
+    const isGrammarVocab = skillName === 'GrammarVocab' || skillName === skillMapping['GRAMMAR AND VOCABULARY'];
+
     const listening =
       skillName === skillMapping.LISTENING
         ? skillScore
@@ -253,30 +255,31 @@ async function calculateTotalPoints(
       skillName === skillMapping.SPEAKING
         ? skillScore
         : participant.Speaking || 0;
+    const grammarVocab =
+      isGrammarVocab
+        ? skillScore
+        : participant.GrammarVocab || 0;
 
-    const totalPoints = listening + reading + writing + speaking;
+    const totalPoints = listening + reading + writing + speaking + grammarVocab;
 
-    const lookupName = (skillName === 'GrammarVocab') ? 'GRAMMAR AND VOCABULARY' : skillName.toUpperCase();
+    const lookupName = isGrammarVocab ? 'GRAMMAR AND VOCABULARY' : skillName.toUpperCase();
     const levelSkill = await suggestLevels(skillScore, lookupName);
 
-    if (skillName === 'GrammarVocab' || skillName === skillMapping['GRAMMAR AND VOCABULARY']) {
-      await SessionParticipant.update(
-        { 
-          [skillName]: skillScore,
-          GrammarVocabLevel: levelSkill
-        },
-        { where: { ID: sessionParticipantId } }
-      );
-    } else {
-      await SessionParticipant.update(
-        {
+    const updateData = isGrammarVocab
+      ? {
+          GrammarVocab: skillScore,
+          GrammarVocabLevel: levelSkill,
+          Total: totalPoints,
+        }
+      : {
           [skillName]: skillScore,
           [skillMappingLevel[skillName.toUpperCase()]]: levelSkill,
           Total: totalPoints,
-        },
-        { where: { ID: sessionParticipantId } }
-      );
-    }
+        };
+
+    await SessionParticipant.update(updateData, {
+      where: { ID: sessionParticipantId },
+    });
 
     return {
       totalPoints,
@@ -306,9 +309,6 @@ async function calculatePoints(req) {
         message: `Invalid skill name: ${skillName}`,
       };
     }
-
-    const pointPerQuestion =
-      pointsPerQuestion[formattedSkillName.toLowerCase()] || 1;
 
     const sessionParticipant = await SessionParticipant.findByPk(
       sessionParticipantId,
@@ -341,6 +341,43 @@ async function calculatePoints(req) {
     if (answers.length === 0) {
       return { status: 404, message: 'No answers found for the student' };
     }
+
+    // ============================================
+    // DYNAMIC SCORING: Count total questions/units for this skill
+    // Each main question = 1 unit
+    // Each sub-question in listening-questions-group = 1 unit
+    // ============================================
+    const skillAnswers = answers.filter(a => 
+      a.AnswerText && 
+      a.Question?.Part?.Skill?.Name === skillName
+    );
+
+    let totalUnits = 0;
+    const questionUnitMap = new Map(); // questionId -> unit count for that question
+
+    skillAnswers.forEach((answer) => {
+      if (questionUnitMap.has(answer.QuestionID)) return;
+
+      const type = answer.Question.Type;
+      let unitCount = 0;
+
+      if (type === 'listening-questions-group') {
+        const correctContent = answer.Question.AnswerContent;
+        if (correctContent?.groupContent?.listContent) {
+          unitCount = correctContent.groupContent.listContent.length;
+        } else {
+          unitCount = 1;
+        }
+      } else {
+        unitCount = 1;
+      }
+
+      questionUnitMap.set(answer.QuestionID, unitCount);
+      totalUnits += unitCount;
+    });
+
+    // Dynamic points per unit: 50 / total units
+    const pointPerUnit = totalUnits > 0 ? 50 / totalUnits : 1;
 
     let totalPoints = 0;
     const logs = [];
@@ -386,7 +423,7 @@ async function calculatePoints(req) {
 
         if (stu === cor) {
           isCorrect = true;
-          pointsForThisQuestion += pointPerQuestion;
+          pointsForThisQuestion += pointPerUnit;
         }
       }
 
@@ -422,7 +459,7 @@ async function calculatePoints(req) {
             
             if (String(userVal || '').trim().toLowerCase() === String(correctVal || '').trim().toLowerCase()) {
               isCorrect = true;
-              pointsForThisQuestion += pointPerQuestion;
+              pointsForThisQuestion += pointPerUnit;
             }
           });
         }
@@ -458,7 +495,7 @@ async function calculatePoints(req) {
             
             if (String(userVal || '').trim() === String(correctKey || '').trim()) {
               isCorrect = true;
-              pointsForThisQuestion += pointPerQuestion;
+              pointsForThisQuestion += pointPerUnit;
             }
           });
         } else if (type === 'dropdown-list') {
@@ -489,15 +526,15 @@ async function calculatePoints(req) {
              
              if (String(userVal || '').trim().toLowerCase() === String(correctVal || '').trim().toLowerCase()) {
                isCorrect = true;
-               pointsForThisQuestion += pointPerQuestion;
+               pointsForThisQuestion += pointPerUnit;
              }
            });
-       } else if (type === 'listening-questions-group') {
-        const studentAnswers = JSON.parse(rawStudentAnswer);
-        const correctList = correctContent.groupContent.listContent;
+        } else if (type === 'listening-questions-group') {
+         const studentAnswers = JSON.parse(rawStudentAnswer);
+         const correctList = correctContent?.groupContent?.listContent || [];
 
-        logItem.studentAnswer = studentAnswers;
-        logItem.correctAnswer = correctList;
+         logItem.studentAnswer = studentAnswers;
+         logItem.correctAnswer = correctList;
 
         correctList.forEach((q) => {
           const stu = studentAnswers.find((x) => x.ID === q.ID);
@@ -508,7 +545,7 @@ async function calculatePoints(req) {
               q.correctAnswer.trim().toLowerCase()
           ) {
             isCorrect = true;
-            pointsForThisQuestion += pointPerQuestion;
+            pointsForThisQuestion += pointPerUnit;
           }
         });
       }
@@ -891,8 +928,8 @@ async function getFullExamReview(sessionParticipantId, user) {
           return String(userAnswerText).trim().toLowerCase() === String(correctVal).trim().toLowerCase();
         }
 
-        // 2) DROPDOWN / MATCHING / ORDERING (All-or-Nothing)
-        if (['dropdown-list', 'matching', 'ordering', 'dropdown-matching', 'full-matching'].includes(type)) {
+        // 2) DROPDOWN / MATCHING (All-or-Nothing)
+        if (['dropdown-list', 'matching', 'dropdown-matching', 'full-matching'].includes(type)) {
           const correctAnswers = Array.isArray(correctAnswerContent.correctAnswer)
             ? correctAnswerContent.correctAnswer
             : [];
@@ -919,7 +956,48 @@ async function getFullExamReview(sessionParticipantId, user) {
           });
         }
 
-        // 3) LISTENING GROUP (All-or-Nothing for the group)
+        // 3) ORDERING - Check position match
+        if (type === 'ordering') {
+          const correctAnswers = Array.isArray(correctAnswerContent.correctAnswer)
+            ? correctAnswerContent.correctAnswer
+            : [];
+          
+          if (correctAnswers.length === 0) return false;
+          if (!Array.isArray(userAnsObj)) return false;
+
+          // Build map: sentence text -> correct position
+          const correctPositionMap = {};
+          correctAnswers.forEach((correct) => {
+            const correctKey = normalizeKey(correct.key || correct.left || correct.id);
+            const correctPos = correct.value;
+            if (correctKey && correctPos) {
+              correctPositionMap[correctKey] = parseInt(correctPos, 10);
+            }
+          });
+
+          // Build map: sentence text -> student's chosen position (from value field)
+          const studentPositionMap = {};
+          userAnsObj.forEach((sa) => {
+            const studentKey = normalizeKey(sa.key || sa.left || sa.id);
+            const studentPos = sa.value;
+            if (studentKey && studentPos) {
+              studentPositionMap[studentKey] = parseInt(studentPos, 10);
+            }
+          });
+
+          // Check if every sentence is in its correct position
+          return correctAnswers.every((correct) => {
+            const correctKey = normalizeKey(correct.key || correct.left || correct.id);
+            if (!correctKey || correctKey === '0') return true;
+
+            const correctPos = correctPositionMap[correctKey];
+            const studentPos = studentPositionMap[correctKey];
+            
+            return studentPos === correctPos;
+          });
+        }
+
+        // 4) LISTENING GROUP (All-or-Nothing for the group)
         if (type === 'listening-questions-group') {
           const correctList = correctAnswerContent.groupContent?.listContent || [];
           if (correctList.length === 0) return false;
