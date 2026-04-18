@@ -1652,6 +1652,7 @@ async function getQuestionGroupDetail(req) {
       SectionID: section.ID,
       SectionName: section.Name,
       Description: section.Description || '',
+      Status: section.Status || 'draft',
     };
 
     // ================================
