@@ -1,8 +1,8 @@
-name: Deploy GP-API to VM (main/develop/uat)
+name: Deploy GP-API to VM (release-v2/develop/uat)
 
 on:
   push:
-    branches: [ main, develop, uat ]
+    branches: [ release/v2, develop, uat ]
   workflow_dispatch:
 
 concurrency:
@@ -10,12 +10,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy_main:
-    name: Deploy main
+  deploy_release_v2:
+    name: Deploy release/v2
     runs-on: ubuntu-latest
-    if: ${{ github.ref_name == 'main' }}
+    if: ${{ github.ref_name == 'release/v2' }}
     steps:
-      - name: SSH & deploy (main)
+      - name: SSH & deploy (release/v2)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VM_HOST }}
@@ -26,7 +26,7 @@ jobs:
             set -euo pipefail
             REPO_DIR="/home/phamvanquy1306/GreenLight/GP-API"
             COMPOSE_DIR="/home/phamvanquy1306/GreenLight"
-            BRANCH="main"
+            BRANCH="release/v2"
 
             echo "➡️ Git in $REPO_DIR (branch $BRANCH)"
             test -d "$REPO_DIR" || (echo "❌ Missing $REPO_DIR"; exit 1)
@@ -42,7 +42,7 @@ jobs:
             cd "$COMPOSE_DIR"
             docker compose pull || true
             docker compose up -d --build
-            echo "✅ Deployed main"
+            echo "✅ Deployed release/v2"
 
   deploy_develop:
     name: Deploy develop
