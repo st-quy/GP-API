@@ -1,5 +1,5 @@
-const MAX_QUESTION_BANK_TEXT_LENGTH = 255;
-const QUESTION_BANK_TEXT_REGEX = /^[a-zA-Z0-9 ,.\-_()"':?\n]*$/;
+const MAX_QUESTION_BANK_TEXT_LENGTH = 2000;
+const QUESTION_BANK_TEXT_REGEX = /^[a-zA-Z0-9 ,.\-_()"':?!\n]*$/;
 
 function validateText(value, fieldName, { required = true } = {}) {
   if (value == null || value === '') {
