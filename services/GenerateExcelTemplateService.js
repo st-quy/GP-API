@@ -4,12 +4,10 @@ const {
 const ExcelJS = require('exceljs');
 const {
   sequelize,
-  Topic,
   Part,
-  QuestionSet,
-  QuestionSetQuestion,
-  TopicPart,
   Skill,
+  Section,
+  SectionPart,
   Question,
 } = require('../models');
 
@@ -183,6 +181,7 @@ const parseExcelBuffer = async (buffer) => {
       topic: topic ? String(topic).trim() : null,
       part: part.trim(),
       subPart: subPart || null,
+      skill: skill ? String(skill).trim() : null,
     });
 
     if (topic) topicSet.add(String(topic).trim());
@@ -192,14 +191,10 @@ const parseExcelBuffer = async (buffer) => {
   if (topicSet.size === 0) {
     return { status: 400, message: 'No topic found in file' };
   }
+  // Use topic name for Section naming (e.g., "Topic7 - Grammar & Vocabulary")
   const topicName = [...topicSet][0];
 
-  const existingTopic = await Topic.findOne({ where: { Name: topicName } });
-  if (existingTopic) {
-    return { status: 400, message: 'Topic already exists' };
-  }
-
-  // 3) Dedupe Part theo CẶP (Part, SubPart) TRONG FILE
+  // 3) Dedupe Part theo CẶP (Part, SubPart) TRONG FILE, giữ skillName đầu tiên
   const partsMap = new Map();
   for (const it of partsRaw) {
     const key = buildPartKey(it.part, it.subPart);
@@ -207,6 +202,7 @@ const parseExcelBuffer = async (buffer) => {
       partsMap.set(key, {
         part: it.part,
         subPart: it.subPart || null,
+        skill: it.skill || null,
       });
     }
   }
@@ -218,14 +214,7 @@ const parseExcelBuffer = async (buffer) => {
     // 4) Bắt đầu transaction
     transaction = await sequelize.transaction();
 
-    // 5.1 Tạo Topic
-    const createdTopic = await Topic.create(
-      { Name: topicName },
-      { transaction }
-    );
-    const topicId = createdTopic.ID;
-
-    // 5.2 Lấy Part đã tồn tại trong DB & chỉ tạo Part mới nếu cặp (Content, SubContent) CHƯA có
+    // 5.1 Lấy Part đã tồn tại trong DB & chỉ tạo Part mới nếu cặp (Content, SubContent) CHƯA có
     //  (1 Part có thể thuộc nhiều Topic)
 
     // Load toàn bộ Part hiện có (nếu data lớn thì tối ưu sau bằng where Content IN ...)
@@ -277,9 +266,9 @@ const parseExcelBuffer = async (buffer) => {
       });
     }
 
-    // Build map PartID -> info (Content, SubContent) cho các Part tham gia Topic này
+    // Build map PartID -> info (Content, SubContent, skillName) for Parts in this Topic
     const partInfoById = new Map();
-    for (const { part, subPart } of partsData) {
+    for (const { part, subPart, skill } of partsData) {
       const key = buildPartKey(part, subPart);
       const id = partIdByKey.get(key);
       if (!id) continue;
@@ -287,74 +276,92 @@ const parseExcelBuffer = async (buffer) => {
         partInfoById.set(id, {
           Content: part,
           SubContent: subPart || null,
+          skillName: skill || null,
         });
       }
     }
 
     const partIdsInTopic = Array.from(partInfoById.keys());
 
-    // 5.3 Tạo QuestionSet cho từng Part trong Topic
-    const questionSetsToCreate = partIdsInTopic.map((partId) => {
-      const info = partInfoById.get(partId);
-      return {
-        Name: `${topicName} - ${info.Content}`,
-        Description: info.SubContent || null,
-        ShuffleQuestions: false,
-        ShuffleAnswers: false,
-      };
-    });
-
-    const createdQuestionSets = await QuestionSet.bulkCreate(
-      questionSetsToCreate,
-      {
-        transaction,
-        returning: true,
-      }
-    );
-
-    // Map PartID -> QuestionSetID (dựa theo index)
-    const questionSetIdByPartId = new Map();
-    createdQuestionSets.forEach((qs, idx) => {
-      const partId = partIdsInTopic[idx];
-      questionSetIdByPartId.set(partId, qs.ID);
-    });
-
-    // 5.4 Many-to-many TopicPart, gán luôn QuestionSetID
-    if (TopicPart) {
-      const tpRows = partIdsInTopic.map((partId) => ({
-        TopicID: topicId,
-        PartID: partId,
-        QuestionSetID: questionSetIdByPartId.get(partId) || null,
-      }));
-      if (tpRows.length) {
-        await TopicPart.bulkCreate(tpRows, {
-          transaction,
-          ignoreDuplicates: true,
-        });
-      }
-    }
-
-    // 5.5 Lấy danh mục Skill
+    // 5.3 Lấy danh mục Skill (map by normalized key)
     const skills = await Skill.findAll({
       attributes: ['ID', 'Name'],
       transaction,
     });
 
-    console.log(
-      'Skills in DB:',
-      skills.map((s) => ({
-        name: s.Name,
-        key: normSkillKey(s.Name),
-      }))
-    );
-
     const skillIdByKey = new Map(
       skills.map((s) => [normSkillKey(s.Name), s.ID])
     );
 
+    // 5.4 Tạo Sections cho mỗi Skill trong Topic (không phải mỗi Part)
+    // Một Section đại diện cho toàn bộ questions của một Skill trong Topic đó
+    // Extract unique skills from partsData - store ALL partIds per skill
+    const uniqueSkills = new Map(); // skillName -> {skill, partIds: []}
+    for (const { part, subPart, skill } of partsData) {
+      if (!skill) continue;
+      const normKey = normSkillKey(skill);
+      if (!uniqueSkills.has(normKey)) {
+        uniqueSkills.set(normKey, { skill, partIds: [] });
+      }
+      // Get PartID for this part and add to array
+      const partKey = buildPartKey(part, subPart);
+      const partId = partIdByKey.get(partKey);
+      if (partId) {
+        const entry = uniqueSkills.get(normKey);
+        if (!entry.partIds.includes(partId)) {
+          entry.partIds.push(partId);
+        }
+      }
+    }
+
+    const sectionsToCreate = [];
+    for (const [skillKey, info] of uniqueSkills) {
+      const skillID = skillIdByKey.get(skillKey);
+      if (skillID) {
+        sectionsToCreate.push({
+          Name: `${topicName} - ${info.skill}`,
+          Description: `${info.skill} questions for ${topicName}`,
+          SkillID: skillID,
+          Status: 'draft',
+        });
+      }
+    }
+
+    const createdSections = await Section.bulkCreate(sectionsToCreate, {
+      transaction,
+      returning: true,
+    });
+
+    // Map Section by skill key for linking
+    const sectionBySkillKey = new Map();
+    createdSections.forEach((section, idx) => {
+      const skillKey = [...uniqueSkills.keys()][idx];
+      sectionBySkillKey.set(skillKey, section);
+    });
+
+    // 5.5 Tạo SectionPart links (Section -> Part, ALL parts per Section)
+    const sectionPartsToCreate = [];
+    for (const [skillKey, info] of uniqueSkills) {
+      const section = sectionBySkillKey.get(skillKey);
+      if (section) {
+        for (const partId of info.partIds) {
+          sectionPartsToCreate.push({
+            SectionID: section.ID,
+            PartID: partId,
+          });
+        }
+      }
+    }
+
+    if (sectionPartsToCreate.length > 0) {
+      await SectionPart.bulkCreate(sectionPartsToCreate, {
+        transaction,
+        ignoreDuplicates: true,
+      });
+    }
+
     // 5.6 Duyệt sheet lần 2 để build Questions
     const questionsToCreate = [];
-    const questionMeta = []; // meta để tạo QuestionSetQuestion
     const foundSkills = new Set();
     const unknownSkillRows = [];
 
@@ -418,7 +425,7 @@ const parseExcelBuffer = async (buffer) => {
       const audio = asText(audioLinkRaw);
       const image = asText(imageLinkRaw);
 
-      // sequence cho QuestionSetQuestion (thứ tự trong đề)
+      // sequence for the question (order in the test)
       const sequenceForSet =
         sequenceRaw && !isNaN(sequenceRaw) ? parseInt(sequenceRaw, 10) : null;
 
@@ -580,11 +587,6 @@ const parseExcelBuffer = async (buffer) => {
         GroupContent: null,
         AnswerContent: answerContent,
       });
-
-      questionMeta.push({
-        partID,
-        sequenceForSet,
-      });
     }
 
     // 5.6.x Nếu có skill trong file nhưng không tồn tại trong DB → báo lỗi sớm
@@ -709,30 +711,7 @@ const parseExcelBuffer = async (buffer) => {
       });
     }
 
-    // 5.10 Tạo QuestionSetQuestion cho từng Question (dùng finalQuestionIds)
-    const qsqRows = [];
-    questionMeta.forEach((meta, idx) => {
-      const partID = meta.partID;
-      if (!partID) return;
-
-      const questionSetID = questionSetIdByPartId.get(partID);
-      if (!questionSetID) return;
-
-      const questionID = finalQuestionIds[idx];
-      if (!questionID) return;
-
-      qsqRows.push({
-        QuestionSetID: questionSetID,
-        QuestionID: questionID,
-        Sequence: meta.sequenceForSet,
-      });
-    });
-
-    if (qsqRows.length) {
-      await QuestionSetQuestion.bulkCreate(qsqRows, { transaction });
-    }
-
-    // 5.11 Done
+    // 5.10 Done
     await transaction.commit();
     return { status: 200, message: 'Parse Successfully' };
   } catch (error) {
