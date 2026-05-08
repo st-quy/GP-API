@@ -22,6 +22,12 @@ module.exports = (sequelize, DataTypes) => {
         key: 'ID',
       },
     },
+  }, {
+    uniqueKeys: {
+      SectionParts_SectionID_PartID_unique: {
+        fields: ['SectionID', 'PartID'],
+      },
+    },
   });
 
   return SectionPart;
