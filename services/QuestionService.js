@@ -23,6 +23,7 @@ const { v4: uuidv4 } = require('uuid');
 const { Op } = require('sequelize');
 const Response = require('./ServiceResponse');
 const { logActivity } = require('./ActivityLogService');
+const { parseQuestionContent } = require('../utils/parsers/QuestionContentParser');
 
 function normalizeTags(input) {
   if (input === null || input === undefined) return [];
@@ -1692,13 +1693,28 @@ async function getQuestionGroupDetail(req) {
         const questions = p.Questions || [];
         const q = questions[0];
         if (!q) return;
+        const answerContent = q.AnswerContent || {};
+        const isPart1Dropdown =
+          (p.Sequence || idx + 1) === 1 && q.Type === 'dropdown-list';
+
+        const hydratedAnswerContent = isPart1Dropdown
+          ? {
+              ...answerContent,
+              options:
+                Array.isArray(answerContent.options) &&
+                answerContent.options.length > 0
+                  ? answerContent.options
+                  : parseQuestionContent(q.Content),
+            }
+          : answerContent;
+
         payload[`part${idx + 1}`] = {
           PartID: p.ID,
           PartName: p.Content,
           Type: q.Type,
           Sequence: p.SectionPart.Sequence,
           Content: q.Content,
-          AnswerContent: q.AnswerContent,
+          AnswerContent: hydratedAnswerContent,
           Tags: q.Tags,
         };
       });

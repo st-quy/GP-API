@@ -9,6 +9,7 @@ const {
 } = require('../models');
 const { Op } = require('sequelize');
 const { logActivity } = require('./ActivityLogService');
+const { parseQuestionContent } = require('../utils/parsers/QuestionContentParser');
 
 async function resolveSkill({ skillId, skillName }) {
   if (!skillId && !skillName) {
@@ -525,12 +526,17 @@ function buildReadingDetail(section) {
        PART 1 — dropdown-list (fill-in-blank)
        ====================================================== */
     if (part.Sequence === 1) {
+      const blanks =
+        Array.isArray(ac.options) && ac.options.length > 0
+          ? ac.options
+          : parseQuestionContent(q.Content);
+
       result.part1 = {
         PartID: part.ID,
         PartName: part.Content,
         Type: 'dropdown-list',
         Content: q.Content,
-        Blanks: ac.options || [],
+        Blanks: blanks,
         CorrectAnswers: ac.correctAnswer || [],
       };
     }

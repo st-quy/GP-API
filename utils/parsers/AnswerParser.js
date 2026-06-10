@@ -1,24 +1,28 @@
-const { LEADING_NUMBER_REGEX } = require("../common/Regex");
 const { splitAndTrimLines } = require("../common/StringUtils");
+const { parseQuestionContent } = require("./QuestionContentParser");
+
+const letterToIndex = (letter) =>
+  String(letter || "").trim().toUpperCase().charCodeAt(0) - 65;
 
 const parseAnswers = (correctStr, contentStr) => {
   const correctLines = splitAndTrimLines(correctStr);
-  const contentLines = splitAndTrimLines(contentStr);
+  const optionsByKey = new Map(
+    parseQuestionContent(contentStr).map((item) => [String(item.key), item.value])
+  );
 
-  return correctLines.map((line, i) => {
+  return correctLines.flatMap((line) => {
     const [keyPart, ansLetter] = line.split("|").map((s) => s.trim());
-    const key = keyPart.replace(LEADING_NUMBER_REGEX);
-    const answer = ansLetter?.toUpperCase();
+    const key = keyPart.match(/\d+/)?.[0];
+    if (!key || key === "0") return [];
 
-    const optionsLine = contentLines[i]?.split("|")[1]?.trim() || "";
-    const options = Object.fromEntries(
-      optionsLine.split("/").map((opt) => {
-        const [letter, ...textParts] = opt.split(".");
-        return [letter.trim(), textParts.join(".").trim()];
-      })
-    );
+    const options = optionsByKey.get(key);
+    if (!options) return [];
 
-    return { key, value: options[answer] || "" };
+    const index = letterToIndex(ansLetter);
+    return {
+      key,
+      value: options[index] || "",
+    };
   });
 };
 

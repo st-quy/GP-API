@@ -10,6 +10,7 @@ const {
   SectionPart,
   Question,
 } = require('../models');
+const { Op } = require('sequelize');
 
 const {
   formatAnswers,
@@ -136,6 +137,54 @@ const buildQuestionKeyFromDb = (q) => {
   });
 };
 
+const fetchImportedSectionsData = async (sectionIds, topicName) => {
+  const sections = await Section.findAll({
+    where: { ID: { [Op.in]: sectionIds } },
+    include: [
+      {
+        model: Skill,
+        as: 'Skill',
+      },
+      {
+        model: Part,
+        as: 'Parts',
+        through: { attributes: [] },
+        include: [
+          {
+            model: Question,
+          },
+        ],
+      },
+    ],
+    order: [
+      ['createdAt', 'ASC'],
+      [{ model: Part, as: 'Parts' }, 'Sequence', 'ASC'],
+      [{ model: Part, as: 'Parts' }, { model: Question }, 'Sequence', 'ASC'],
+    ],
+  });
+
+  const plainSections = sections.map((section) =>
+    section.get({ plain: true })
+  );
+
+  return {
+    ID: null,
+    Name: topicName,
+    Sections: plainSections,
+    Skills: plainSections
+      .filter((section) => section.Skill)
+      .map((section) => ({
+        ID: section.Skill.ID,
+        Name: section.Skill.Name,
+        createdAt: section.Skill.createdAt,
+        updatedAt: section.Skill.updatedAt,
+        TopicID: null,
+        SectionID: section.ID,
+        Parts: section.Parts || [],
+      })),
+  };
+};
+
 // =====================
 // Hàm chính
 // =====================
@@ -150,11 +199,12 @@ const parseExcelBuffer = async (buffer) => {
     return { status: 400, message: 'No worksheet found in Excel file' };
   }
 
-  // Helper build key Part+SubPart dùng chung toàn hàm
-  const buildPartKey = (part, subPart) => {
+  // Helper build key Part+Skill dùng chung toàn hàm.
+  // SubPart là instruction/content phụ của cùng một Part, không phải định danh Part mới.
+  const buildPartKey = (part, skill) => {
     const p = normKey(part);
-    const s = normKey(subPart || '');
-    return `${p}__${s}`;
+    const sk = normSkillKey(skill || '');
+    return `${p}__${sk}`;
   };
 
   // 1) Đọc partsData & topicSet từ sheet (bỏ header row 1)
@@ -194,15 +244,21 @@ const parseExcelBuffer = async (buffer) => {
   // Use topic name for Section naming (e.g., "Topic7 - Grammar & Vocabulary")
   const topicName = [...topicSet][0];
 
-  // 3) Dedupe Part theo CẶP (Part, SubPart) TRONG FILE, giữ skillName đầu tiên
+  // 3) Dedupe Part theo bộ (Part, Skill) trong file và gán Sequence theo thứ tự trong từng Skill.
   const partsMap = new Map();
+  const sequenceBySkill = new Map();
   for (const it of partsRaw) {
-    const key = buildPartKey(it.part, it.subPart);
+    const skillKey = normSkillKey(it.skill);
+    const key = buildPartKey(it.part, it.skill);
     if (!partsMap.has(key)) {
+      const nextSequence = (sequenceBySkill.get(skillKey) || 0) + 1;
+      sequenceBySkill.set(skillKey, nextSequence);
+
       partsMap.set(key, {
         part: it.part,
         subPart: it.subPart || null,
         skill: it.skill || null,
+        sequence: nextSequence,
       });
     }
   }
@@ -214,42 +270,27 @@ const parseExcelBuffer = async (buffer) => {
     // 4) Bắt đầu transaction
     transaction = await sequelize.transaction();
 
-    // 5.1 Lấy Part đã tồn tại trong DB & chỉ tạo Part mới nếu cặp (Content, SubContent) CHƯA có
-    //  (1 Part có thể thuộc nhiều Topic)
+    // 4.1 Lấy danh mục Skill (map by normalized key)
+    const skills = await Skill.findAll({
+      attributes: ['ID', 'Name'],
+      transaction,
+    });
 
-    // Load toàn bộ Part hiện có (nếu data lớn thì tối ưu sau bằng where Content IN ...)
-    const existingParts = await Part.findAll({ transaction });
-
-    const existingPartIdByKey = new Map(
-      existingParts.map((p) => [buildPartKey(p.Content, p.SubContent), p.ID])
+    const skillIdByKey = new Map(
+      skills.map((s) => [normSkillKey(s.Name), s.ID])
     );
-
-    // Map cuối: key (Part, SubPart) -> PartID
+    // 5.1 Tạo Part riêng cho lần import. Questions đang thuộc PartID nên không reuse Part cũ,
+    // tránh lẫn câu hỏi giữa các topic có title generic như "Part 1".
     const partIdByKey = new Map();
-    const partsToInsert = [];
-
-    for (const { part, subPart } of partsData) {
-      const key = buildPartKey(part, subPart);
-      const existedId = existingPartIdByKey.get(key);
-
-      if (existedId) {
-        // ĐÃ có Part này trong DB → reuse
-        partIdByKey.set(key, existedId);
-      } else {
-        // CHƯA có → chuẩn bị tạo mới
-        const match = part.match(/\d+/);
-        const sequence = match ? parseInt(match[0], 10) : null;
-
-        partsToInsert.push({
-          key,
-          data: {
-            Content: part,
-            SubContent: subPart,
-            Sequence: sequence,
-          },
-        });
-      }
-    }
+    const partsToInsert = partsData.map(({ part, subPart, skill, sequence }) => ({
+      key: buildPartKey(part, skill),
+      data: {
+        Content: part,
+        SubContent: subPart,
+        Sequence: sequence,
+        SkillID: skillIdByKey.get(normSkillKey(skill)) || null,
+      },
+    }));
 
     if (partsToInsert.length > 0) {
       const createdParts = await Part.bulkCreate(
@@ -266,35 +307,8 @@ const parseExcelBuffer = async (buffer) => {
       });
     }
 
-    // Build map PartID -> info (Content, SubContent, skillName) for Parts in this Topic
-    const partInfoById = new Map();
-    for (const { part, subPart, skill } of partsData) {
-      const key = buildPartKey(part, subPart);
-      const id = partIdByKey.get(key);
-      if (!id) continue;
-      if (!partInfoById.has(id)) {
-        partInfoById.set(id, {
-          Content: part,
-          SubContent: subPart || null,
-          skillName: skill || null,
-        });
-      }
-    }
-
-    const partIdsInTopic = Array.from(partInfoById.keys());
-
-    // 5.3 Lấy danh mục Skill (map by normalized key)
-    const skills = await Skill.findAll({
-      attributes: ['ID', 'Name'],
-      transaction,
-    });
-
-    const skillIdByKey = new Map(
-      skills.map((s) => [normSkillKey(s.Name), s.ID])
-    );
-
-    // 5.4 Tạo Sections cho mỗi Skill trong Topic (không phải mỗi Part)
-    // Một Section đại diện cho toàn bộ questions của một Skill trong Topic đó
+    // 5.4 Tạo Sections cho mỗi Skill trong file import.
+    // Một Section đại diện cho toàn bộ questions của một Skill trong question bank đó.
     // Extract unique skills from partsData - store ALL partIds per skill
     const uniqueSkills = new Map(); // skillName -> {skill, partIds: []}
     for (const { part, subPart, skill } of partsData) {
@@ -304,7 +318,7 @@ const parseExcelBuffer = async (buffer) => {
         uniqueSkills.set(normKey, { skill, partIds: [] });
       }
       // Get PartID for this part and add to array
-      const partKey = buildPartKey(part, subPart);
+      const partKey = buildPartKey(part, skill);
       const partId = partIdByKey.get(partKey);
       if (partId) {
         const entry = uniqueSkills.get(normKey);
@@ -404,7 +418,7 @@ const parseExcelBuffer = async (buffer) => {
       if (allEmpty) continue;
 
       // Lấy PartID theo cặp (Part, SubPart)
-      const partKeyForRow = buildPartKey(partContent, subPart);
+      const partKeyForRow = buildPartKey(partContent, skillName);
       const partID = partIdByKey.get(partKeyForRow) || null;
 
       const skillKey = normSkillKey(skillName);
@@ -711,9 +725,24 @@ const parseExcelBuffer = async (buffer) => {
       });
     }
 
-    // 5.10 Done
     await transaction.commit();
-    return { status: 200, message: 'Parse Successfully' };
+
+    const importedData = await fetchImportedSectionsData(
+      createdSections.map((section) => section.ID),
+      topicName
+    );
+
+    return {
+      status: 200,
+      message: 'Parse Successfully',
+      data: importedData,
+      summary: {
+        topics: 0,
+        sections: createdSections.length,
+        parts: partsToInsert.length,
+        questions: questionsToCreate.length,
+      },
+    };
   } catch (error) {
     if (transaction && !transaction.finished) {
       try {
