@@ -14,29 +14,88 @@ const { TOPIC_STATUS } = require('../helpers/constants');
 const { sanitizeQuestion } = require('../utils/security');
 const { logActivity } = require('./ActivityLogService');
 
-const shuffleArray = (array) => {
-  for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]];
-  }
-  return array;
+const getPublicMinioBaseUrl = () => {
+  const baseUrl = process.env.MINIO_PUBLIC_URL || process.env.MINIO_URL_BASE || '';
+  return baseUrl
+    .replace('https://minio.local:', 'https://localhost:')
+    .replace('http://minio.local:', 'http://localhost:')
+    .replace(/\/$/, '');
 };
 
-const shuffleByGroup = (questions) => {
-  const groups = {};
-  questions.forEach(q => {
-    const partId = q.PartID || 'default';
-    if (!groups[partId]) groups[partId] = [];
-    groups[partId].push(q);
-  });
-  Object.keys(groups).forEach(key => {
-    groups[key] = shuffleArray(groups[key]);
-  });
-  return questions.map(q => {
-    const partId = q.PartID || 'default';
-    return groups[partId].shift();
-  });
+const normalizeMinioUrl = (value) => {
+  if (typeof value !== 'string' || !value.trim()) return value;
+
+  const publicBaseUrl = getPublicMinioBaseUrl();
+  if (!publicBaseUrl) return value;
+
+  const bucketPathMatch = value.match(/\/(?:gp-bucket-dev|gp-bucket)\/(.+)$/);
+  if (bucketPathMatch) {
+    return `${publicBaseUrl}/${bucketPathMatch[1]}`;
+  }
+
+  if (/^(Topic\d+|audio|audios|image|images)\//i.test(value)) {
+    return `${publicBaseUrl}/${value.replace(/^\/+/, '')}`;
+  }
+
+  return value;
 };
+
+const normalizeMediaValue = (value) => {
+  if (Array.isArray(value)) return value.map(normalizeMediaValue);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, childValue]) => [
+        key,
+        normalizeMediaFields(childValue),
+      ])
+    );
+  }
+
+  return normalizeMinioUrl(value);
+};
+
+function normalizeMediaFields(value) {
+  if (Array.isArray(value)) return value.map(normalizeMediaFields);
+  if (!value || typeof value !== 'object') return value;
+
+  const mediaKeys = new Set([
+    'AudioKeys',
+    'ImageKeys',
+    'audioKeys',
+    'imageKeys',
+    'audioKey',
+    'imageKey',
+    'audioUrl',
+    'imageUrl',
+    'audio',
+    'image',
+  ]);
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, childValue]) => [
+      key,
+      mediaKeys.has(key)
+        ? normalizeMediaValue(childValue)
+        : normalizeMediaFields(childValue),
+    ])
+  );
+}
+
+const getSequenceValue = (value, fallback = Number.MAX_SAFE_INTEGER) => {
+  const sequence = Number(value);
+  return Number.isFinite(sequence) ? sequence : fallback;
+};
+
+const sortBySequence = (items = []) =>
+  [...items]
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const sequenceDiff =
+        getSequenceValue(a.item?.Sequence, a.index) -
+        getSequenceValue(b.item?.Sequence, b.index);
+      return sequenceDiff || a.index - b.index;
+    })
+    .map(({ item }) => item);
 
 const getQuestionsByQuestionSetId = async (req) => {
   try {
@@ -65,31 +124,13 @@ const getQuestionsByQuestionSetId = async (req) => {
       return res.status(404).json({ message: 'QuestionSet not found' });
     }
 
-    let questions = questionSet.Questions.map((item) => ({
+    const questions = sortBySequence(questionSet.Questions.map((item) => ({
       ...item.Question.dataValues,
       Sequence: item.Sequence,
-    }));
-
-    if (questionSet.ShuffleQuestions) {
-      questions = shuffleByGroup(questions);
-    } else {
-      questions = _.sortBy(questions, ["Sequence"]);
-    }
-
-    if (questionSet.ShuffleAnswers) {
-      questions = questions.map((q) => ({
-        ...q,
-        AnswerContent: {
-          ...q.AnswerContent,
-          options: _.shuffle(q.AnswerContent?.options || []),
-        },
-      }));
-    }
+    })));
 
     return {
       questionSetId,
-      shuffleQuestions: questionSet.ShuffleQuestions,
-      shuffleAnswers: questionSet.ShuffleAnswers,
       questions,
     };
   } catch (err) {
@@ -100,7 +141,7 @@ const getQuestionsByQuestionSetId = async (req) => {
 
 const createTopic = async (req) => {
   try {
-    const { Name, Status, ShuffleQuestions, ShuffleAnswers, Duration } = req.body;
+    const { Name, Status, Duration } = req.body;
     if (!Name) {
       return {
         status: 400,
@@ -133,8 +174,6 @@ const createTopic = async (req) => {
       Duration: Duration || null,
       CreatedBy: userId,
       UpdatedBy: userId,
-      ShuffleQuestions: ShuffleQuestions || false,
-      ShuffleAnswers: ShuffleAnswers || false,
     });
 
     logActivity({
@@ -321,40 +360,17 @@ const getTopicWithRelations = async (req, res) => {
     const userRoles = req.user?.role ? (Array.isArray(req.user.role) ? req.user.role : [req.user.role]) : [];
     const isStudent = userRoles.some(r => r.toLowerCase() === 'student');
 
-    if (plainTopic.ShuffleQuestions || plainTopic.ShuffleAnswers || isStudent) {
-      for (const section of plainTopic.Sections || []) {
-        for (const part of section.Parts || []) {
-          let questions = part.Questions || [];
-          
-          if (plainTopic.ShuffleQuestions) {
-            questions = shuffleByGroup(questions);
-          }
-          
-          questions = questions.map(q => {
-            let answerContent = q.AnswerContent;
-            if (typeof answerContent === 'string') {
-              try {
-                answerContent = JSON.parse(answerContent);
-              } catch (e) {}
-            }
+    for (const section of plainTopic.Sections || []) {
+      section.Parts = sortBySequence(section.Parts || []);
 
-            if (plainTopic.ShuffleAnswers && answerContent && answerContent.options) {
-              answerContent = {
-                ...answerContent,
-                options: shuffleArray([...(answerContent.options || [])]),
-              };
-              q.AnswerContent = answerContent;
-            }
-
-            return sanitizeQuestion(q, isStudent);
-          });
-          
-          part.Questions = questions;
-        }
+      for (const part of section.Parts) {
+        part.Questions = sortBySequence(part.Questions || []).map((question) =>
+          sanitizeQuestion(question, isStudent)
+        );
       }
     }
 
-    return plainTopic;
+    return normalizeMediaFields(plainTopic);
   } catch (error) {
     console.error('Error fetching topic with relations:', error);
 
@@ -768,8 +784,6 @@ async function bulkDuplicateTopics(req) {
         Name: newName,
         Status: TOPIC_STATUS.DRAFT,
         Duration: originalTopic.Duration,
-        ShuffleQuestions: originalTopic.ShuffleQuestions,
-        ShuffleAnswers: originalTopic.ShuffleAnswers,
         CreatedBy: userId,
         UpdatedBy: userId,
       });
@@ -931,8 +945,6 @@ async function duplicateTopic(req) {
       Name: newName,
       Status: TOPIC_STATUS.DRAFT,
       Duration: originalTopic.Duration,
-      ShuffleQuestions: originalTopic.ShuffleQuestions,
-      ShuffleAnswers: originalTopic.ShuffleAnswers,
       CreatedBy: userId,
       UpdatedBy: userId,
     });

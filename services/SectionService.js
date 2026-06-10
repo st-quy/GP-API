@@ -381,13 +381,60 @@ function buildMappingFromCorrectAnswer(ac) {
   });
 }
 
+function getSequenceValue(value) {
+  const sequence = Number(value);
+  return Number.isFinite(sequence) ? sequence : Number.MAX_SAFE_INTEGER;
+}
+
+function getAudioKeyValue(item) {
+  const audioKeys = item?.AudioKeys ?? item?.AnswerContent?.audioKeys;
+  if (Array.isArray(audioKeys)) return audioKeys[0] || '';
+  if (audioKeys && typeof audioKeys === 'object') {
+    return audioKeys.url || audioKeys.hyperlink || audioKeys.text || '';
+  }
+  return audioKeys || '';
+}
+
+function getQuestionNumberFromAudio(item) {
+  const match = String(getAudioKeyValue(item)).match(/(?:^|[/_-])Q(\d+)\.mp3(?:$|\?)/i);
+  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+}
+
+function sortBySequence(items = []) {
+  return [...items].sort((a, b) => {
+    const sequenceDiff = getSequenceValue(a?.Sequence) - getSequenceValue(b?.Sequence);
+    if (sequenceDiff !== 0) return sequenceDiff;
+
+    const createdAtA = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const createdAtB = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return createdAtA - createdAtB;
+  });
+}
+
+function sortListeningQuestions(items = []) {
+  const audioNumbers = items.map(getQuestionNumberFromAudio);
+  const canSortByAudioNumber =
+    audioNumbers.length > 1 &&
+    audioNumbers.every((value) => value !== Number.MAX_SAFE_INTEGER) &&
+    new Set(audioNumbers).size === audioNumbers.length;
+
+  if (!canSortByAudioNumber) return sortBySequence(items);
+
+  return [...items].sort((a, b) => {
+    const audioNumberDiff = getQuestionNumberFromAudio(a) - getQuestionNumberFromAudio(b);
+    if (audioNumberDiff !== 0) return audioNumberDiff;
+
+    return getSequenceValue(a?.Sequence) - getSequenceValue(b?.Sequence);
+  });
+}
+
 /* ============================================================
    BUILD LISTENING DETAIL (4 PART)
    ============================================================ */
 function buildListeningDetail(section) {
   const parts = (section.Parts || [])
     .slice()
-    .sort((a, b) => (a.Sequence || 0) - (b.Sequence || 0));
+    .sort((a, b) => getSequenceValue(a.Sequence) - getSequenceValue(b.Sequence));
 
   const r = {
     section: section,
@@ -413,14 +460,17 @@ function buildListeningDetail(section) {
   // ========================
   const p1 = parts.find((p) => p.Sequence === 1);
   if (p1) {
+    const questions = sortListeningQuestions(p1.Questions || []);
+
     r.part1 = {
       PartID: p1.ID,
       Type: 'multiple-choice',
       PartName: p1.Content,
-      questions: p1.Questions.map((q) => {
+      questions: questions.map((q, index) => {
         const ac = getAC(q);
         return {
           QuestionID: q.ID,
+          Sequence: index + 1,
           Content: q.Content,
           AudioUrl: audioOf(q),
           Options: ac.options || [],
@@ -435,12 +485,13 @@ function buildListeningDetail(section) {
   // ========================
   const p2 = parts.find((p) => p.Sequence === 2);
   if (p2 && p2.Questions.length) {
-    const q = p2.Questions[0];
+    const q = sortListeningQuestions(p2.Questions || [])[0];
     const ac = getAC(q);
 
     r.part2 = {
       PartID: p2.ID,
       Type: 'matching',
+      Sequence: 1,
       Instruction: q.Content,
       AudioUrl: audioOf(q),
       LeftItems: ac.leftItems || [],
@@ -454,12 +505,13 @@ function buildListeningDetail(section) {
   // ========================
   const p3 = parts.find((p) => p.Sequence === 3);
   if (p3 && p3.Questions.length) {
-    const q = p3.Questions[0];
+    const q = sortListeningQuestions(p3.Questions || [])[0];
     const ac = getAC(q);
 
     r.part3 = {
       PartID: p3.ID,
       Type: 'matching',
+      Sequence: 1,
       Instruction: q.Content,
       AudioUrl: audioOf(q),
       LeftItems: ac.leftItems || [],
@@ -473,16 +525,19 @@ function buildListeningDetail(section) {
   // ========================
   const p4 = parts.find((p) => p.Sequence === 4);
   if (p4 && p4.Questions.length) {
+    const questions = sortListeningQuestions(p4.Questions || []);
+
     r.part4 = {
       PartID: p4.ID,
       Type: 'listening-questions-group',
-      groups: p4.Questions.map((q, index) => {
+      groups: questions.map((q, index) => {
         const ac = getAC(q);
 
         const list = ac.groupContent?.listContent || [];
 
         return {
           id: index + 1,
+          Sequence: index + 1,
           instruction: ac.content || q.Content,
           audioUrl: audioOf(q),
           subQuestions: list.map((it) => ({

@@ -43,6 +43,60 @@ function parseTagsQuery(tagsQuery) {
   return normalizeTags(tagsQuery);
 }
 
+function getSequenceValue(value) {
+  const sequence = Number(value);
+  return Number.isFinite(sequence) ? sequence : Number.MAX_SAFE_INTEGER;
+}
+
+function getAudioKeyValue(item) {
+  const audioKeys = item?.AudioKeys ?? item?.AnswerContent?.audioKeys;
+  if (Array.isArray(audioKeys)) return audioKeys[0] || '';
+  if (audioKeys && typeof audioKeys === 'object') {
+    return audioKeys.url || audioKeys.hyperlink || audioKeys.text || '';
+  }
+  return audioKeys || '';
+}
+
+function getQuestionNumberFromAudio(item) {
+  const match = String(getAudioKeyValue(item)).match(/(?:^|[/_-])Q(\d+)\.mp3(?:$|\?)/i);
+  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+}
+
+function sortBySequence(items = []) {
+  return [...items].sort((a, b) => {
+    const sequenceDiff = getSequenceValue(a?.Sequence) - getSequenceValue(b?.Sequence);
+    if (sequenceDiff !== 0) return sequenceDiff;
+
+    const audioNumberDiff = getQuestionNumberFromAudio(a) - getQuestionNumberFromAudio(b);
+    if (audioNumberDiff !== 0) return audioNumberDiff;
+
+    const createdAtA = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const createdAtB = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return createdAtA - createdAtB;
+  });
+}
+
+function sortListeningQuestions(items = []) {
+  const audioNumbers = items.map(getQuestionNumberFromAudio);
+  const canSortByAudioNumber =
+    audioNumbers.length > 1 &&
+    audioNumbers.every((value) => value !== Number.MAX_SAFE_INTEGER) &&
+    new Set(audioNumbers).size === audioNumbers.length;
+
+  if (!canSortByAudioNumber) return sortBySequence(items);
+
+  return [...items].sort((a, b) => {
+    const audioNumberDiff = getQuestionNumberFromAudio(a) - getQuestionNumberFromAudio(b);
+    if (audioNumberDiff !== 0) return audioNumberDiff;
+
+    return getSequenceValue(a?.Sequence) - getSequenceValue(b?.Sequence);
+  });
+}
+
+function getPartSequence(part, fallback) {
+  return getSequenceValue(part?.SectionPart?.Sequence ?? part?.Sequence ?? fallback);
+}
+
 async function getAllQuestions(req) {
   try {
     const {
@@ -1105,7 +1159,7 @@ async function createListeningGroup(req) {
             Type: q.Type, // multiple-choice | dropdown-list | listening-questions-group
             SkillID: skill.ID,
             PartID: partRow.ID,
-            Sequence: idx + 1,
+            Sequence: getSequenceValue(q.Sequence ?? q.sequence ?? idx + 1),
             Content: q.Content || '',
             SubContent: q.SubContent || null,
             GroupContent: q.GroupContent || null,
@@ -1481,8 +1535,6 @@ async function getQuestionsByQuestionSetID(req) {
       message: 'Questions fetched successfully',
       data: {
         questionSetId,
-        shuffleQuestions: questionSet.ShuffleQuestions,
-        shuffleAnswers: questionSet.ShuffleAnswers,
         questions: orderedQuestions,
       },
     };
@@ -1647,7 +1699,9 @@ async function getQuestionGroupDetail(req) {
       return Response.notFound('Section not found');
     }
 
-    const sortedParts = (section.Parts || []).sort((a, b) => (a.Sequence || 0) - (b.Sequence || 0));
+    const sortedParts = sortBySequence(section.Parts || []).sort(
+      (a, b) => getPartSequence(a, 0) - getPartSequence(b, 0)
+    );
 
     const payload = {
       SectionID: section.ID,
@@ -1661,14 +1715,15 @@ async function getQuestionGroupDetail(req) {
     // ================================
     if (skillLower === 'speaking') {
       sortedParts.forEach((p, idx) => {
-        const firstQ = p.Questions?.[0];
-        const partSequence = p.SectionPart?.Sequence || p.Sequence || (idx + 1);
+        const questions = sortBySequence(p.Questions || []);
+        const firstQ = questions[0];
+        const partSequence = getPartSequence(p, idx + 1);
         payload[`part${idx + 1}`] = {
           id: p.ID,
           name: p.Content,
           sequence: partSequence,
           image: firstQ?.ImageKeys?.[0] || null,
-          questions: p.Questions,
+          questions,
         };
       });
 
@@ -1677,11 +1732,15 @@ async function getQuestionGroupDetail(req) {
 
     if (skillLower === 'listening') {
       sortedParts.forEach((p, idx) => {
+        const questions = sortListeningQuestions(p.Questions || []).map((q, qIdx) => ({
+          ...(typeof q.toJSON === 'function' ? q.toJSON() : q),
+          Sequence: qIdx + 1,
+        }));
         payload[`part${idx + 1}`] = {
           id: p.ID,
           name: p.Content,
-          sequence: p.SectionPart?.Sequence || p.Sequence || (idx + 1),
-          questions: p.Questions || [],
+          sequence: getPartSequence(p, idx + 1),
+          questions,
         };
       });
 
@@ -1690,7 +1749,7 @@ async function getQuestionGroupDetail(req) {
 
     if (skillLower === 'reading') {
       sortedParts.forEach((p, idx) => {
-        const questions = p.Questions || [];
+        const questions = sortBySequence(p.Questions || []);
         const q = questions[0];
         if (!q) return;
         const answerContent = q.AnswerContent || {};
@@ -1712,7 +1771,7 @@ async function getQuestionGroupDetail(req) {
           PartID: p.ID,
           PartName: p.Content,
           Type: q.Type,
-          Sequence: p.SectionPart.Sequence,
+          Sequence: getPartSequence(p, idx + 1),
           Content: q.Content,
           AnswerContent: hydratedAnswerContent,
           Tags: q.Tags,
@@ -1724,12 +1783,12 @@ async function getQuestionGroupDetail(req) {
 
     if (skillLower === 'writing') {
       sortedParts.forEach((p, idx) => {
-        const qs = p.Questions;
+        const qs = sortBySequence(p.Questions || []);
         const key = `part${idx + 1}`;
         const base = {
           PartID: p.ID,
           name: p.Content,
-          sequence: p.SectionPart.Sequence,
+          sequence: getPartSequence(p, idx + 1),
         };
 
         if (idx === 0) {
@@ -1766,11 +1825,12 @@ async function getQuestionGroupDetail(req) {
 
     if (skillLower === 'grammar and vocabulary') {
       sortedParts.forEach((p, idx) => {
+        const questions = sortBySequence(p.Questions || []);
         payload[`part${idx + 1}`] = {
           PartID: p.ID,
           name: p.Content,
-          sequence: p.SectionPart.Sequence,
-          questions: p.Questions.map((q) => ({
+          sequence: getPartSequence(p, idx + 1),
+          questions: questions.map((q) => ({
             ID: q.ID,
             Type: q.Type,
             Content: q.Content,
@@ -2698,6 +2758,7 @@ async function updateListeningGroup(sectionId, payload) {
       // ===== CREATE OR UPDATE =====
       for (let i = 0; i < filteredQs.length; i++) {
         const q = filteredQs[i];
+        const sequence = getSequenceValue(q.Sequence ?? q.sequence ?? i + 1);
 
         if (q.questionId && dbQMap[q.questionId]) {
           // ---------------- UPDATE ----------------
@@ -2711,7 +2772,7 @@ async function updateListeningGroup(sectionId, payload) {
               ImageKeys: q.ImageKeys || null,
               AnswerContent: q.AnswerContent || null,
               Tags: normalizeTags([...(q.Tags || q.tags || []), ...(normalizedTags || [])]),
-              Sequence: i + 1,
+              Sequence: sequence,
               UpdatedBy: userId,
             },
             { transaction: t }
@@ -2724,7 +2785,7 @@ async function updateListeningGroup(sectionId, payload) {
               Type: q.Type,
               SkillID: skill.ID,
               PartID: dbPart.ID,
-              Sequence: i + 1,
+              Sequence: sequence,
               Content: q.Content,
               SubContent: q.SubContent || null,
               GroupContent: q.AnswerContent?.groupContent || null,

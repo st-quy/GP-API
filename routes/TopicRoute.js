@@ -148,7 +148,7 @@ router.post('/remove-part', removePartFromTopic);
  * @swagger
  * /topics/questionset/{questionSetId}:
  *   get:
- *     summary: Get all questions in a questionSet (no shuffle)
+ *     summary: Get all questions in a questionSet by sequence
  *     tags: [Topic]
  *     parameters:
  *       - in: path
