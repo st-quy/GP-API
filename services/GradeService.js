@@ -347,10 +347,7 @@ async function calculatePoints(req) {
     // Each main question = 1 unit
     // Each sub-question in listening-questions-group = 1 unit
     // ============================================
-    const skillAnswers = answers.filter(a => 
-      a.AnswerText && 
-      a.Question?.Part?.Skill?.Name === skillName
-    );
+    const skillAnswers = answers.filter(a => a.Question?.Part?.Skill?.Name === skillName);
 
     let totalUnits = 0;
     const questionUnitMap = new Map(); // questionId -> unit count for that question
@@ -385,6 +382,40 @@ async function calculatePoints(req) {
     // Define normalizeKey function for consistent key normalization
     const normalizeKey = (k) => {
       return String(k || '').trim().split('.')[0];
+    };
+
+    const isMatchingType = (type) =>
+      ['matching', 'dropdown-matching', 'full-matching'].includes(String(type || '').toLowerCase());
+
+    const getCorrectAnswerValue = (correct) =>
+      correct?.right ?? correct?.value ?? correct?.rightValue ?? correct?.answerText;
+
+    const getStudentValueForCorrectAnswer = (studentAnswersMap, correct, parsedContent) => {
+      const candidateKeys = [
+        correct?.left,
+        correct?.key,
+        correct?.id,
+        correct?.questionId,
+      ];
+
+      const numericKey = Number(correct?.key);
+      if (Number.isInteger(numericKey) && numericKey > 0 && Array.isArray(parsedContent?.leftItems)) {
+        candidateKeys.push(parsedContent.leftItems[numericKey - 1]);
+      }
+
+      const leftIndex = Number(correct?.leftIndex);
+      if (Number.isInteger(leftIndex) && leftIndex >= 0 && Array.isArray(parsedContent?.leftItems)) {
+        candidateKeys.push(parsedContent.leftItems[leftIndex]);
+      }
+
+      for (const key of candidateKeys) {
+        const normalizedKey = normalizeKey(key);
+        if (normalizedKey && studentAnswersMap[normalizedKey] !== undefined) {
+          return studentAnswersMap[normalizedKey];
+        }
+      }
+
+      return undefined;
     };
 
     answers.forEach((answer) => {
@@ -430,7 +461,7 @@ async function calculatePoints(req) {
         // ================================
         // MATCHING
         // ================================
-        else if (type === 'matching') {
+        else if (isMatchingType(type)) {
           // Parse correctContent if it's a string
           let parsedContent = correctContent;
           if (typeof correctContent === 'string') {
@@ -461,17 +492,13 @@ async function calculatePoints(req) {
             
             // Count points for each correct pair - divide by number of items for partial credit
             const pointsPerCorrectItem = pointPerUnit / correctAnswers.length;
-            let correctCount = 0;
-            
             correctAnswers.forEach((correct) => {
-              const correctKey = normalizeKey(correct.left || correct.key || correct.id);
-              const correctVal = correct.right || correct.value;
-              const userVal = studentAnswersMap[correctKey];
+              const correctVal = getCorrectAnswerValue(correct);
+              const userVal = getStudentValueForCorrectAnswer(studentAnswersMap, correct, parsedContent);
               
               if (String(userVal || '').trim().toLowerCase() === String(correctVal || '').trim().toLowerCase()) {
                 isCorrect = true;
                 pointsForThisQuestion += pointsPerCorrectItem;
-                correctCount++;
               }
             });
           }
@@ -551,9 +578,8 @@ async function calculatePoints(req) {
             const pointsPerCorrectItem = pointPerUnit / correctAnswers.length;
             
             correctAnswers.forEach((correct) => {
-              const correctKey = normalizeKey(correct.key || correct.left || correct.id || correct.questionId);
-              const correctVal = correct.value || correct.right;
-              const userVal = studentAnswersMap[correctKey];
+              const correctVal = getCorrectAnswerValue(correct);
+              const userVal = getStudentValueForCorrectAnswer(studentAnswersMap, correct, parsedContent);
               
               if (String(userVal || '').trim().toLowerCase() === String(correctVal || '').trim().toLowerCase()) {
                 isCorrect = true;
@@ -585,11 +611,9 @@ async function calculatePoints(req) {
       // ================================
       // Finalize tracking
       // ================================
-      // Round pointsForThisQuestion to 2 decimal places to avoid floating point issues
-      const roundedPoints = Math.round(pointsForThisQuestion * 100) / 100;
-      totalPoints += roundedPoints;
+      totalPoints += pointsForThisQuestion;
       logItem.result = isCorrect ? 'correct' : 'incorrect';
-      logItem.pointAdded = roundedPoints;
+      logItem.pointAdded = Math.round(pointsForThisQuestion * 100) / 100;
 
       logs.push(logItem);
     });
@@ -843,6 +867,39 @@ async function getFullExamReview(sessionParticipantId, user) {
       }
     };
 
+    const normalizeAnswerKey = (k) => String(k || '').trim().split('.')[0];
+
+    const getCorrectAnswerValueForReview = (correct) =>
+      correct?.right ?? correct?.value ?? correct?.rightValue ?? correct?.answerText;
+
+    const getStudentValueForCorrectAnswerForReview = (studentAnswersMap, correct, parsedContent) => {
+      const candidateKeys = [
+        correct?.left,
+        correct?.key,
+        correct?.id,
+        correct?.questionId,
+      ];
+
+      const numericKey = Number(correct?.key);
+      if (Number.isInteger(numericKey) && numericKey > 0 && Array.isArray(parsedContent?.leftItems)) {
+        candidateKeys.push(parsedContent.leftItems[numericKey - 1]);
+      }
+
+      const leftIndex = Number(correct?.leftIndex);
+      if (Number.isInteger(leftIndex) && leftIndex >= 0 && Array.isArray(parsedContent?.leftItems)) {
+        candidateKeys.push(parsedContent.leftItems[leftIndex]);
+      }
+
+      for (const key of candidateKeys) {
+        const normalizedKey = normalizeAnswerKey(key);
+        if (normalizedKey && studentAnswersMap[normalizedKey] !== undefined) {
+          return studentAnswersMap[normalizedKey];
+        }
+      }
+
+      return undefined;
+    };
+
     const getCorrectnessMap = (
       questionType,
       userAnswerText,
@@ -850,7 +907,6 @@ async function getFullExamReview(sessionParticipantId, user) {
     ) => {
       if (!userAnswerText || !correctAnswerContent) return null;
 
-      const normalizeKey = (k) => String(k || '').trim().split('.')[0];
       const safeParse = (str) => {
         if (typeof str === 'object' && str !== null) return str;
         try { return JSON.parse(str); } catch { return null; }
@@ -919,18 +975,18 @@ async function getFullExamReview(sessionParticipantId, user) {
 
           const studentAnswersMap = {};
           userAnsObj.forEach(sa => {
-            const key = normalizeKey(sa.left || sa.key || sa.id || sa.questionId);
+            const key = normalizeAnswerKey(sa.left || sa.key || sa.id || sa.questionId);
             if (key) {
               studentAnswersMap[key] = sa.right || sa.value || sa.answerText || String(sa);
             }
           });
 
           correctAnswers.forEach((correct) => {
-            const correctKey = normalizeKey(correct.left || correct.key || correct.id || correct.questionId);
-            if (correctKey === '0') return;
+            const correctKey = normalizeAnswerKey(correct.left || correct.key || correct.id || correct.questionId);
+            if (String(correct?.key) === '0' || correctKey === '0') return;
 
-            const correctVal = correct.right || correct.value;
-            const userVal = studentAnswersMap[correctKey];
+            const correctVal = getCorrectAnswerValueForReview(correct);
+            const userVal = getStudentValueForCorrectAnswerForReview(studentAnswersMap, correct, correctAnswerContent);
             
             map[correctKey] = String(userVal || '').trim().toLowerCase() === String(correctVal || '').trim().toLowerCase();
           });
@@ -966,10 +1022,6 @@ async function getFullExamReview(sessionParticipantId, user) {
       correctAnswerContent
     ) => {
       if (!userAnswerText || !correctAnswerContent) return false;
-
-      const normalizeKey = (k) => {
-        return String(k || '').trim().split('.')[0];
-      };
 
       const safeParse = (str) => {
         if (typeof str === 'object' && str !== null) return str;
@@ -1008,18 +1060,18 @@ async function getFullExamReview(sessionParticipantId, user) {
 
           const studentAnswersMap = {};
           userAnsObj.forEach(sa => {
-            const key = normalizeKey(sa.left || sa.key || sa.id || sa.questionId);
+            const key = normalizeAnswerKey(sa.left || sa.key || sa.id || sa.questionId);
             if (key) {
               studentAnswersMap[key] = sa.right || sa.value || sa.answerText || String(sa);
             }
           });
 
           return correctAnswers.every((correct) => {
-            const correctKey = normalizeKey(correct.left || correct.key || correct.id || correct.questionId);
-            if (correctKey === '0') return true; // Skip "done for you" items if any
+            const correctKey = normalizeAnswerKey(correct.left || correct.key || correct.id || correct.questionId);
+            if (String(correct?.key) === '0' || correctKey === '0') return true; // Skip "done for you" items if any
 
-            const correctVal = correct.right || correct.value;
-            const userVal = studentAnswersMap[correctKey];
+            const correctVal = getCorrectAnswerValueForReview(correct);
+            const userVal = getStudentValueForCorrectAnswerForReview(studentAnswersMap, correct, correctAnswerContent);
             
             return String(userVal || '').trim().toLowerCase() === String(correctVal || '').trim().toLowerCase();
           });
