@@ -2111,7 +2111,9 @@ async function updateReadingGroup(sectionId, payload) {
       partSeqMap[p.Sequence] = p;
     });
 
-    const incomingPartIds = parts.map((p) => p.PartID).filter((id) => !!id);
+    const incomingPartIds = parts
+      .map((p) => p.PartID || partSeqMap[p.Sequence]?.ID)
+      .filter((id) => !!id);
 
     const existingPartIds = existingParts.map((p) => p.ID);
 
@@ -2162,8 +2164,8 @@ async function updateReadingGroup(sectionId, payload) {
           },
           { transaction: t }
         );
-      } else if (isDraft && !p.PartID) {
-        // For drafts: find by sequence or create new
+      } else if (!p.PartID) {
+        // Find by sequence or create new
         const existingBySeq = partSeqMap[p.Sequence];
         if (existingBySeq) {
           partRow = existingBySeq;
@@ -2193,8 +2195,6 @@ async function updateReadingGroup(sectionId, payload) {
             { transaction: t }
           );
         }
-      } else if (!p.PartID) {
-        throw new Error(`Missing PartID for part`);
       } else {
         throw new Error(`PartID ${p.PartID} not found`);
       }
@@ -2206,11 +2206,6 @@ async function updateReadingGroup(sectionId, payload) {
       });
 
       const qContent = p.Content || '';
-      if (isDraft && !qContent.trim() && !p.AnswerContent) {
-        // Skip empty questions for drafts
-        finalParts.push(partRow);
-        continue;
-      }
 
       if (oldQ) {
         const updatePayload = {
@@ -2355,15 +2350,18 @@ async function updateWritingGroup(sectionId, payload) {
         throw new Error(`Missing data for ${key}`);
       }
 
-      // For drafts, allow missing PartID (create new part)
-      if (!isDraft && !incoming.PartID) {
-        throw new Error(`Missing PartID for ${key}`);
+      let dbPart = incoming.PartID ? oldPartMap[incoming.PartID] : null;
+
+      if (incoming.PartID && !dbPart) {
+        throw new Error(`PartID ${incoming.PartID} not found`);
       }
 
-      if (incoming.PartID) {
-        const dbPart = oldPartMap[incoming.PartID];
-        if (!dbPart) throw new Error(`PartID ${incoming.PartID} not found`);
+      if (!dbPart) {
+        dbPart = partSeqMap[seqNum];
+      }
 
+      if (dbPart) {
+        // Update existing part
         await dbPart.update(
           {
             Content: incoming.name,
@@ -2373,47 +2371,32 @@ async function updateWritingGroup(sectionId, payload) {
         );
 
         updatedParts[key] = dbPart;
-      } else if (isDraft) {
-        // For drafts: find existing part by sequence first, then create if none
-        let dbPart = partSeqMap[seqNum];
+      } else {
+        // Create new part
+        const newPart = await Part.create(
+          {
+            ID: uuidv4(),
+            SkillID: section.SkillID,
+            Content: incoming.name || `${key.charAt(0).toUpperCase() + key.slice(1)}`,
+            SubContent: incoming.subContent || null,
+            Sequence: seqNum,
+            CreatedBy: userId,
+            UpdatedBy: userId,
+          },
+          { transaction: t }
+        );
 
-        if (dbPart) {
-          // Update existing part
-          await dbPart.update(
-            {
-              Content: incoming.name || dbPart.Content,
-              SubContent: incoming.subContent || dbPart.SubContent || null,
-            },
-            { transaction: t }
-          );
-          updatedParts[key] = dbPart;
-        } else {
-          // Create new part for draft
-          const newPart = await Part.create(
-            {
-              ID: uuidv4(),
-              SkillID: section.SkillID,
-              Content: incoming.name || `${key.charAt(0).toUpperCase() + key.slice(1)}`,
-              SubContent: incoming.subContent || null,
-              Sequence: seqNum,
-              CreatedBy: userId,
-              UpdatedBy: userId,
-            },
-            { transaction: t }
-          );
+        // Link part to section via SectionPart
+        await SectionPart.create(
+          {
+            SectionID: sectionId,
+            PartID: newPart.ID,
+            Sequence: seqNum,
+          },
+          { transaction: t }
+        );
 
-          // Link part to section via SectionPart
-          await SectionPart.create(
-            {
-              SectionID: sectionId,
-              PartID: newPart.ID,
-              Sequence: seqNum,
-            },
-            { transaction: t }
-          );
-
-          updatedParts[key] = newPart;
-        }
+        updatedParts[key] = newPart;
       }
     }
 
@@ -2673,9 +2656,18 @@ async function updateListeningGroup(sectionId, payload) {
         throw new Error(`Missing data for ${key}`);
       }
 
-      if (incoming.partId && oldPartsMap[incoming.partId]) {
+      let dbPart = incoming.partId ? oldPartsMap[incoming.partId] : null;
+
+      if (incoming.partId && !dbPart) {
+        throw new Error(`PartID ${incoming.partId} not found`);
+      }
+
+      if (!dbPart) {
+        dbPart = partSeqMap[seqNum];
+      }
+
+      if (dbPart) {
         // Update existing part
-        const dbPart = oldPartsMap[incoming.partId];
         await dbPart.update(
           {
             Content: incoming.name,
@@ -2685,40 +2677,24 @@ async function updateListeningGroup(sectionId, payload) {
           { transaction: t }
         );
         updatedParts[key] = dbPart;
-      } else if (isDraft && !incoming.partId) {
-        // For drafts: find by sequence or create new
-        const existingBySeq = partSeqMap[seqNum];
-        if (existingBySeq) {
-          await existingBySeq.update(
-            {
-              Content: incoming.name || existingBySeq.Content,
-              UpdatedBy: userId,
-            },
-            { transaction: t }
-          );
-          updatedParts[key] = existingBySeq;
-        } else {
-          const newPart = await Part.create(
-            {
-              ID: uuidv4(),
-              SkillID: section.SkillID,
-              Content: incoming.name || `Part ${seqNum}`,
-              Sequence: seqNum,
-              CreatedBy: userId,
-              UpdatedBy: userId,
-            },
-            { transaction: t }
-          );
-          await SectionPart.create(
-            { SectionID: sectionId, PartID: newPart.ID, Sequence: seqNum },
-            { transaction: t }
-          );
-          updatedParts[key] = newPart;
-        }
-      } else if (!incoming.partId) {
-        throw new Error(`Missing partId for ${key}`);
       } else {
-        throw new Error(`PartID ${incoming.partId} not found`);
+        // Create new part
+        const newPart = await Part.create(
+          {
+            ID: uuidv4(),
+            SkillID: section.SkillID,
+            Content: incoming.name || `Part ${seqNum}`,
+            Sequence: seqNum,
+            CreatedBy: userId,
+            UpdatedBy: userId,
+          },
+          { transaction: t }
+        );
+        await SectionPart.create(
+          { SectionID: sectionId, PartID: newPart.ID, Sequence: seqNum },
+          { transaction: t }
+        );
+        updatedParts[key] = newPart;
       }
     }
 
