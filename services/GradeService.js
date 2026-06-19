@@ -262,7 +262,8 @@ async function calculateTotalPoints(
         ? roundedSkillScore
         : participant.GrammarVocab || 0;
 
-    const totalPoints = Math.round((listening + reading + writing + speaking + grammarVocab) * 10) / 10;
+    // Total = L + R + W + S (GrammarVocab is NOT included in Total)
+    const totalPoints = parseFloat((listening + reading + writing + speaking).toFixed(2));
 
     const lookupName = isGrammarVocab ? 'GRAMMAR AND VOCABULARY' : skillName.toUpperCase();
     const levelSkill = await suggestLevels(roundedSkillScore, lookupName);
