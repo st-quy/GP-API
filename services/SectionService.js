@@ -637,10 +637,14 @@ function buildReadingDetail(section) {
         LeftItems: ac.leftItems || [],
         RightItems: ac.rightItems || [],
 
-        Mapping: (ac.correctAnswer || []).map((m, i) => ({
-          leftIndex: i,
-          rightValue: m.value,
-        })),
+        Mapping: (ac.correctAnswer || []).map((m) => {
+          const keyNum = Number(m.key);
+          const leftIndex = !isNaN(keyNum) ? keyNum - 1 : 0;
+          return {
+            leftIndex,
+            rightValue: m.value,
+          };
+        }),
       };
     }
 
@@ -657,10 +661,13 @@ function buildReadingDetail(section) {
         LeftItems: ac.leftItems || [],
         RightItems: ac.rightItems || [],
 
-        Mapping: (ac.correctAnswer || []).map((m, idx) => ({
-          leftIndex: idx,
-          rightValue: m.right,
-        })),
+        Mapping: (ac.correctAnswer || []).map((m) => {
+          const leftIndex = (ac.leftItems || []).indexOf(m.left);
+          return {
+            leftIndex: leftIndex >= 0 ? leftIndex : 0,
+            rightValue: m.right,
+          };
+        }),
       };
     }
   }
