@@ -237,42 +237,44 @@ async function calculateTotalPoints(
       };
     }
 
+    const roundedSkillScore = Math.round(skillScore * 10) / 10;
+
     const isGrammarVocab = skillName === 'GrammarVocab' || skillName === skillMapping['GRAMMAR AND VOCABULARY'];
 
     const listening =
       skillName === skillMapping.LISTENING
-        ? skillScore
+        ? roundedSkillScore
         : participant.Listening || 0;
     const reading =
       skillName === skillMapping.READING
-        ? skillScore
+        ? roundedSkillScore
         : participant.Reading || 0;
     const writing =
       skillName === skillMapping.WRITING
-        ? skillScore
+        ? roundedSkillScore
         : participant.Writing || 0;
     const speaking =
       skillName === skillMapping.SPEAKING
-        ? skillScore
+        ? roundedSkillScore
         : participant.Speaking || 0;
     const grammarVocab =
       isGrammarVocab
-        ? skillScore
+        ? roundedSkillScore
         : participant.GrammarVocab || 0;
 
-    const totalPoints = listening + reading + writing + speaking + grammarVocab;
+    const totalPoints = Math.round((listening + reading + writing + speaking + grammarVocab) * 10) / 10;
 
     const lookupName = isGrammarVocab ? 'GRAMMAR AND VOCABULARY' : skillName.toUpperCase();
-    const levelSkill = await suggestLevels(skillScore, lookupName);
+    const levelSkill = await suggestLevels(roundedSkillScore, lookupName);
 
     const updateData = isGrammarVocab
       ? {
-          GrammarVocab: skillScore,
+          GrammarVocab: roundedSkillScore,
           GrammarVocabLevel: levelSkill,
           Total: totalPoints,
         }
       : {
-          [skillName]: skillScore,
+          [skillName]: roundedSkillScore,
           [skillMappingLevel[skillName.toUpperCase()]]: levelSkill,
           Total: totalPoints,
         };
@@ -613,14 +615,14 @@ async function calculatePoints(req) {
       // ================================
       totalPoints += pointsForThisQuestion;
       logItem.result = isCorrect ? 'correct' : 'incorrect';
-      logItem.pointAdded = Math.round(pointsForThisQuestion * 100) / 100;
+      logItem.pointAdded = Math.round(pointsForThisQuestion * 10) / 10;
 
       logs.push(logItem);
     });
 
-    // Final rounding: round to 2 decimal places, then cap at 50
-    totalPoints = Math.round(totalPoints * 100) / 100;
-    totalPoints = totalPoints >= 49.99 ? 50 : Math.min(50, totalPoints);
+    // Final rounding: round to 1 decimal place, then cap at 50
+    totalPoints = Math.round(totalPoints * 10) / 10;
+    totalPoints = totalPoints >= 49.95 ? 50 : Math.min(50, totalPoints);
 
     await calculateTotalPoints(
       sessionParticipantId,
