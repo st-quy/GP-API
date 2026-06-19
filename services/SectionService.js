@@ -662,7 +662,10 @@ function buildReadingDetail(section) {
         RightItems: ac.rightItems || [],
 
         Mapping: (ac.correctAnswer || []).map((m) => {
-          const leftIndex = (ac.leftItems || []).indexOf(m.left);
+          const mLeft = typeof m.left === 'string' ? m.left.trim().toLowerCase() : '';
+          const leftIndex = (ac.leftItems || []).findIndex(
+            (item) => (typeof item === 'string' ? item.trim().toLowerCase() : '') === mLeft
+          );
           return {
             leftIndex: leftIndex >= 0 ? leftIndex : 0,
             rightValue: m.right,
