@@ -565,7 +565,7 @@ async function calculatePoints(req) {
             studentAnswers = JSON.parse(rawStudentAnswer);
           } catch (e) {}
           
-          const correctAnswers = (parsedContent?.correctAnswer || []).filter(item => item.key !== '0');
+          const correctAnswers = (parsedContent?.correctAnswer || []).filter(item => String(item.key).trim() !== '0');
           
           if (studentAnswers?.length && correctAnswers?.length) {
             // Build student answers map for direct lookup
